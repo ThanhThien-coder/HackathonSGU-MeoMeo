@@ -204,7 +204,10 @@ export function computeEdgesOnKept(
   return edges;
 }
 
-function isEasier(a: Candidate, b: Candidate): boolean {
+export function isEasier(
+  a: Pick<Candidate, "cognitive_complexity" | "rank_score" | "id">,
+  b: Pick<Candidate, "cognitive_complexity" | "rank_score" | "id">
+): boolean {
   if (a.cognitive_complexity !== b.cognitive_complexity) {
     return a.cognitive_complexity < b.cognitive_complexity;
   }
