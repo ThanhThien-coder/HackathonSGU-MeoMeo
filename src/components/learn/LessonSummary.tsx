@@ -5,6 +5,7 @@
 import { useState } from "react";
 import type { HybridArchitecturalNode } from "@/contracts";
 import { Button, Chip, PlainText } from "@/components/ui/common";
+import { PREPARE_QUESTIONS_HINT } from "@/components/learn/waiting-label";
 import { buildSummary, rangeLabel, type AnalysisSlot, type SummaryItem } from "@/lib/role-card";
 import { useWorkbenchStore } from "@/store/workbench";
 
@@ -55,9 +56,16 @@ function NextAction({ nodeId }: { nodeId: string }) {
 
   if (preparing) {
     return (
-      <Button variant="primary" disabled className="w-full py-2.5 text-[15px]">
-        Đang chuẩn bị câu hỏi…
-      </Button>
+      <div className="grid gap-1.5">
+        <Button variant="primary" disabled className="w-full py-2.5 text-[15px]">
+          Đang chuẩn bị câu hỏi…
+        </Button>
+        {run ? null : (
+          <p role="status" className="m-0 text-center text-xs text-muted">
+            {PREPARE_QUESTIONS_HINT}
+          </p>
+        )}
+      </div>
     );
   }
   if (!run && error) {
