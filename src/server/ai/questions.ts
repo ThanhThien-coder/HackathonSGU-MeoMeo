@@ -12,7 +12,7 @@ import {
 import { ApiHttpError } from "@/server/errors";
 import { logger } from "@/server/log";
 import { checkTokenQuota } from "@/server/quota";
-import { callLLMOnce } from "./gemini";
+import { callLLMOnce, type LlmOutcome } from "./gemini";
 import type { AnalyzeUsage } from "./analyze";
 import { loadMissedPoints } from "./history";
 import { withGuardFeedback } from "./prompts/common";
@@ -95,6 +95,7 @@ export async function generateQuestions(
   let tokensIn = 0;
   let tokensOut = 0;
   let requests = 0;
+  let lastFailed = false;
 
   for (let attempt = 1; attempt <= 1 + CONFIG.LLM_MAX_RETRIES; attempt++) {
     if (pending.length === 0) break;
@@ -102,7 +103,10 @@ export async function generateQuestions(
     const req = feedback.length > 0 ? withGuardFeedback(base, feedback) : base;
     feedback = [];
 
-    const r = await callLLMOnce(req);
+    // NH-15: lần trước lỗi/quá giờ ⇒ gọi thẳng flash-lite; bị cổng gác chặn thì giữ model chính
+    const liteOnly: boolean = lastFailed;
+    const r: LlmOutcome<{ questions: GeneratedQuestionRaw[] }> = await callLLMOnce(req, undefined, undefined, { liteOnly });
+    lastFailed = !r.ok;
     requests++;
     tokensIn += r.tokens_in;
     tokensOut += r.tokens_out;
