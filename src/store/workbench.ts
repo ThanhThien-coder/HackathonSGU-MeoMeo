@@ -29,6 +29,7 @@ import {
   switchPersonaSafe,
   type ApiResult,
 } from "@/lib/api";
+import { CONFIG } from "@/contracts/config";
 import { deriveNodeStates } from "@/lib/derive";
 import { formatErrorMessage } from "@/lib/messages";
 
@@ -201,6 +202,57 @@ function omit<T extends object, K extends keyof T>(obj: T, keys: readonly K[]): 
   return copy;
 }
 
+/**
+ * Thứ tự tô-pô (Kahn), hòa theo `id` tăng dần (Mục 7.3). Có chu trình ⇒ phần còn lại nối theo `id`.
+ * Dùng cho "1–2 bài kế tiếp" của hàng phân tích.
+ */
+export function topoOrderOf(nodes: Array<{ id: string; prerequisites: string[] }>): string[] {
+  const ids = new Set(nodes.map((n) => n.id));
+  const indegree = new Map<string, number>();
+  const children = new Map<string, string[]>();
+  for (const n of nodes) {
+    const parents = [...new Set(n.prerequisites)].filter((p) => ids.has(p) && p !== n.id);
+    indegree.set(n.id, parents.length);
+    for (const p of parents) children.set(p, [...(children.get(p) ?? []), n.id]);
+  }
+  const ready = [...ids].filter((id) => indegree.get(id) === 0).sort();
+  const order: string[] = [];
+  while (ready.length > 0) {
+    const id = ready.shift() as string;
+    order.push(id);
+    for (const c of children.get(id) ?? []) {
+      const left = (indegree.get(c) ?? 1) - 1;
+      indegree.set(c, left);
+      if (left === 0) {
+        ready.push(c);
+        ready.sort();
+      }
+    }
+  }
+  const seen = new Set(order);
+  return [...order, ...[...ids].filter((id) => !seen.has(id)).sort()];
+}
+
+/** Số bài kế tiếp (sau bài đang mở) được tải trước, D-46. */
+const ANALYZE_LOOKAHEAD = 2;
+
+/** Bài đã có kết quả phân tích (bản đủ hoặc lỗi) thì không đưa vào hàng nữa. */
+const analysisSettled = (a: ClientWorkbenchState["analyses"][string] | undefined) => a !== undefined && a !== "PENDING";
+
+/** Một lời gọi `analyze-node` đang chờ hoặc đang chạy; `done` xong khi lời gọi kết thúc hoặc bị bỏ khỏi hàng. */
+interface AnalysisJob {
+  sessionId: string;
+  nodeId: string;
+  done: Promise<void>;
+  finish: () => void;
+}
+
+function newAnalysisJob(sessionId: string, nodeId: string): AnalysisJob {
+  let finish!: () => void;
+  const done = new Promise<void>((resolve) => (finish = resolve));
+  return { sessionId, nodeId, done, finish };
+}
+
 export const FIXTURE_SESSION_ID = "fixture-shop-api";
 /** Chỉ để thấy đồng hồ quét chạy khi dùng fixture; server thật không dùng số này. */
 const FIXTURE_INGEST_DELAY_MS = 1500;
@@ -287,6 +339,69 @@ export const useWorkbenchStore = create<WorkbenchStore>()((set, get) => {
         await get().refreshProgress();
       }
     }
+  };
+
+  // ---- Hàng phân tích (Mục 7.3): hàng chờ + các lời gọi đang chạy, theo phiên ----
+  let analysisQueue: AnalysisJob[] = [];
+  const analysisRunning = new Map<string, AnalysisJob>();
+  const analysisKey = (j: Pick<AnalysisJob, "sessionId" | "nodeId">) => `${j.sessionId}::${j.nodeId}`;
+
+  /** Lấy việc từ đầu hàng cho tới khi đủ `CONFIG.ANALYZE_CONCURRENCY` lời gọi đang chạy của phiên hiện tại. */
+  const pumpAnalysis = () => {
+    const sessionId = get().session_id;
+    // Mục của phiên khác không còn ý nghĩa: bỏ, trả lời các bên đang chờ.
+    const stale = analysisQueue.filter((j) => j.sessionId !== sessionId);
+    analysisQueue = analysisQueue.filter((j) => j.sessionId === sessionId);
+    for (const job of stale) job.finish();
+    if (!sessionId) return;
+
+    const runningNow = () => [...analysisRunning.values()].filter((j) => j.sessionId === sessionId).length;
+    while (analysisQueue.length > 0 && runningNow() < CONFIG.ANALYZE_CONCURRENCY && !get().ui.quota_stopped) {
+      const job = analysisQueue.shift() as AnalysisJob;
+      analysisRunning.set(analysisKey(job), job);
+      void runAnalysis(job).finally(() => {
+        analysisRunning.delete(analysisKey(job));
+        job.finish();
+        pumpAnalysis();
+      });
+    }
+  };
+
+  /** `ERR_TOKEN_QUOTA_EXCEEDED` ⇒ dừng hàng: bài đang chờ ⇒ `"FAILED"` (Mục 7.3). */
+  const stopAnalysisQueue = (sessionId: string) => {
+    const waiting = analysisQueue.filter((j) => j.sessionId === sessionId);
+    analysisQueue = analysisQueue.filter((j) => j.sessionId !== sessionId);
+    if (waiting.length > 0 && sameSession(sessionId)) {
+      set((s) => {
+        const analyses = { ...s.analyses };
+        for (const job of waiting) if (analyses[job.nodeId] === "PENDING") analyses[job.nodeId] = "FAILED";
+        return { analyses };
+      });
+    }
+    for (const job of waiting) job.finish();
+  };
+
+  const runAnalysis = async ({ sessionId, nodeId }: AnalysisJob) => {
+    const res = await analyzeNodeSafe(sessionId, nodeId);
+    if (!sameSession(sessionId)) return;
+
+    if (!res.ok) {
+      // Lỗi khác hạn mức ⇒ chỉ bài này `"FAILED"`, hàng chạy tiếp.
+      const quota = res.code === "ERR_TOKEN_QUOTA_EXCEEDED";
+      set((s) => ({
+        analyses: { ...s.analyses, [nodeId]: "FAILED" },
+        ui: { ...s.ui, quota_stopped: s.ui.quota_stopped || quota },
+      }));
+      if (quota) stopAnalysisQueue(sessionId);
+      return;
+    }
+    const data: AnalyzeNodeResponse = res.data;
+    const before = get().progress?.nodes[nodeId]?.status;
+    set((s) => ({ analyses: { ...s.analyses, [nodeId]: data.analysis ?? "FAILED" } }));
+    mergeNodeState(data.node_state, data.tokens_used);
+    await afterAnswer(sessionId, { ...data, skill_change: null }, before);
+    // Phân tích về sau khi người học đã mở bài ⇒ gọi `enrich-node` (7.4 bước 2).
+    if (get().active_node_id === nodeId && data.analysis) void get().loadRun(nodeId);
   };
 
   return {
@@ -407,31 +522,60 @@ export const useWorkbenchStore = create<WorkbenchStore>()((set, get) => {
       else if (analysis !== "PENDING" && analysis !== "FAILED") void get().loadRun(nodeId);
     },
 
-    requestAnalysis: async (nodeId, retry) => {
-      const { session_id: sessionId, analyses, ui } = get();
-      if (!sessionId || ui.fixture || ui.quota_stopped) return;
-      const current = analyses[nodeId];
-      if (current === "PENDING" && !retry) return;
-      if (current && current !== "PENDING" && current !== "FAILED") return;
+    /**
+     * Hàng phân tích (Mục 7.3, D-46): chỉ bài `nodeId` và 1–2 bài kế tiếp theo thứ tự tô-pô, tối đa
+     * `CONFIG.ANALYZE_CONCURRENCY` lời gọi `analyzeNodeSafe` cùng lúc. Bài vào hàng ⇒ `"PENDING"`.
+     * Gọi lại với bài khác ⇒ chuyển ưu tiên: bài chưa chạy mà không còn trong nhóm ưu tiên bị bỏ khỏi hàng
+     * (hết nhãn). `retry` ("Thử lại phân tích") đưa bài `"FAILED"` lên đầu hàng. Trả về khi bài `nodeId` xong.
+     */
+    requestAnalysis: (nodeId, retry) => {
+      const { session_id: sessionId, ui, analyses, result } = get();
+      if (!sessionId || ui.fixture || ui.quota_stopped) return Promise.resolve();
 
-      set((s) => ({ analyses: { ...s.analyses, [nodeId]: "PENDING" } }));
-      const res = await analyzeNodeSafe(sessionId, nodeId);
-      if (!sameSession(sessionId)) return;
+      const own = analyses[nodeId];
+      const wantsOwn = own === undefined || own === "PENDING" || (retry === true && own === "FAILED");
+      const topo = result ? topoOrderOf(result.nodes) : [];
+      const after = topo.indexOf(nodeId) >= 0 ? topo.slice(topo.indexOf(nodeId) + 1) : [];
+      const next = after.filter((id) => !analysisSettled(analyses[id])).slice(0, ANALYZE_LOOKAHEAD);
+      const wanted = [...(wantsOwn ? [nodeId] : []), ...next];
+      const wantedSet = new Set(wanted);
 
-      if (!res.ok) {
-        set((s) => ({
-          analyses: { ...s.analyses, [nodeId]: "FAILED" },
-          ui: { ...s.ui, quota_stopped: s.ui.quota_stopped || res.code === "ERR_TOKEN_QUOTA_EXCEEDED" },
-        }));
-        return;
+      // Chuyển ưu tiên: mục của phiên khác hoặc không còn được cần ⇒ bỏ khỏi hàng.
+      const kept = new Map<string, AnalysisJob>();
+      const dropped: AnalysisJob[] = [];
+      for (const job of analysisQueue) {
+        if (job.sessionId === sessionId && wantedSet.has(job.nodeId)) kept.set(job.nodeId, job);
+        else dropped.push(job);
       }
-      const data: AnalyzeNodeResponse = res.data;
-      const before = get().progress?.nodes[nodeId]?.status;
-      set((s) => ({ analyses: { ...s.analyses, [nodeId]: data.analysis ?? "FAILED" } }));
-      mergeNodeState(data.node_state, data.tokens_used);
-      await afterAnswer(sessionId, { ...data, skill_change: null }, before);
-      if (get().active_node_id === nodeId && data.analysis) await get().loadRun(nodeId);
+      analysisQueue = [];
+      let ownJob: AnalysisJob | undefined;
+      for (const id of wanted) {
+        const running = analysisRunning.get(analysisKey({ sessionId, nodeId: id }));
+        if (running) {
+          if (id === nodeId) ownJob = running;
+          continue;
+        }
+        const job = kept.get(id) ?? newAnalysisJob(sessionId, id);
+        analysisQueue.push(job);
+        if (id === nodeId) ownJob = job;
+      }
+
+      set((s) => {
+        const updated = { ...s.analyses };
+        for (const job of dropped) {
+          if (job.sessionId === sessionId && updated[job.nodeId] === "PENDING" && !analysisRunning.has(analysisKey(job))) {
+            delete updated[job.nodeId];
+          }
+        }
+        for (const job of analysisQueue) updated[job.nodeId] = "PENDING";
+        return { analyses: updated };
+      });
+      for (const job of dropped) job.finish();
+
+      pumpAnalysis();
+      return ownJob?.done ?? Promise.resolve();
     },
+
 
     loadRun: async (nodeId) => {
       const { session_id: sessionId, ui, runs, analyses, progress } = get();
