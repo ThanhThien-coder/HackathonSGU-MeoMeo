@@ -1,14 +1,16 @@
 "use client";
 
-// Thẻ lát cắt bài học (.slice) theo prototype.html & TasteSkill 2.5
+// Thẻ bài học dạng một dòng: biểu tượng file · tên bài · nhãn bên phải.
+// Route (title_evidence) nằm trong tooltip; "cần thêm: …" chỉ hiện khi bài cần học trước ở nhóm khác.
+import { File, FileCheck, FileX, Lock } from "lucide-react";
 import type { HybridArchitecturalNode, NodeStatus } from "@/contracts";
 import { cardAction } from "@/lib/lesson-map";
 
-const STATUS_CLASS: Record<NodeStatus, string> = {
-  LOCKED: "st-locked text-[var(--locked)]",
-  AVAILABLE: "st-ready text-[var(--ready)]",
-  COMPLETED: "st-done text-[var(--done)]",
-  FAILED: "st-fail text-[var(--fail)]",
+const STATUS_COLOR: Record<NodeStatus, string> = {
+  LOCKED: "text-[var(--locked)]",
+  AVAILABLE: "text-[var(--ready)]",
+  COMPLETED: "text-[var(--done)]",
+  FAILED: "text-[var(--fail)]",
 };
 
 const STATUS_LABEL: Record<NodeStatus, string> = {
@@ -16,6 +18,13 @@ const STATUS_LABEL: Record<NodeStatus, string> = {
   AVAILABLE: "Sẵn sàng",
   COMPLETED: "Đã xong",
   FAILED: "Chưa đạt",
+};
+
+const STATUS_ICON: Record<NodeStatus, typeof File> = {
+  LOCKED: File,
+  AVAILABLE: File,
+  COMPLETED: FileCheck,
+  FAILED: FileX,
 };
 
 export type CardAnalysis = "PENDING" | "FAILED" | "READY" | "NONE";
@@ -29,6 +38,7 @@ export interface LessonCardProps {
   status: NodeStatus;
   hasWarning: boolean;
   weakNames: string[];
+  /** Bài cần học trước nằm ở nhóm khác (crossGroupBlockers). Rỗng ⇒ không hiện "cần thêm". */
   blockedNames: string[];
   isStart: boolean;
   active: boolean;
@@ -52,24 +62,31 @@ export function LessonCard({
   onRetryAnalysis,
 }: LessonCardProps) {
   const action = cardAction(status, blockedNames);
+  const locked = status === "LOCKED";
   const inferred = ["DOMAIN_TERMS", "DIRECTORY", "FILE_BASENAME"].includes(node.title_source);
-  const tooltip =
-    action.hint ??
-    [
-      title,
-      node.title_evidence,
-      inferred ? "Tên suy ra — gần đúng" : null,
-      node.title_source === "VIRTUAL"
-        ? "Chặng tách từ hàm dài — code thật, engine chia theo vai trò câu lệnh"
-        : null,
-    ]
-      .filter(Boolean)
-      .join(" · ");
+  const Icon = STATUS_ICON[status];
+
+  const tooltip = [
+    title,
+    node.title_evidence,
+    inferred ? "Tên suy ra — gần đúng" : null,
+    node.title_source === "VIRTUAL"
+      ? "Chặng tách từ hàm dài — code thật, engine chia theo vai trò câu lệnh"
+      : null,
+    analysis === "PENDING" ? "Đang phân tích…" : null,
+    analysis === "FAILED" ? "Chưa phân tích được" : null,
+    action.hint,
+  ]
+    .filter(Boolean)
+    .join(" · ");
 
   const label = [
     `${title} — ${STATUS_LABEL[status]}`,
+    isStart ? "bắt đầu ở đây" : null,
+    node.is_capstone ? "trọng tâm" : null,
     hasWarning ? "có cảnh báo" : null,
     analysis === "PENDING" ? "đang phân tích" : null,
+    analysis === "FAILED" ? "chưa phân tích được" : null,
   ]
     .filter(Boolean)
     .join(", ");
@@ -83,54 +100,40 @@ export function LessonCard({
         aria-disabled={action.ariaDisabled || undefined}
         aria-current={active ? "true" : undefined}
         onClick={() => (action.kind === "OPEN" ? onOpen(node.id) : onBlocked(node.id))}
-        className={`slice block w-full text-left rounded-[10px] p-3 relative transition-all cursor-pointer ${
+        className={`slice relative block w-full cursor-pointer rounded-[8px] px-2.5 py-1.5 text-left transition-colors ${
           active
-            ? "sel bg-[var(--panel2)] shadow-sm before:content-[''] before:absolute before:left-0 before:top-2.5 before:bottom-2.5 before:w-[3px] before:rounded-r-[3px] before:bg-[var(--accent)]"
-            : "bg-[var(--panel)] hover:bg-[var(--panel2)] hover:-translate-y-0.5"
-        } ${status === "LOCKED" ? "opacity-60" : ""}`}
+            ? "sel bg-[var(--panel2)] before:absolute before:top-1.5 before:bottom-1.5 before:left-0 before:w-[3px] before:rounded-r-[3px] before:bg-[var(--accent)] before:content-['']"
+            : "hover:bg-[var(--panel2)]"
+        } ${locked ? "opacity-60" : ""}`}
       >
-        <div className="s-top flex items-baseline gap-2 flex-wrap">
+        <div className="flex min-w-0 items-center gap-2">
+          <Icon size={15} strokeWidth={2} aria-hidden="true" className={`shrink-0 ${STATUS_COLOR[status]}`} />
 
-          <span className="s-name text-[14px] font-semibold text-[var(--text)]">{title}</span>
-          {node.is_capstone ? (
-            <span className="star text-[var(--ready)] font-bold text-xs">
-              (Trọng tâm)
-            </span>
-          ) : null}
-          {inferred ? (
-            <span className="ai-tag text-[10px] font-medium text-[var(--muted)] rounded-full px-2 py-0.5 bg-[var(--panel3)]">
-              AI đặt tên
-            </span>
-          ) : null}
-        </div>
+          <span className="min-w-0 flex-1 truncate text-[13.5px] font-medium text-[var(--text)]">{title}</span>
 
-        <span className="s-code block font-mono text-[11.5px] text-[var(--muted)] mt-1 word-break-all">
-          {node.title_evidence}
-        </span>
-
-        <div className={`s-st flex items-center gap-2 mt-2 text-xs font-semibold ${STATUS_CLASS[status]}`}>
-          <span
-            className={`dot h-2 w-2 rounded-full ${
-              status === "AVAILABLE" ? "bg-[var(--ready)] shadow-[0_0_6px_var(--ready)]" : "bg-currentColor"
-            }`}
-          />
-          <span>{STATUS_LABEL[status]}</span>
-          {isStart ? (
-            <span className="text-[10.5px] rounded-full bg-[var(--hl-step)] text-[var(--accent)] px-2 py-0.5 font-bold">
-              Bắt đầu
-            </span>
-          ) : null}
           {analysis === "PENDING" ? (
-            <span className="text-[11px] font-normal text-[var(--muted)]">đang phân tích…</span>
+            <span
+              aria-hidden="true"
+              className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-[var(--muted)]"
+            />
           ) : null}
-          {analysis === "FAILED" ? (
-            <span className="text-[11px] font-normal text-[var(--fail)]">Chưa phân tích được</span>
+
+          {isStart ? (
+            <span className="shrink-0 rounded-full bg-[var(--hl-step)] px-2 py-0.5 text-[10.5px] font-bold text-[var(--accent)]">
+              Bắt đầu ở đây
+            </span>
+          ) : null}
+          {node.is_capstone ? (
+            <span className="shrink-0 text-[11px] font-bold text-[var(--ready)]">★ Trọng tâm</span>
+          ) : null}
+          {locked ? (
+            <Lock size={13} strokeWidth={2} aria-hidden="true" className="shrink-0 text-[var(--locked)]" />
           ) : null}
         </div>
 
-        {action.hint ? (
-          <div className="need mt-2 text-xs text-[var(--muted)] border-t border-[var(--panel3)] pt-1.5">
-            {action.hint}
+        {blockedNames.length > 0 ? (
+          <div className="need mt-0.5 truncate pl-[23px] text-[11.5px] text-[var(--muted)]">
+            cần thêm: {blockedNames.join(", ")}
           </div>
         ) : null}
       </button>
@@ -139,7 +142,7 @@ export function LessonCard({
         <button
           type="button"
           onClick={() => onRetryAnalysis(node.id)}
-          className="tbtn mt-1 text-xs py-1 px-2 text-[var(--text)]"
+          className="tbtn mt-0.5 ml-[33px] px-2 py-0.5 text-xs text-[var(--text)]"
         >
           Thử lại phân tích
         </button>
