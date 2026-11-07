@@ -101,6 +101,14 @@ export function IngestBox() {
       // localStorage bị chặn: bỏ qua, vẫn chuyển trang.
     }
 
+    // Vừa quét repo mới ⇒ trang học tự mở hướng dẫn buồng lái; mở lại phiên cũ thì không.
+    try {
+      if (res.data.resumed) sessionStorage.removeItem("sf.tour_pending");
+      else sessionStorage.setItem("sf.tour_pending", res.data.session_id);
+    } catch {
+      // sessionStorage bị chặn: bỏ qua hướng dẫn tự mở.
+    }
+
     if (res.data.resumed) {
       const completed = Object.values(res.data.progress.nodes).filter((n) => n.status === "COMPLETED").length;
       const total = res.data.result.nodes.length;

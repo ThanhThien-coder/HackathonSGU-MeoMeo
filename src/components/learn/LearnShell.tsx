@@ -139,26 +139,22 @@ export function LearnShell() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  // Tự động mở hướng dẫn sử dụng (Duolingo Tour) khi người dùng đã chọn bài học
+  // Tự mở hướng dẫn buồng lái CHỈ khi vừa quét repo mới từ trang chủ (IngestBox đặt cờ `sf.tour_pending`).
+  // Học tiếp phiên cũ không có cờ ⇒ không tự mở; vẫn mở tay bằng nút "Hướng dẫn".
   useEffect(() => {
-    if (!result || !activeNodeId) return;
+    if (!result || !activeNodeId || !sessionParam) return;
     try {
-      const shown = window.sessionStorage.getItem("sf.tour_shown");
-      if (!shown) {
+      if (window.sessionStorage.getItem("sf.tour_pending") === sessionParam) {
+        window.sessionStorage.removeItem("sf.tour_pending");
         setTourOpen(true);
       }
     } catch {
       // sessionStorage có thể bị chặn
     }
-  }, [result, activeNodeId]);
+  }, [result, activeNodeId, sessionParam]);
 
   const handleCloseTour = () => {
     setTourOpen(false);
-    try {
-      window.sessionStorage.setItem("sf.tour_shown", "true");
-    } catch {
-      // Không làm gián đoạn UI
-    }
   };
 
   const handleEnsureColumnsOpen = () => {
