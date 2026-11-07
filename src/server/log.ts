@@ -31,18 +31,19 @@ export interface ApiRequestLogEntry {
   error_code: ErrorCode | null;
 }
 
+// 4 trường tùy chọn: bản log tối giản (B23), lời gọi Gemini chưa có req_id; pino bỏ qua trường undefined
 export interface AiCallLogEntry {
-  req_id: string;
+  req_id?: string;
   call_kind: "ANALYZE" | "OVERVIEW" | "QUESTIONS" | "GRADE" | "EXPLAIN";
   backend: string;
   model: string;
   tokens_in: number;
   tokens_out: number;
-  cached_tokens: number;
+  cached_tokens?: number;
   retries: number;
   cost_usd: number;
-  ai_cache_hit: boolean;
-  duration_ms: number;
+  ai_cache_hit?: boolean;
+  duration_ms?: number;
   session_id?: string;
   node_id?: string;
 }

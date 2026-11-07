@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import type {
   AnalyzeNodeResponse,
+  ClientStaticEngineResult,
   ClientWorkbenchState,
   EnrichNodeResponse,
   EvaluateFeynmanResponse,
@@ -13,6 +14,7 @@ import type {
   NodeStateView,
   PersonaMode,
   SkillChange,
+  StaticEngineResult,
 } from "@/contracts";
 import {
   analyzeNodeSafe,
@@ -27,6 +29,7 @@ import {
   switchPersonaSafe,
   type ApiResult,
 } from "@/lib/api";
+import { deriveNodeStates } from "@/lib/derive";
 import { formatErrorMessage } from "@/lib/messages";
 
 // ---------- Kiểu của slice `ui` (docs/spec/30_UI.md Mục 7.1) ----------
@@ -188,9 +191,50 @@ function isFixtureMode(): boolean {
 const FIXTURE_NOT_READY: ApiResult<never> = {
   ok: false,
   code: "ERR_CLIENT_NETWORK",
-  message: "Chế độ fixture chưa có dữ liệu (chờ fixture shop-api).",
+  message: "Chế độ fixture chưa có dữ liệu cho thao tác này.",
   retryable: false,
 };
+
+function omit<T extends object, K extends keyof T>(obj: T, keys: readonly K[]): Omit<T, K> {
+  const copy = { ...obj };
+  for (const k of keys) delete copy[k];
+  return copy;
+}
+
+export const FIXTURE_SESSION_ID = "fixture-shop-api";
+/** Chỉ để thấy đồng hồ quét chạy khi dùng fixture; server thật không dùng số này. */
+const FIXTURE_INGEST_DELAY_MS = 1500;
+
+/** Dựng `IngestResponse` từ `shop-api.json`, cùng hình dạng server trả (bỏ trường chỉ-server). */
+async function buildFixtureIngest(): Promise<IngestResponse> {
+  const { default: raw } = await import("@/server/engine/__fixtures__/shop-api.json");
+  const full = raw as unknown as StaticEngineResult;
+  const result: ClientStaticEngineResult = {
+    ...omit(full, ["symbol_whitelist", "readme_excerpt", "manifest_description", "ingestion_report"]),
+    ingestion_report: omit(full.ingestion_report, ["suspicious_instruction_files"]),
+  };
+
+  const derived = deriveNodeStates(
+    result.nodes.map((n) => ({
+      node_id: n.id,
+      title: n.title,
+      prerequisites: n.prerequisites,
+      is_capstone: n.is_capstone,
+    })),
+    [],
+  );
+  const nodes: Record<string, NodeStateView> = {};
+  for (const [id, s] of Object.entries(derived)) nodes[id] = { ...s, last_run: null };
+
+  return {
+    session_id: FIXTURE_SESSION_ID,
+    result,
+    progress: { session_id: FIXTURE_SESSION_ID, nodes, tokens_used: 0 },
+    analyses: {},
+    resumed: false,
+    from_cache: false,
+  };
+}
 
 export const useWorkbenchStore = create<WorkbenchStore>()((set, get) => {
   /** Chỉ nhận response nếu vẫn đang ở đúng phiên đã gửi (Mục 7.1). */
@@ -287,9 +331,15 @@ export const useWorkbenchStore = create<WorkbenchStore>()((set, get) => {
 
     // ---- Nạp repo ----
     ingest: async (req) => {
-      if (get().ui.fixture) return FIXTURE_NOT_READY;
       set((s) => ({ ui: { ...s.ui, ingesting: true, ingest_error: null } }));
-      const res = await ingestRepoSafe(req);
+      let res: ApiResult<IngestResponse>;
+      if (get().ui.fixture) {
+        // `?fixture=1`: không gọi API, trả bản đồ shop-api sau một khoảng ngắn để thấy đồng hồ quét.
+        await new Promise((resolve) => setTimeout(resolve, FIXTURE_INGEST_DELAY_MS));
+        res = { ok: true, data: await buildFixtureIngest() };
+      } else {
+        res = await ingestRepoSafe(req);
+      }
       if (res.ok) get().applyIngest(res.data);
       else set((s) => ({ ui: { ...s.ui, ingesting: false, ingest_error: toUiError(res) } }));
       return res;

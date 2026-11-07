@@ -102,3 +102,32 @@ describe("phiên học", () => {
     expect(s.ui.metrics).toEqual({ ingest_ms: 10, engine_ms: 20 });
   });
 });
+
+describe("chế độ fixture", () => {
+  it("ingest nạp shop-api, không gọi API, bản client không có trường chỉ-server", async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    useWorkbenchStore.setState((s) => ({ ui: { ...s.ui, fixture: true } }));
+
+    const pending = useWorkbenchStore.getState().ingest({ repo_url: "https://github.com/a/b" });
+    expect(useWorkbenchStore.getState().ui.ingesting).toBe(true);
+    await vi.runAllTimersAsync();
+    const res = await pending;
+    vi.useRealTimers();
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(res.ok).toBe(true);
+    const s = useWorkbenchStore.getState();
+    expect(s.ui.ingesting).toBe(false);
+    expect(s.session_id).toBe("fixture-shop-api");
+    expect(s.result?.repo_name).toBe("shop-api");
+    expect(s.result).not.toHaveProperty("symbol_whitelist");
+    expect(s.result).not.toHaveProperty("readme_excerpt");
+    expect(s.result?.ingestion_report).not.toHaveProperty("suspicious_instruction_files");
+    const states = Object.values(s.progress?.nodes ?? {});
+    expect(states).toHaveLength(s.result?.nodes.length ?? -1);
+    expect(states.some((n) => n.status === "AVAILABLE")).toBe(true);
+    expect(states.some((n) => n.status === "LOCKED")).toBe(true);
+  });
+});
