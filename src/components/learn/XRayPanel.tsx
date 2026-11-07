@@ -178,7 +178,7 @@ export function XRayPanel() {
     <div className="flex flex-col gap-3 p-3.5 min-w-0 break-words overflow-hidden h-full">
       {banner}
       {notice}
-      <div className="flex-1 flex flex-col min-h-0">
+      <div className="flex-1 flex flex-col min-h-0 overflow-y-auto">
         {body}
       </div>
     </div>
