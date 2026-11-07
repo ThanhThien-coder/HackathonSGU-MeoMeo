@@ -13,7 +13,7 @@ export function uniqueKey(baseKey: string, keyCounts: Map<string, number>): stri
   return `${baseKey}~${count + 1}`;
 }
 
-function findEnclosingClass(node: Node): { className: string; isAbstract: boolean } | null {
+export function findEnclosingClass(node: Node): { className: string; isAbstract: boolean } | null {
   let curr = node.parent;
   while (curr) {
     if (
@@ -267,7 +267,7 @@ function functionNodeOf(defNode: Node): Node {
   return defNode;
 }
 
-function extractParams(defNode: Node): string[] {
+export function extractParams(defNode: Node): string[] {
   const fnNode = functionNodeOf(defNode);
   const singleParam = fnNode.childForFieldName("parameter");
   if (singleParam) {
@@ -292,7 +292,7 @@ function extractParams(defNode: Node): string[] {
   return result;
 }
 
-function extractLocals(defNode: Node): string[] {
+export function extractLocals(defNode: Node): string[] {
   const fnNode = functionNodeOf(defNode);
   const bodyNode =
     fnNode.childForFieldName("body") ??
@@ -380,6 +380,21 @@ interface SymbolCandidate {
   name: string;
   kind: "FUNCTION" | "METHOD" | "CLASS" | "INTERFACE" | "TYPE" | "VARIABLE";
   isDirectDefaultExport: boolean;
+  owner?: string;
+}
+
+// `const ctrl = { create() {} }` cấp file: trả tên biến chứa object.
+function objectOwnerOf(objectNode: Node | null): string | null {
+  const declarator = objectNode?.parent;
+  if (objectNode?.type !== "object" || declarator?.type !== "variable_declarator") {
+    return null;
+  }
+  const scope = declarator.parent?.parent;
+  if (scope?.type !== "program" && scope?.type !== "export_statement") {
+    return null;
+  }
+  const nameNode = declarator.childForFieldName("name");
+  return nameNode?.type === "identifier" ? nameNode.text : null;
 }
 
 // Hàm không có tên riêng trong cây nên query không bắt được (ENG-21):
@@ -544,6 +559,22 @@ function collectFileSymbols(
             const valNode =
               declarator.childForFieldName("value") ?? declarator.namedChild(1);
 
+            if (nameNode?.type === "identifier" && valNode?.type === "object") {
+              for (const prop of valNode.namedChildren) {
+                const keyNode = prop.type === "pair" ? prop.childForFieldName("key") : null;
+                const propValue = prop.type === "pair" ? prop.childForFieldName("value") : null;
+                if (keyNode && propValue && isFunctionValue(propValue)) {
+                  candidates.push({
+                    defNode: prop,
+                    name: keyNode.text,
+                    kind: "METHOD",
+                    isDirectDefaultExport: false,
+                    owner: nameNode.text,
+                  });
+                }
+              }
+            }
+
             if (nameNode && nameNode.type === "identifier") {
               const isFunctionVal =
                 valNode &&
@@ -592,11 +623,15 @@ function collectFileSymbols(
   for (const cand of candidates) {
     let baseKey = `${file.path}#${cand.name}`;
     let enclosingClassInfo: { className: string; isAbstract: boolean } | null = null;
+    let owner: string | null = null;
 
     if (cand.kind === "METHOD") {
       enclosingClassInfo = findEnclosingClass(cand.defNode);
+      owner = cand.owner ?? objectOwnerOf(cand.defNode.parent);
       if (enclosingClassInfo) {
         baseKey = `${file.path}#${enclosingClassInfo.className}.${cand.name}`;
+      } else if (owner) {
+        baseKey = `${file.path}#${owner}.${cand.name}`;
       }
     }
 
@@ -640,7 +675,10 @@ function collectFileSymbols(
           }
           p = p.parent;
         }
-        is_exported = hasExportAncestor || fileExportedNames.has(cand.name);
+        is_exported =
+          hasExportAncestor ||
+          fileExportedNames.has(cand.name) ||
+          (owner !== null && fileExportedNames.has(owner));
       }
     }
 
@@ -940,6 +978,74 @@ function collectClassInfo(
       }
     }
 
+    // `export default new T()`, `module.exports = new T()`
+    if (node.parent?.type === "program") {
+      const assign = node.type === "expression_statement" ? node.namedChild(0) : null;
+      const defaultValue =
+        node.type === "export_statement" && node.children.some((c) => c.text === "default")
+          ? node.childForFieldName("value")
+          : assign?.type === "assignment_expression" &&
+              assign.childForFieldName("left")?.text === "module.exports"
+            ? assign.childForFieldName("right")
+            : null;
+      if (defaultValue?.type === "new_expression") {
+        const ctor = defaultValue.childForFieldName("constructor");
+        if (ctor) {
+          setFieldType(`${file.path}#default`, ctor.text);
+        }
+      }
+    }
+
+    // Field của interface và type (whitelist)
+    if (node.type === "property_signature") {
+      let p = node.parent;
+      let inInterfaceOrTypeObject = false;
+      while (p) {
+        if (p.type === "interface_declaration") {
+          inInterfaceOrTypeObject = true;
+          break;
+        }
+        if (p.type === "object_type") {
+          let q = p.parent;
+          while (q) {
+            if (q.type === "type_alias_declaration") {
+              inInterfaceOrTypeObject = true;
+              break;
+            }
+            if (
+              q.type === "statement_block" ||
+              q.type === "class_declaration" ||
+              q.type === "function_declaration"
+            ) {
+              break;
+            }
+            q = q.parent;
+          }
+          if (inInterfaceOrTypeObject) {
+            break;
+          }
+        }
+        if (
+          p.type === "statement_block" ||
+          p.type === "class_declaration" ||
+          p.type === "function_declaration"
+        ) {
+          break;
+        }
+        p = p.parent;
+      }
+      if (inInterfaceOrTypeObject) {
+        const nameNode =
+          node.childForFieldName("name") ??
+          node.children.find(
+            (c) => c.type === "property_identifier" || c.type === "identifier"
+          );
+        if (nameNode) {
+          idx.type_fields.add(nameNode.text);
+        }
+      }
+    }
+
     for (let i = 0; i < node.childCount; i++) {
       const child = node.child(i);
       if (child) {
@@ -961,6 +1067,7 @@ export function collectSymbols(files: ParsedFile[]): SymbolIndex {
     class_parents: new Map(),
     locals: new Map(),
     functions: new Map(),
+    type_fields: new Set(),
   };
 
   const keyCounts = new Map<string, number>();

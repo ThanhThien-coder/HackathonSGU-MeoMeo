@@ -54,6 +54,14 @@ export interface Candidate
   base_title: string;
 }
 
+export interface CallSite {
+  callee: string;
+  line: number;
+  column: number;
+  confidence: "RESOLVED" | "INFERRED";
+  ambiguous: boolean;
+}
+
 export interface FunctionInfo extends SymbolDefinition {
   params: string[];
   locals: string[];
@@ -105,6 +113,7 @@ export interface SymbolIndex {
   class_parents: Map<string, string>;
   locals: LocalSymbolIndex;
   functions: Map<string, FunctionInfo>;
+  type_fields: Set<string>;
 }
 
 export interface EngineContext {
