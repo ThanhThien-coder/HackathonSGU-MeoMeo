@@ -1,5 +1,9 @@
+"use client";
+
 import Link from "next/link";
+import { useState } from "react";
 import { Button } from "@/components/ui/common";
+import { signInWithGithub } from "@/lib/supabase/client";
 
 const OFFLINE_HREF = "/learn?offline=1";
 
@@ -23,6 +27,22 @@ export function OfflineCard() {
 }
 
 export function LoginScreen() {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const signIn = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      // Về lại đúng trang đang đứng (VD `/learn?session=…`); đang ở `/login` thì về trang chủ.
+      const here = window.location.pathname + window.location.search;
+      await signInWithGithub(here.startsWith("/login") ? undefined : here);
+    } catch {
+      setError("Chưa mở được trang đăng nhập GitHub. Hãy thử lại, hoặc xem bản demo Offline.");
+      setBusy(false);
+    }
+  };
+
   return (
     <section className="mx-auto flex w-full max-w-md flex-col gap-5 rounded-2xl border border-line bg-panel p-6 sm:p-8">
       <div>
@@ -31,11 +51,14 @@ export function LoginScreen() {
           Đăng nhập bằng GitHub để quét repo và học theo từng bài.
         </p>
       </div>
-      {/* TODO(TH-06): khi `src/lib/supabase/client.ts` merge, gọi `signInWithGithub()`,
-          bật nút và đổi nhãn về "Đăng nhập GitHub". */}
-      <Button variant="primary" disabled className="w-full">
-        Đăng nhập (đang nối)
+      <Button variant="primary" disabled={busy} onClick={() => void signIn()} className="w-full">
+        {busy ? "Đang chuyển tới GitHub…" : "Đăng nhập GitHub"}
       </Button>
+      {error ? (
+        <p role="alert" className="m-0 text-sm text-st-fail-fg">
+          {error}
+        </p>
+      ) : null}
       <OfflineCard />
     </section>
   );
