@@ -257,6 +257,22 @@ describe("errors", () => {
       expect(infoSpy).toHaveBeenCalled();
     });
 
+    it("logAiCall chấp nhận bản tối giản, không có 4 trường tùy chọn", () => {
+      const infoSpy = vi.spyOn(logger, "info");
+      logAiCall({
+        call_kind: "GRADE",
+        backend: "studio",
+        model: "gemini-3.5-flash-lite",
+        tokens_in: 10,
+        tokens_out: 5,
+        retries: 1,
+        cost_usd: 0.0001,
+      });
+      expect(infoSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ call_kind: "GRADE", tokens_in: 10, retries: 1 }),
+      );
+    });
+
     it("logGuardBlocked ghi mức warn", () => {
       const warnSpy = vi.spyOn(logger, "warn");
       logGuardBlocked({

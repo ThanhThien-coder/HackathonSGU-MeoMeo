@@ -144,6 +144,7 @@ export const CONFIG = {
   REPORT_NOTE_MAX_CHARS: 500,         // = check char_length(note) của dispute_reports
 
   // ---------- Giao diện (30_UI) ----------
+  UI_PANE_WIDTHS_PCT: [24, 45, 31],   // Bản đồ / Code / X-Ray từ 1024 px, theo prototype.html (applyChrome)
   UI_PRESENTATION_FOCUS_PCT: 60,      // Cột code ở chế độ trình chiếu; 2 cột còn lại chia đều phần còn lại
   UI_PRESENTATION_FONT_SCALE: 1.25,
 
