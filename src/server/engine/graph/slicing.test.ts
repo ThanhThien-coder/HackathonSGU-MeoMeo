@@ -1,4 +1,5 @@
 import { beforeAll, describe, expect, it } from "vitest";
+import { CONFIG } from "@/contracts";
 import type { IngestionReport, LanguageId } from "@/contracts";
 import { buildCallGraph, findEntries } from "./callgraph";
 import { fillComplexity } from "./complexity";
@@ -249,6 +250,119 @@ describe("slicing (Spec 11 §8, ENG-80 -> ENG-89)", () => {
     expect(lines.filter((l) => l.includes("… ("))).toHaveLength(2);
     expect(step?.snippet).toContain("productRepo.save");
     expect(step?.snippet_line_map.filter((n) => n === 0)).toHaveLength(2);
+  });
+
+  describe("ENG-87 giữ dòng dẫn sang bước sau", () => {
+    const route = (name: string) =>
+      'import express from "express";\n' +
+      `import { ${name} } from "../services/long.service";\n` +
+      "const router = express.Router();\n" +
+      'router.post("/long", (req, res) => {\n' +
+      `  res.json(${name}());\n` +
+      "});\n";
+
+    const filler = (from: number, to: number) => {
+      const lines: string[] = [];
+      for (let i = from; i <= to; i++) {
+        lines.push(`  x = x + ${i};`);
+      }
+      return lines;
+    };
+
+    async function stepOf(service: string[], name: string) {
+      const { ctx, entries } = await createTestContext(
+        { "src/routes/long.routes.ts": route(name), "src/services/long.service.ts": service.join("\n") },
+        ["express"]
+      );
+      const candidate = buildSlice(entries[0], ctx);
+      return { candidate, step: candidate.trace_steps.find((s) => s.function_name === name) };
+    }
+
+    it("lệnh dữ liệu đầu hàm không đẩy mất lời gọi bước sau và return cuối", async () => {
+      const { candidate, step } = await stepOf(
+        [
+          "function audit(value) {",
+          "  return auditRepo.save({ value });",
+          "}",
+          "export function longFunction() {",
+          "  let x = 0;",
+          "  const found = productRepo.findOne({ id: 1 });",
+          ...filler(1, 60),
+          "  const saved = audit(found);",
+          ...filler(61, 80),
+          "  return x + saved;",
+          "}",
+        ],
+        "longFunction"
+      );
+
+      expect(candidate.trace_steps.map((s) => s.function_name)).toContain("audit");
+      expect(step?.snippet).toContain("productRepo.findOne");
+      expect(step?.snippet).toContain("audit(found)");
+      expect(step?.snippet).toContain("return x + saved;");
+      expect(step?.snippet.split("\n").length).toBeLessThanOrEqual(CONFIG.STEP_MAX_LINES);
+    });
+
+    it("lệnh nhiều dòng giữ cả dòng đóng ngoặc", async () => {
+      const { step } = await stepOf(
+        [
+          "export function longFunction() {",
+          "  let x = 0;",
+          "  const first = productRepo.findOne({ id: 1 });",
+          ...filler(1, 50),
+          "  const saved = productRepo.save({",
+          "    a: x,",
+          ...Array.from({ length: 30 }, (_, i) => `    b${i}: x + ${i},`),
+          "  });",
+          "  return first + saved;",
+          "}",
+        ],
+        "longFunction"
+      );
+
+      const lines = step?.snippet.split("\n") ?? [];
+      const open = lines.indexOf("  const saved = productRepo.save({");
+      expect(open).toBeGreaterThan(0);
+      expect(lines.slice(open)).toContain("  });");
+    });
+
+    it("quá nhiều dòng ưu tiên vẫn không vượt trần, số dòng gốc tăng dần", async () => {
+      const calls = Array.from({ length: 45 }, (_, i) => [
+        `  const r${i} = productRepo.save({ i: ${i} });`,
+        `  x = x + r${i};`,
+      ]).flat();
+      const { step } = await stepOf(
+        ["export function longFunction() {", "  let x = 0;", ...calls, "  return x;", "}"],
+        "longFunction"
+      );
+
+      const rows = step?.snippet_line_map.filter((row) => row > 0) ?? [];
+      expect(step?.snippet.split("\n").length).toBeLessThanOrEqual(CONFIG.STEP_MAX_LINES);
+      expect(rows).toEqual([...rows].sort((a, b) => a - b));
+      expect(new Set(rows).size).toBe(rows.length);
+    });
+
+    it("marker cộng cả marker cũ nằm trong đoạn lược, không có 2 marker liền nhau", async () => {
+      const { step } = await stepOf(
+        [
+          "export function longFunction() {",
+          "  let x = 0;",
+          "  const found = productRepo.findOne({ id: 1 });",
+          ...Array.from({ length: 45 }, (_, i) => [`  x = x + ${i};`, `  console.log(${i});`]).flat(),
+          "  return x + found;",
+          "}",
+        ],
+        "longFunction"
+      );
+
+      const map = step?.snippet_line_map ?? [];
+      const markers = step?.snippet.split("\n").filter((_, i) => map[i] === 0) ?? [];
+      const hidden = markers.reduce((sum, l) => sum + Number(/\((\d+) dòng\)/.exec(l)?.[1] ?? 0), 0);
+      const shown = map.filter((row) => row > 0).length;
+
+      expect(shown + hidden).toBe(95);
+      expect(map.some((row, i) => row === 0 && map[i + 1] === 0)).toBe(false);
+    });
   });
 
   it("T-ENG-11: 5 buoc, nhieu dong => cat bo la khong bao ve", async () => {
