@@ -102,6 +102,7 @@ export interface SymbolIndex {
   re_exports: Map<string, ReExport[]>;
   field_types: FieldTypeMap;
   interface_impls: InterfaceImplMap;
+  class_parents: Map<string, string>;
   locals: LocalSymbolIndex;
   functions: Map<string, FunctionInfo>;
 }
