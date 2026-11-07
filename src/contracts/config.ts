@@ -82,7 +82,9 @@ export const CONFIG = {
   DOMAIN_TERM_MIN_TF: 2,
 
   // ---------- AI (20_AI_GOI_VA_PROMPT, 21_AI_KIEM_VA_DUYET) ----------
-  LLM_MODEL: "gemini-3.5-flash-lite", // D-50
+  LLM_MODEL: "gemini-3.8-flash", // model chính, thay D-50; số đo 07/11
+  LLM_MODEL_FALLBACK: "gemini-3.5-flash-lite", // dùng khi model chính quá LLM_PRIMARY_TIMEOUT_MS hoặc lỗi
+  LLM_PRIMARY_TIMEOUT_MS: 12000, // đo 07/11: 8/9 lần 3.8-flash ≤ 11,4 s; xấu nhất ~12 s + ~3 s flash-lite
   LLM_TEMPERATURE: 0,
   LLM_THINKING_BUDGET: 0,
   LLM_TIMEOUT_MS: 30000,              // Đo lại ở H+1
@@ -93,6 +95,10 @@ export const CONFIG = {
   GUARD_FEEDBACK_MAX_CHARS: 400,     // Trần khối <guard_feedback> khi gọi lại (AI-37)
   GRADING_QUOTE_MIN_CHARS: 3,         // Đoạn trích (đã chuẩn hóa) ngắn hơn ⇒ ý đó không tính (D-13)
   LLM_MAX_OUTPUT_TOKENS: { ANALYZE: 1400, OVERVIEW: 1500, QUESTIONS: 900, GRADE: 500, EXPLAIN: 400 },   // Đo thật: OVERVIEW 13 bài vượt 600 (C-12); ANALYZE bài 5 bước vượt 900 (C-02)
+  LLM_PRICES_USD_PER_M: {
+    "gemini-3.8-flash": { INPUT: 0.75, OUTPUT: 3.75 },
+    "gemini-3.5-flash-lite": { INPUT: 0.30, OUTPUT: 2.50 },
+  }, // 3.8-flash giá ưu đãi tới 31/12/2026, nguồn tổng hợp, chưa đối chiếu trang Google
   LLM_PRICE_INPUT_USD_PER_M: 0.30,    // USD / 1 triệu token vào (D-69)
   LLM_PRICE_OUTPUT_USD_PER_M: 2.50,   // USD / 1 triệu token ra, gồm token suy nghĩ (D-69)
   ANALYZE_CONCURRENCY: 3,             // Số lời gọi analyze-node chạy cùng lúc / phiên
