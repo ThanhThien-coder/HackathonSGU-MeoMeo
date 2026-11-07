@@ -1,3 +1,4 @@
+import { CONFIG } from "@/contracts/config";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import {
   aiCostUsd,
@@ -96,6 +97,14 @@ describe("gemini.ts", () => {
       expect(res).toBe("vertex");
     });
 
+    it("vertex có key, không có project ⇒ trả về vertex (express)", () => {
+      const res = assertGeminiEnv({
+        GEMINI_BACKEND: "vertex",
+        GEMINI_API_KEY: "vertex-key",
+      });
+      expect(res).toBe("vertex");
+    });
+
     it("studio thiếu key ⇒ ném lỗi", () => {
       expect(() => assertGeminiEnv({ GEMINI_BACKEND: "studio" })).toThrow(
         "Thiếu biến môi trường GEMINI_API_KEY"
@@ -136,6 +145,18 @@ describe("gemini.ts", () => {
       });
     });
 
+    it("vertex có key ⇒ tạo client vertex express bằng apiKey, không truyền project", () => {
+      createGeminiClient({
+        GEMINI_BACKEND: "vertex",
+        GEMINI_API_KEY: " vertex-key ",
+        GOOGLE_CLOUD_PROJECT: "my-gcp-project",
+      });
+      expect(GoogleGenAI).toHaveBeenCalledWith({
+        vertexai: true,
+        apiKey: "vertex-key",
+      });
+    });
+
     it("tạo client studio đúng apiKey", () => {
       createGeminiClient({
         GEMINI_BACKEND: "studio",
@@ -148,8 +169,23 @@ describe("gemini.ts", () => {
   });
 
   describe("aiCostUsd", () => {
-    it("aiCostUsd(1754, 561) ≈ 0.001929", () => {
+    it("aiCostUsd(1_000_000, 1_000_000, 'gemini-3.8-flash') = 4.5", () => {
+      const cost = aiCostUsd(1_000_000, 1_000_000, "gemini-3.8-flash");
+      expect(cost).toBe(4.5);
+    });
+
+    it("aiCostUsd(1754, 561) với model mặc định tính theo giá 3.8-flash", () => {
       const cost = aiCostUsd(1754, 561);
+      expect(cost).toBeCloseTo(0.003419, 6);
+    });
+
+    it("aiCostUsd(1754, 561, 'gemini-3.5-flash-lite') ≈ 0.001929", () => {
+      const cost = aiCostUsd(1754, 561, "gemini-3.5-flash-lite");
+      expect(cost).toBeCloseTo(0.001929, 6);
+    });
+
+    it("aiCostUsd với model không có trong bảng giá thì dùng giá mặc định", () => {
+      const cost = aiCostUsd(1754, 561, "unknown-model");
       expect(cost).toBeCloseTo(0.001929, 6);
     });
   });
@@ -241,7 +277,21 @@ describe("gemini.ts", () => {
       }
       expect(res.tokens_in).toBe(100);
       expect(res.tokens_out).toBe(60);
+      expect(res.model).toBe("gemini-3.8-flash");
+      expect(res.fell_back).toBe(false);
       expect(addSessionTokens).toHaveBeenCalledWith("sess-1", 100, 60);
+    });
+
+    it("luôn gửi thinkingConfig.thinkingBudget = CONFIG.LLM_THINKING_BUDGET (kể cả 0)", async () => {
+      const mockGenerate = vi.fn().mockResolvedValue({
+        text: '{"value": 1}',
+        usageMetadata: { promptTokenCount: 1, candidatesTokenCount: 1 },
+        candidates: [{ finishReason: "STOP" }],
+      });
+      const client = { models: { generateContent: mockGenerate } } as unknown as GoogleGenAI;
+      await callLLMOnce(dummyReq, client, validEnv);
+      const arg = mockGenerate.mock.calls[0][0] as { config: { thinkingConfig?: { thinkingBudget: number } } };
+      expect(arg.config.thinkingConfig).toEqual({ thinkingBudget: CONFIG.LLM_THINKING_BUDGET });
     });
 
     it("trả về INVALID_JSON khi finishReason != STOP", async () => {
@@ -259,8 +309,10 @@ describe("gemini.ts", () => {
       if (!res.ok) {
         expect(res.kind).toBe("INVALID_JSON");
       }
-      expect(res.tokens_in).toBe(10);
-      expect(res.tokens_out).toBe(20);
+      expect(res.tokens_in).toBe(20);
+      expect(res.tokens_out).toBe(40);
+      expect(res.model).toBe("gemini-3.5-flash-lite");
+      expect(res.fell_back).toBe(true);
     });
 
     it("trả về INVALID_JSON khi JSON cú pháp hỏng", async () => {
@@ -356,7 +408,11 @@ describe("gemini.ts", () => {
       const sleepFn = vi.fn().mockResolvedValue(undefined);
       const res = await callLLMWithRetry(dummyReq, sleepFn, client, validEnv);
 
-      expect(mockGenerate).toHaveBeenCalledTimes(2);
+      // Attempt 0: primary (429) -> fallback (429) = 2 calls
+      // sleep 1 lần
+      // Attempt 1: primary (429) -> fallback (429) = 2 calls
+      // Tổng cộng: 4 calls
+      expect(mockGenerate).toHaveBeenCalledTimes(4);
       expect(sleepFn).toHaveBeenCalledTimes(1);
       expect(res.ok).toBe(false);
       if (!res.ok) {
@@ -379,6 +435,11 @@ describe("gemini.ts", () => {
           candidates: [{ finishReason: "STOP" }],
         })
         .mockResolvedValueOnce({
+          text: "{ invalid json fallback",
+          usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 5 },
+          candidates: [{ finishReason: "STOP" }],
+        })
+        .mockResolvedValueOnce({
           text: '{"ok": true}',
           usageMetadata: { promptTokenCount: 15, candidatesTokenCount: 10 },
           candidates: [{ finishReason: "STOP" }],
@@ -391,17 +452,17 @@ describe("gemini.ts", () => {
       const sleepFn = vi.fn().mockResolvedValue(undefined);
       const res = await callLLMWithRetry(dummyReq, sleepFn, client, validEnv);
 
-      expect(mockGenerate).toHaveBeenCalledTimes(2);
+      expect(mockGenerate).toHaveBeenCalledTimes(3);
       expect(sleepFn).toHaveBeenCalledTimes(1);
       expect(res.ok).toBe(true);
-      expect(res.tokens_in).toBe(25);
-      expect(res.tokens_out).toBe(15);
+      expect(res.tokens_in).toBe(35);
+      expect(res.tokens_out).toBe(20);
       expect(logAiCall).toHaveBeenCalledWith(
         expect.objectContaining({
           call_kind: "QUESTIONS",
           retries: 1,
-          tokens_in: 25,
-          tokens_out: 15,
+          tokens_in: 35,
+          tokens_out: 20,
         })
       );
     });
@@ -418,12 +479,249 @@ describe("gemini.ts", () => {
       const sleepFn = vi.fn().mockResolvedValue(undefined);
       const res = await callLLMWithRetry(dummyReq, sleepFn, client, validEnv);
 
-      expect(mockGenerate).toHaveBeenCalledTimes(1);
+      // Attempt 0: primary (429) -> fallback (429) = 2 calls
+      // retry_after_ms > 20000ms ⇒ break, không gọi lại attempt 1
+      expect(mockGenerate).toHaveBeenCalledTimes(2);
       expect(sleepFn).not.toHaveBeenCalled();
       expect(res.ok).toBe(false);
       if (!res.ok) {
         expect(res.kind).toBe("TRANSIENT");
       }
+    });
+  });
+
+  describe("TASK_06 Fallback gemini-3.8-flash -> gemini-3.5-flash-lite", () => {
+    const dummyReq: LlmRequest<{ value: number }> = {
+      kind: "ANALYZE",
+      system: "sys",
+      user: "usr",
+      schema: { type: "OBJECT" } as unknown as import("@google/genai").Schema,
+      sessionId: "sess-task-06",
+      parse: (j: unknown) => {
+        if (typeof j === "object" && j !== null && "value" in j) {
+          return j as { value: number };
+        }
+        return null;
+      },
+    };
+
+    const validEnv = {
+      GEMINI_BACKEND: "studio",
+      GEMINI_API_KEY: "key",
+    };
+
+    it("model chính ok ⇒ chỉ 1 lần gọi, model = 'gemini-3.8-flash', fell_back = false", async () => {
+      const mockGenerate = vi.fn().mockResolvedValue({
+        text: '{"value": 42}',
+        usageMetadata: { promptTokenCount: 100, candidatesTokenCount: 50 },
+        candidates: [{ finishReason: "STOP" }],
+      });
+      const client = { models: { generateContent: mockGenerate } } as unknown as GoogleGenAI;
+
+      const res = await callLLMOnce(dummyReq, client, validEnv);
+
+      expect(res.ok).toBe(true);
+      expect(mockGenerate).toHaveBeenCalledTimes(1);
+      expect(mockGenerate.mock.calls[0][0].model).toBe("gemini-3.8-flash");
+      expect(mockGenerate.mock.calls[0][0].model).toBe(CONFIG.LLM_MODEL);
+      expect(res.model).toBe("gemini-3.8-flash");
+      expect(res.fell_back).toBe(false);
+      expect(res.tokens_in).toBe(100);
+      expect(res.tokens_out).toBe(50);
+    });
+
+    it("model chính ném lỗi timeout/AbortError ⇒ gọi tiếp flash-lite, fell_back = true, token cộng cả 2", async () => {
+      const timeoutErr = new Error("The operation was aborted due to timeout");
+      timeoutErr.name = "TimeoutError";
+
+      const mockGenerate = vi
+        .fn()
+        .mockRejectedValueOnce(timeoutErr)
+        .mockResolvedValueOnce({
+          text: '{"value": 99}',
+          usageMetadata: { promptTokenCount: 120, candidatesTokenCount: 40 },
+          candidates: [{ finishReason: "STOP" }],
+        });
+      const client = { models: { generateContent: mockGenerate } } as unknown as GoogleGenAI;
+
+      const res = await callLLMOnce(dummyReq, client, validEnv);
+
+      expect(res.ok).toBe(true);
+      if (res.ok) {
+        expect(res.value).toEqual({ value: 99 });
+      }
+      expect(mockGenerate).toHaveBeenCalledTimes(2);
+      expect(mockGenerate.mock.calls[0][0].model).toBe("gemini-3.8-flash");
+      expect(mockGenerate.mock.calls[1][0].model).toBe("gemini-3.5-flash-lite");
+      expect(res.model).toBe("gemini-3.5-flash-lite");
+      expect(res.fell_back).toBe(true);
+      expect(res.tokens_in).toBe(120);
+      expect(res.tokens_out).toBe(40);
+      expect(addSessionTokens).toHaveBeenCalledWith("sess-task-06", 120, 40);
+    });
+
+    it("model chính 429 ⇒ chuyển flash-lite", async () => {
+      const rateLimitErr = new Error("429 Too Many Requests");
+      (rateLimitErr as unknown as Record<string, unknown>).status = 429;
+
+      const mockGenerate = vi
+        .fn()
+        .mockRejectedValueOnce(rateLimitErr)
+        .mockResolvedValueOnce({
+          text: '{"value": 123}',
+          usageMetadata: { promptTokenCount: 80, candidatesTokenCount: 30 },
+          candidates: [{ finishReason: "STOP" }],
+        });
+      const client = { models: { generateContent: mockGenerate } } as unknown as GoogleGenAI;
+
+      const res = await callLLMOnce(dummyReq, client, validEnv);
+
+      expect(res.ok).toBe(true);
+      if (res.ok) {
+        expect(res.value).toEqual({ value: 123 });
+      }
+      expect(mockGenerate).toHaveBeenCalledTimes(2);
+      expect(mockGenerate.mock.calls[0][0].model).toBe("gemini-3.8-flash");
+      expect(mockGenerate.mock.calls[1][0].model).toBe("gemini-3.5-flash-lite");
+      expect(res.model).toBe("gemini-3.5-flash-lite");
+      expect(res.fell_back).toBe(true);
+    });
+
+    it("model chính JSON hỏng ⇒ chuyển flash-lite", async () => {
+      const mockGenerate = vi
+        .fn()
+        .mockResolvedValueOnce({
+          text: "{ broken json",
+          usageMetadata: { promptTokenCount: 70, candidatesTokenCount: 15 },
+          candidates: [{ finishReason: "STOP" }],
+        })
+        .mockResolvedValueOnce({
+          text: '{"value": 456}',
+          usageMetadata: { promptTokenCount: 85, candidatesTokenCount: 35 },
+          candidates: [{ finishReason: "STOP" }],
+        });
+      const client = { models: { generateContent: mockGenerate } } as unknown as GoogleGenAI;
+
+      const res = await callLLMOnce(dummyReq, client, validEnv);
+
+      expect(res.ok).toBe(true);
+      if (res.ok) {
+        expect(res.value).toEqual({ value: 456 });
+      }
+      expect(mockGenerate).toHaveBeenCalledTimes(2);
+      expect(mockGenerate.mock.calls[0][0].model).toBe("gemini-3.8-flash");
+      expect(mockGenerate.mock.calls[1][0].model).toBe("gemini-3.5-flash-lite");
+      expect(res.model).toBe("gemini-3.5-flash-lite");
+      expect(res.fell_back).toBe(true);
+      expect(res.tokens_in).toBe(70 + 85);
+      expect(res.tokens_out).toBe(15 + 35);
+      expect(addSessionTokens).toHaveBeenNthCalledWith(1, "sess-task-06", 70, 15);
+      expect(addSessionTokens).toHaveBeenNthCalledWith(2, "sess-task-06", 85, 35);
+    });
+
+    it("cả 2 lỗi ⇒ trả không ok, đúng 2 lần gọi", async () => {
+      const err1 = new Error("503 Service Unavailable");
+      (err1 as unknown as Record<string, unknown>).status = 503;
+      const err2 = new Error("500 Internal Server Error");
+      (err2 as unknown as Record<string, unknown>).status = 500;
+
+      const mockGenerate = vi
+        .fn()
+        .mockRejectedValueOnce(err1)
+        .mockRejectedValueOnce(err2);
+      const client = { models: { generateContent: mockGenerate } } as unknown as GoogleGenAI;
+
+      const res = await callLLMOnce(dummyReq, client, validEnv);
+
+      expect(res.ok).toBe(false);
+      expect(mockGenerate).toHaveBeenCalledTimes(2);
+      expect(res.model).toBe("gemini-3.5-flash-lite");
+      expect(res.fell_back).toBe(true);
+    });
+
+    it("lần gọi 1 dùng model: CONFIG.LLM_MODEL, lần 2 dùng CONFIG.LLM_MODEL_FALLBACK", async () => {
+      const mockGenerate = vi
+        .fn()
+        .mockResolvedValueOnce({
+          text: "{ invalid json",
+          usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 10 },
+          candidates: [{ finishReason: "STOP" }],
+        })
+        .mockResolvedValueOnce({
+          text: '{"value": 789}',
+          usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 10 },
+          candidates: [{ finishReason: "STOP" }],
+        });
+      const client = { models: { generateContent: mockGenerate } } as unknown as GoogleGenAI;
+
+      await callLLMOnce(dummyReq, client, validEnv);
+
+      expect(mockGenerate).toHaveBeenCalledTimes(2);
+      expect(mockGenerate.mock.calls[0][0].model).toBe(CONFIG.LLM_MODEL);
+      expect(mockGenerate.mock.calls[0][0].model).toBe("gemini-3.8-flash");
+      expect(mockGenerate.mock.calls[1][0].model).toBe(CONFIG.LLM_MODEL_FALLBACK);
+      expect(mockGenerate.mock.calls[1][0].model).toBe("gemini-3.5-flash-lite");
+    });
+
+    it("gọi CONFIG.LLM_MODEL với LLM_PRIMARY_TIMEOUT_MS và CONFIG.LLM_MODEL_FALLBACK với LLM_TIMEOUT_MS", async () => {
+      const timeoutSpy = vi.spyOn(AbortSignal, "timeout");
+      const mockGenerate = vi
+        .fn()
+        .mockResolvedValueOnce({
+          text: "{ invalid json",
+          usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 10 },
+          candidates: [{ finishReason: "STOP" }],
+        })
+        .mockResolvedValueOnce({
+          text: '{"value": 111}',
+          usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 10 },
+          candidates: [{ finishReason: "STOP" }],
+        });
+      const client = { models: { generateContent: mockGenerate } } as unknown as GoogleGenAI;
+
+      await callLLMOnce(dummyReq, client, validEnv);
+
+      expect(timeoutSpy).toHaveBeenNthCalledWith(1, CONFIG.LLM_PRIMARY_TIMEOUT_MS);
+      expect(timeoutSpy).toHaveBeenNthCalledWith(2, CONFIG.LLM_TIMEOUT_MS);
+      timeoutSpy.mockRestore();
+    });
+
+    it("callLLMWithRetry logAiCall ghi model thật đã trả lời, fell_back và cost_usd theo từng model", async () => {
+      const mockGenerate = vi
+        .fn()
+        .mockResolvedValueOnce({
+          text: "{ invalid",
+          usageMetadata: { promptTokenCount: 200, candidatesTokenCount: 100 },
+          candidates: [{ finishReason: "STOP" }],
+        })
+        .mockResolvedValueOnce({
+          text: '{"value": 333}',
+          usageMetadata: { promptTokenCount: 300, candidatesTokenCount: 150 },
+          candidates: [{ finishReason: "STOP" }],
+        });
+      const client = { models: { generateContent: mockGenerate } } as unknown as GoogleGenAI;
+
+      const res = await callLLMWithRetry(dummyReq, undefined, client, validEnv);
+
+      expect(res.ok).toBe(true);
+      expect(res.model).toBe("gemini-3.5-flash-lite");
+      expect(res.fell_back).toBe(true);
+      expect(res.tokens_in).toBe(500);
+      expect(res.tokens_out).toBe(250);
+
+      const expectedCost =
+        aiCostUsd(200, 100, "gemini-3.8-flash") +
+        aiCostUsd(300, 150, "gemini-3.5-flash-lite");
+
+      expect(logAiCall).toHaveBeenCalledWith(
+        expect.objectContaining({
+          model: "gemini-3.5-flash-lite",
+          fell_back: true,
+          tokens_in: 500,
+          tokens_out: 250,
+          cost_usd: expectedCost,
+        })
+      );
     });
   });
 });
