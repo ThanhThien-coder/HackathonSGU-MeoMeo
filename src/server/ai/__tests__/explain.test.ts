@@ -177,8 +177,11 @@ describe("explain selection unit tests", () => {
       };
 
       const key = explainCacheKey(session, req);
-      const expected = `se|GITHUB|3f9a1c7e5b2d4a8f6c0e1d9b7a5c3e2f4b6d8a0c||${CONFIG.ENGINE_VERSION}|slice-product-list|2|17:37-17:45|${CONFIG.PROMPT_VERSION}|${CONFIG.LLM_MODEL}`;
+      const expected = `se|GITHUB|3f9a1c7e5b2d4a8f6c0e1d9b7a5c3e2f4b6d8a0c||${CONFIG.ENGINE_VERSION}|slice-product-list|2|17:37-17:45|${CONFIG.PROMPT_VERSION}|gemini-3.5-flash-lite`;
       expect(key).toBe(expected);
+      // NH-14: khóa cache giải thích dùng model thật của EXPLAIN, không lẫn với 3.8-flash
+      expect(key).toContain("gemini-3.5-flash-lite");
+      expect(key).not.toContain("gemini-3.8-flash");
     });
   });
 

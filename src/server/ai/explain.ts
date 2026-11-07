@@ -12,7 +12,7 @@ import {
 import { sql } from "@/server/db";
 import { ApiHttpError } from "@/server/errors";
 import { assertSessionTokenQuota } from "@/server/quota";
-import { aiCostUsd, callLLMWithRetry, isAiDisabled } from "./gemini";
+import { aiCostUsd, callLLMWithRetry, isAiDisabled, modelForKind } from "./gemini";
 import { IDENT_RE, LANGUAGE_WORDS } from "./guard/text";
 import { explainScope } from "./guard/names";
 import { forbiddenKeywords } from "./guard/forbidden";
@@ -86,7 +86,7 @@ export function explainCacheKey(
   const engineVersion = session.engine_version ?? CONFIG.ENGINE_VERSION;
   const { line_start, col_start, line_end, col_end } = req.range;
 
-  return `se|${source}|${snapshotId}|${subdir}|${engineVersion}|${req.node_id}|${req.step_number}|${line_start}:${col_start}-${line_end}:${col_end}|${CONFIG.PROMPT_VERSION}|${CONFIG.LLM_MODEL}`;
+  return `se|${source}|${snapshotId}|${subdir}|${engineVersion}|${req.node_id}|${req.step_number}|${line_start}:${col_start}-${line_end}:${col_end}|${CONFIG.PROMPT_VERSION}|${modelForKind("EXPLAIN")}`;
 }
 
 function sliceSelection(
