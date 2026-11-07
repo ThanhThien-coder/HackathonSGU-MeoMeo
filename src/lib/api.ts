@@ -1,6 +1,7 @@
 import { createBrowserClient } from "@supabase/ssr";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type {
+  AnalyzeOverviewResponse,
   AnalyzeNodeResponse,
   ApiError,
   EnrichNodeResponse,
@@ -224,6 +225,12 @@ const analyze = endpointPair<[string, string], AnalyzeNodeResponse>((sessionId, 
 );
 export const analyzeNode = analyze.plain;
 export const analyzeNodeSafe = analyze.safe;
+
+const overview = endpointPair<[string], AnalyzeOverviewResponse>((sessionId) =>
+  post("/api/analyze-overview", { session_id: sessionId }),
+);
+export const analyzeOverview = overview.plain;
+export const analyzeOverviewSafe = overview.safe;
 
 const enrich = endpointPair<[string, string, RunMode?], EnrichNodeResponse>((sessionId, nodeId, mode = "LEARN") =>
   post("/api/enrich-node", { session_id: sessionId, node_id: nodeId, mode }),

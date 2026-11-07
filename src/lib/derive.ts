@@ -138,20 +138,20 @@ export function deriveNodeStates(
   return derived;
 }
 
-// Bản thi cắt AI tổng quan (B06) ⇒ overview.ai luôn null ⇒ không có tên AI.
+// Tên bài tiếng Việt do AI tổng quan đặt (đã qua kiểm ở server); chưa có ⇒ null, dùng tên tất định.
 export function aiTitleOf(nodeId: string, overview: RepoOverviewView | null): string | null {
-  void nodeId;
-  void overview;
-  return null;
+  return overview?.ai?.node_titles[nodeId] ?? null;
 }
 
 export function displayTitle(
   node: { id: string; title: string; title_source: string },
   overview: RepoOverviewView | null
 ): string {
-  const rawTitle = aiTitleOf(node.id, overview) ?? node.title;
+  const aiTitle = aiTitleOf(node.id, overview);
+  const rawTitle = aiTitle ?? node.title;
   const inferredSources = new Set(["DOMAIN_TERMS", "DIRECTORY", "FILE_BASENAME"]);
-  const titleWithPrefix = inferredSources.has(node.title_source)
+  // "~" chỉ đánh dấu tên tất định đoán từ thư mục/tên file; tên AI đã đọc cả luồng ⇒ không cần
+  const titleWithPrefix = aiTitle === null && inferredSources.has(node.title_source)
     ? `~${rawTitle}`
     : rawTitle;
 

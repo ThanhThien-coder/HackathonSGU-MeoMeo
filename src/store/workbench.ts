@@ -19,6 +19,7 @@ import type {
 } from "@/contracts";
 import {
   analyzeNodeSafe,
+  analyzeOverviewSafe,
   enrichNodeSafe,
   evaluateFeynmanSafe,
   explainSelectionSafe,
@@ -521,6 +522,14 @@ export const useWorkbenchStore = create<WorkbenchStore>()((set, get) => {
     prefetchNodes(sessionId, first);
   };
 
+  /** Sau `ingest` ok ở chế độ thật: AI tổng quan chạy nền, không chặn bản đồ. Lỗi ⇒ `null`, UI giữ câu dự phòng. */
+  const loadOverview = async (sessionId: string) => {
+    set({ overview: "PENDING" });
+    const res = await analyzeOverviewSafe(sessionId);
+    if (!sameSession(sessionId)) return;
+    set({ overview: res.ok ? res.data.overview : null });
+  };
+
   const runAnalysis = async ({ sessionId, nodeId }: AnalysisJob) => {
     const res = await analyzeNodeSafe(sessionId, nodeId);
     if (!sameSession(sessionId)) return;
@@ -666,7 +675,10 @@ export const useWorkbenchStore = create<WorkbenchStore>()((set, get) => {
       if (res.ok) {
         get().applyIngest(res.data);
         if (get().is_offline_mode || (get().ui.fixture && getOfflineBundle())) seedOfflineSession();
-        else prefetchFirstAvailable(res.data.session_id);
+        else {
+          void loadOverview(res.data.session_id);
+          prefetchFirstAvailable(res.data.session_id);
+        }
       } else set((s) => ({ ui: { ...s.ui, ingesting: false, ingest_error: toUiError(res) } }));
       return res;
     },
