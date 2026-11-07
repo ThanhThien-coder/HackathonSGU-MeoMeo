@@ -3,7 +3,7 @@ import { CONFIG } from "@/contracts";
 import type { NodeAnalysis, StaticEngineResult } from "@/contracts";
 import fixtureJson from "../engine/__fixtures__/shop-api.json";
 import * as cacheModule from "../cache";
-import * as stubModule from "../engine/stub";
+import { runEngine } from "../engine";
 import { ApiHttpError } from "../errors";
 import { authenticateRequest } from "../auth";
 import {
@@ -30,6 +30,12 @@ vi.mock("@/server/db", () => ({
   sql: mockSql,
   db: { sql: mockSql, tx: mockTx },
 }));
+
+// Engine thật cần mạng và grammar: test route chỉ mock runEngine, giữ toClientResult thật.
+vi.mock("@/server/engine", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/server/engine")>();
+  return { ...actual, runEngine: vi.fn() };
+});
 
 vi.mock("@/server/auth", () => ({
   authenticateRequest: vi.fn(),
@@ -70,6 +76,11 @@ function makeDummySessionRecord(): SessionRecord {
 describe("POST /api/ingest route", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(runEngine).mockImplementation(async () => {
+      const result = structuredClone(fixture);
+      result.engine_version = CONFIG.ENGINE_VERSION;
+      return result;
+    });
     mockSql.mockResolvedValue([]);
     vi.mocked(authenticateRequest).mockResolvedValue({
       id: VALID_USER_ID,
@@ -158,8 +169,6 @@ describe("POST /api/ingest route", () => {
     vi.mocked(verifySessionOwnership).mockResolvedValueOnce(session);
     vi.mocked(getSessionStaticResult).mockResolvedValueOnce(fixture);
 
-    const spyRunEngine = vi.spyOn(stubModule, "runEngine");
-
     const req = new Request("http://localhost/api/ingest", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -178,7 +187,7 @@ describe("POST /api/ingest route", () => {
     expect(json.resumed).toBe(true);
     expect(json.from_cache).toBe(true);
 
-    expect(spyRunEngine).not.toHaveBeenCalled();
+    expect(vi.mocked(runEngine)).not.toHaveBeenCalled();
     expect(vi.mocked(touchSession)).toHaveBeenCalledWith(VALID_SESSION_ID);
   });
 
