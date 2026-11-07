@@ -13,8 +13,8 @@ import {
   findQuestion,
   readRunQuestion,
   toEvaluateRequest,
-  withDbRetry,
 } from "../evaluate";
+import { withDbRetry } from "../progress";
 import { ApiHttpError } from "../errors";
 import type { RunRecord, SessionRecord } from "../session";
 import questionsFixture from "../ai/__fixtures__/questions-n3.json";
