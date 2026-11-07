@@ -42,7 +42,7 @@ const TECH_TOKENS = new Set([
   "sync",
 ]);
 
-const ACTION_SEGMENTS = new Set([
+export const ACTION_SEGMENTS = new Set([
   "cancel",
   "login",
   "logout",
@@ -209,6 +209,30 @@ export function normalizeTokens(text: string): string[] {
   }
 
   return result;
+}
+
+export function staticRouteSegments(path: string | null): string[] {
+  if (!path) {
+    return [];
+  }
+  const rawSegments = path.split("/").filter(Boolean);
+  const staticSegments: string[] = [];
+  for (const seg of rawSegments) {
+    if (/^(:|\{|\<|\[)/.test(seg)) {
+      continue;
+    }
+    const clean = seg.toLowerCase();
+    if (
+      clean === "api" ||
+      /^v\d+$/.test(clean) ||
+      !/^[A-Za-z0-9_-]+$/.test(seg) ||
+      seg.length > CONFIG.ROUTE_SEGMENT_MAX_CHARS
+    ) {
+      continue;
+    }
+    staticSegments.push(seg);
+  }
+  return staticSegments;
 }
 
 function nameFromRoute(
@@ -459,7 +483,7 @@ export function nameCandidate(
       };
     }
     return {
-      title: sanitizeTitle(baseName),
+      title: sanitizeTitle(toTitleCase(nameWithoutExt)),
       title_source: "FILE_BASENAME",
       title_evidence: firstFile,
     };
