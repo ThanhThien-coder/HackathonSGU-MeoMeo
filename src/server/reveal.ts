@@ -1,17 +1,17 @@
 import type { RevealRequest, RevealResponse } from "@/contracts";
 import { db } from "@/server/db";
 import { ApiHttpError } from "@/server/errors";
-import { toQuestionState } from "@/server/enrich";
 import {
   applyBkt,
   finalizeRunIfDone,
-  findQuestion,
-  loadNodeStateTx,
+  loadNodeState,
   lockRun,
-  readRunQuestion,
+  readSkeleton,
   saveRunQuestions,
+  toQuestionState,
   withDbRetry,
-} from "./evaluate";
+} from "@/server/progress";
+import { findQuestion, readRunQuestion } from "./evaluate";
 
 export function toRevealRequest(body: unknown): RevealRequest {
   if (typeof body !== "object" || body === null || Array.isArray(body)) {
@@ -54,6 +54,7 @@ export async function revealQuestion(
   return await withDbRetry(() =>
     db.tx(async (tx) => {
       const run2 = await lockRun(tx, run.id);
+      const skeleton = await readSkeleton(tx, run2.session_id);
       const q2 = findQuestion(run2, req.question_index);
       if (q2.finished) {
         throw new ApiHttpError("ERR_QUESTION_FINISHED");
@@ -68,12 +69,8 @@ export async function revealQuestion(
       q2.p_after = skillChange.p_after;
 
       await saveRunQuestions(tx, run2);
-      const unlocked = await finalizeRunIfDone(tx, run2, now);
-      const nodeState = await loadNodeStateTx(
-        tx,
-        run2.session_id,
-        run2.node_id,
-      );
+      const unlocked = await finalizeRunIfDone(tx, run2, now, skeleton);
+      const nodeState = await loadNodeState(tx, run2, skeleton);
 
       return {
         question: toQuestionState(q2),
