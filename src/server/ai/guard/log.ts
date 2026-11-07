@@ -7,6 +7,14 @@ import type {
 } from "@/contracts";
 import { logGuardBlocked } from "@/server/log";
 
+const GUARD_CALL_KIND = {
+  analyze: "ANALYZE",
+  overview: "OVERVIEW",
+  questions: "QUESTIONS",
+  grade: "GRADE",
+  explain: "EXPLAIN",
+} as const satisfies Record<GuardCall, keyof typeof CONFIG.LLM_MODEL_BY_KIND>;
+
 export function logGuardBlock(
   call: GuardCall,
   attempt: number,
@@ -21,7 +29,7 @@ export function logGuardBlock(
     node_id: nodeId,
     codes,
     prompt_version: CONFIG.PROMPT_VERSION,
-    llm_model: CONFIG.LLM_MODEL,
+    llm_model: CONFIG.LLM_MODEL_BY_KIND[GUARD_CALL_KIND[call]],
   };
   logGuardBlocked(entry);
 }
