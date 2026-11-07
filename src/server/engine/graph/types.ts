@@ -9,6 +9,7 @@ import type {
 } from "@/contracts";
 
 export interface ExternalCall {
+  is_data_sink?: boolean;
   caller: string;
   line: number;
   receiver_chain: string[];
