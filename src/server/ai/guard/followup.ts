@@ -9,6 +9,23 @@ import {
   normText,
 } from "./text";
 import { checkNames, gradeScope } from "./names";
+
+const echoWords = (s: string): string[] =>
+  s
+    .normalize("NFC")
+    .toLowerCase()
+    .split(/[^\p{L}\p{N}_.]+/u)
+    .map((w) => w.replace(/^\.+|\.+$/gu, ""))
+    .filter((w) => w.length > 0);
+
+// Gợi ý gần như chỉ nhắc lại đề (≥ 75% từ của gợi ý có sẵn trong đề) ⇒ không giúp được người học
+export function echoesQuestion(hint: string, question: string): boolean {
+  const h = echoWords(hint);
+  if (h.length === 0) return false;
+  const q = new Set(echoWords(question));
+  const inQ = h.filter((w) => q.has(w)).length;
+  return inQ / h.length >= 0.75;
+}
 import { findForbidden } from "./forbidden";
 
 const nums = (s: string): Set<string> =>
@@ -70,7 +87,8 @@ export function verifyFollowUp(
   if (
     typeof q === "string" &&
     q.trim().length > 0 &&
-    (type === "CONCEPT" || type === "CODE_POINTER")
+    (type === "CONCEPT" || type === "CODE_POINTER") &&
+    !echoesQuestion(q, t.feynman_question ?? "")
   ) {
     const scope = gradeScope(t, answer);
     const forbidden = findForbidden([q], t.forbidden_external_keywords ?? []);

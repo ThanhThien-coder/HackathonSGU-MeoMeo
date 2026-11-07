@@ -60,7 +60,42 @@ export const injectionGrading = (
   follow_up_type: null,
   follow_up_step_index: null,
   feedback:
-    "Câu trả lời có câu lệnh gửi cho hệ thống chấm nên không được chấm. Hãy giải thích đoạn code bằng lời của bạn.",
+    "Mình chỉ chấm được phần giải thích về đoạn code thôi. Bạn thử giải thích bằng lời của mình nhé.",
+  detected_jargons: [],
+});
+
+// Câu "bí" (không biết, chịu, bó tay…): nhận bằng code, không cần AI ⇒ trả gợi ý ngay, 0 token.
+// Chỉ bắt câu NGẮN để không nuốt câu trả lời thật có chữ "không biết" ở giữa.
+const GIVE_UP_RE =
+  /^(?:(?:em|mình|tôi|tui|tớ|con|t|e)\s+)?(?:cũng\s+|thật\s+sự\s+|thực\s+sự\s+)?(?:(?:hoàn\s+toàn\s+)?(?:không|khong|ko|k|hông|hong|hok|chẳng|chả|chưa)\s+(?:biết|bít|biet|hiểu|hieu|rõ|ro|nhớ|nghĩ\s+ra|có\s+ý\s+tưởng)|chịu|chiu|bó\s+tay|bo\s+tay|pass|idk|i\s+don'?t\s+know|no\s+idea|\?+)(?:\s+(?:luôn|lun|ạ|á|a|ah|à|nha|nhé|đâu|gì\s+hết|gì\s+cả|hết|cả|thật|quá|rồi|nó\s+xử\s+lí\s+sao\s+luôn|nó\s+xử\s+lý\s+sao\s+luôn))*$/iu;
+
+export function isGiveUpText(answer: string): boolean {
+  const a = answer
+    .normalize("NFC")
+    .toLowerCase()
+    .replace(/[.,!…~:;"'()\[\]]+/gu, " ")
+    .replace(/\s+/gu, " ")
+    .trim();
+  if (a.length === 0 || a.split(" ").length > 10) return false;
+  return GIVE_UP_RE.test(a);
+}
+
+export const giveUpGrading = (
+  t: Pick<RunQuestion, "must_have_points">,
+): GradingRaw => ({
+  core_accuracy: 0,
+  simplicity: 0,
+  intent: "GIVE_UP",
+  points: t.must_have_points.map((_, i) => ({
+    index: i + 1,
+    covered: false,
+    quote: "",
+  })),
+  misconception: "",
+  follow_up_question: null,
+  follow_up_type: null,
+  follow_up_step_index: null,
+  feedback: "Không sao cả, mình cùng đi từng bước nhé. Xem gợi ý bên dưới rồi thử lại.",
   detected_jargons: [],
 });
 
@@ -282,12 +317,12 @@ export function staticFeedback(
   maxAttempts: number,
 ): string {
   if (isPassed) {
-    return "Chính xác! Bạn đã nắm vững bản chất của đoạn code này.";
+    return "Chính xác! Bạn đã nắm được ý chính của đoạn code này.";
   }
   if (attempt < maxAttempts) {
-    return "Câu trả lời chưa đủ ý. Hãy xem gợi ý bên dưới để hoàn thiện câu trả lời.";
+    return "Còn thiếu một chút thôi. Xem gợi ý bên dưới rồi thử nói thêm nhé.";
   }
-  return "Bạn đã dùng hết số lượt nộp. Hãy xem đáp án mẫu bên dưới để đối chiếu với câu trả lời của mình.";
+  return "Bạn đã dùng hết lượt cho câu này. Xem đáp án mẫu bên dưới để so với cách bạn nghĩ nhé.";
 }
 
 const isGiveUp = (g: GradingRaw): boolean =>

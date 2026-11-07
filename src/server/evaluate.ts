@@ -33,7 +33,9 @@ import {
   coveredFlags,
   decidePass,
   gradeWithAI,
+  giveUpGrading,
   injectionGrading,
+  isGiveUpText,
   toEvaluateResponse,
   type GradeUsage,
 } from "@/server/ai/grade";
@@ -212,6 +214,9 @@ export async function evaluateFeynman(
   let grading: GradingRaw;
   if (isInjection(clean)) {
     grading = injectionGrading(t);
+  } else if (isGiveUpText(clean)) {
+    // Câu "bí" (không biết, chịu…): chấm sẵn bằng code, 0 token, gợi ý theo thang lượt (câu mồi ⇒ gợi ý dạy)
+    grading = giveUpGrading(t);
   } else {
     const usage: GradeUsage = { tokens_in: 0, tokens_out: 0 };
     grading = await gradeWithAI(
