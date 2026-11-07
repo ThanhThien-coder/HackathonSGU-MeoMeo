@@ -129,7 +129,7 @@ function sliceSelection(
     sliced = [firstLine, ...middleLines, lastLine].join("\n");
   }
 
-  if (sliced.trim().length === 0) {
+  if (sliced.trim().length === 0 || !/[\p{L}\p{N}]/u.test(sliced)) {
     throw new ApiHttpError("ERR_SELECTION_INVALID");
   }
 

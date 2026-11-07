@@ -353,8 +353,10 @@ describe("plan", () => {
           correct_count: 1,
         },
       };
+      // Bài 2 bước ⇒ tối đa 2 câu (câu thứ 3 bị cắt); 3 bước ⇒ đủ 3 câu xoay góc.
+      expect(planNodeQuestions(analysisX, skills, T0, 3)).toHaveLength(3);
       const plan = planNodeQuestions(analysisX, skills, T0, 2);
-      expect(plan).toHaveLength(3);
+      expect(plan).toHaveLength(2);
       expect(plan[0]).toEqual({
         question_index: 1,
         skill: "ERROR_HANDLING",
@@ -368,13 +370,6 @@ describe("plan", () => {
         tier: "PRACTITIONER",
         focus: "ARCHITECTURE",
         step_indices: [1],
-      });
-      expect(plan[2]).toEqual({
-        question_index: 3,
-        skill: "DTO_VALIDATION",
-        tier: "PRACTITIONER",
-        focus: "CHANGE",
-        step_indices: [1, 2],
       });
     });
 
@@ -402,8 +397,9 @@ describe("plan", () => {
           correct_count: 1,
         },
       };
+      expect(planNodeQuestions(analysisXPrime, skills, T0, 3)).toHaveLength(3);
       const plan = planNodeQuestions(analysisXPrime, skills, T0, 2);
-      expect(plan).toHaveLength(3);
+      expect(plan).toHaveLength(2);
       expect(plan[0]).toEqual({
         question_index: 1,
         skill: "DTO_VALIDATION",
@@ -414,13 +410,6 @@ describe("plan", () => {
       expect(plan[1]).toEqual({
         question_index: 2,
         skill: "HTTP_ROUTING",
-        tier: "PRACTITIONER",
-        focus: "CHANGE",
-        step_indices: [1, 2],
-      });
-      expect(plan[2]).toEqual({
-        question_index: 3,
-        skill: "ERROR_HANDLING",
         tier: "PRACTITIONER",
         focus: "CHANGE",
         step_indices: [1, 2],
