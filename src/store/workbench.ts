@@ -12,6 +12,7 @@ import type {
   LearningSessionSummary,
   MeResponse,
   NodeStateView,
+  OfflineMockBundle,
   PersonaMode,
   SkillChange,
   StaticEngineResult,
@@ -30,8 +31,24 @@ import {
   type ApiResult,
 } from "@/lib/api";
 import { CONFIG } from "@/contracts/config";
-import { deriveNodeStates } from "@/lib/derive";
+import { deriveNodeStates, displayTitle } from "@/lib/derive";
 import { formatErrorMessage } from "@/lib/messages";
+import {
+  getOfflineBundle,
+  getOfflineProfile,
+  loadOfflineBundle,
+  offlineEnrichNode,
+  offlineEvaluateFeynman,
+  offlineGetAnalysis,
+  offlineIngestRepo,
+  offlineProgress,
+  offlineRevealQuestion,
+  resetOfflineRuntime,
+  setOfflineMode as setOfflineRuntime,
+  setOfflinePersona as setOfflineRuntimePersona,
+} from "@/lib/offline";
+import { buildFixtureBundle } from "@/lib/fixture-bundle";
+import { explanationKey } from "@/lib/selection-explain";
 
 // ---------- Kiểu của slice `ui` (docs/spec/30_UI.md Mục 7.1) ----------
 
@@ -196,6 +213,36 @@ const FIXTURE_NOT_READY: ApiResult<never> = {
   retryable: false,
 };
 
+const FIXTURE_EXPLAIN_DELAY_MS = 400;
+
+/** Kết quả mẫu cho nút "Giải thích" ở `?fixture=1`; tham chiếu tới 1 bài khác của bản đồ để thử chip "Còn dùng ở". */
+function buildFixtureExplanation(
+  result: ClientStaticEngineResult | null,
+  nodeId: string,
+  selectedText: string,
+  tokensUsed: number,
+): ExplainSelectionResponse {
+  const other = result?.nodes.find((n) => n.id !== nodeId && n.trace_steps.length > 0);
+  return {
+    explanation: {
+      kind: "CODE",
+      what: "Đây là đoạn giải thích mẫu của chế độ fixture: AI thật không được gọi.",
+      here: `Ở bước này, đoạn "${selectedText.trim().slice(0, 60)}" là một phần của luồng xử lý đang xem.`,
+      analogy: "Giống một trạm kiểm tra trên đường đi: mỗi yêu cầu phải qua đó trước khi đi tiếp.",
+      skill: "HTTP_ROUTING",
+    },
+    references: other
+      ? [{ node_id: other.id, step_number: other.trace_steps[0].step_number, name: other.title }]
+      : [],
+    tokens_used: tokensUsed,
+  };
+}
+
+/** Bản sao của kết quả `offline*`: `offline.ts` giữ và sửa tại chỗ run / progress của nó, store không dùng chung đối tượng. */
+function cloneOk<T>(res: ApiResult<T>): ApiResult<T> {
+  return res.ok ? { ok: true, data: structuredClone(res.data) } : res;
+}
+
 function omit<T extends object, K extends keyof T>(obj: T, keys: readonly K[]): Omit<T, K> {
   const copy = { ...obj };
   for (const k of keys) delete copy[k];
@@ -326,19 +373,64 @@ export const useWorkbenchStore = create<WorkbenchStore>()((set, get) => {
       },
     }));
 
-  /** Mục 7.5: có `skill_change` ⇒ làm mới hồ sơ bằng `GET /api/me`. */
+  /** Tên bài để đọc trong toast (cùng cách đặt tên với bản đồ bài học). */
+  const lessonName = (nodeId: string): string => {
+    const { result, overview } = get();
+    const node = result?.nodes.find((n) => n.id === nodeId);
+    return node ? displayTitle(node, overview === "PENDING" ? null : overview) : nodeId;
+  };
+
+  /**
+   * Mục 7.5 / UI-57: trạng thái bài vừa đổi sang xong hoặc chưa đạt ⇒ toast. Bài chưa đạt không có nút học
+   * lại (D-35); bài con vẫn mở kèm ⚠ nên người học không bị kẹt. Chỉ đọc kết quả server, không tự tính gì.
+   */
+  const announceStatus = (
+    state: NodeStateView,
+    statusBefore: NodeStateView["status"] | undefined,
+    unlockedNodeIds: string[],
+  ) => {
+    if (!statusBefore || statusBefore === state.status) return;
+    if (state.status === "COMPLETED") {
+      const opened = unlockedNodeIds.map(lessonName);
+      get().pushToast(`Bài đã xong!${opened.length > 0 ? ` Đã mở khóa: ${opened.join(", ")}.` : ""}`, "success");
+    } else if (state.status === "FAILED") {
+      get().pushToast("Bài chưa đạt.", "info");
+    }
+  };
+
+  /**
+   * Mục 7.5: `unlocked_node_ids` khác rỗng hoặc trạng thái node vừa đổi ⇒ toast + tải lại tiến độ từ server
+   * (mở khóa, `has_warning` của bài khác). `statusBefore` lấy trước khi `mergeNodeState` thay node.
+   */
+  const settleNodeState = async (
+    sessionId: string,
+    state: NodeStateView,
+    unlockedNodeIds: string[],
+    statusBefore: NodeStateView["status"] | undefined,
+  ) => {
+    const changed = statusBefore !== undefined && statusBefore !== state.status;
+    if (unlockedNodeIds.length === 0 && !changed) return;
+    if (!sameSession(sessionId)) return;
+    announceStatus(state, statusBefore, unlockedNodeIds);
+    set((s) => ({ ui: { ...s.ui, newly_unlocked: unlockedNodeIds } }));
+    await get().refreshProgress();
+  };
+
+  /** Offline và `?fixture=1` cùng chạy trên `offline.ts` (0 request); chỉ Offline mới hiện nhãn và đổi persona. */
+  const isLocal = () => get().is_offline_mode || get().ui.fixture;
+
+  /** Mục 7.5: có `skill_change` ⇒ làm mới hồ sơ bằng đúng 1 lần `GET /api/me`, rồi áp `node_state`. */
   const afterAnswer = async (
     sessionId: string,
     r: { skill_change?: SkillChange | null; unlocked_node_ids: string[]; node_state: NodeStateView },
     statusBefore: NodeStateView["status"] | undefined,
   ) => {
-    if (r.skill_change) void get().loadMe({ force: true });
-    if (r.unlocked_node_ids.length > 0 || (statusBefore && statusBefore !== r.node_state.status)) {
-      if (sameSession(sessionId)) {
-        set((s) => ({ ui: { ...s.ui, newly_unlocked: r.unlocked_node_ids } }));
-        await get().refreshProgress();
-      }
+    if (r.skill_change) {
+      // Offline: hồ sơ tính lại ngay trên trình duyệt (`offline.ts`), không có `GET /api/me`.
+      if (isLocal()) set({ profile: structuredClone(getOfflineProfile()) });
+      else void get().loadMe({ force: true });
     }
+    await settleNodeState(sessionId, r.node_state, r.unlocked_node_ids, statusBefore);
   };
 
   // ---- Hàng phân tích (Mục 7.3): hàng chờ + các lời gọi đang chạy, theo phiên ----
@@ -412,7 +504,7 @@ export const useWorkbenchStore = create<WorkbenchStore>()((set, get) => {
   const fetchRun = async (nodeId: string, force: boolean) => {
     const { session_id: sessionId, ui, runs, analyses, progress } = get();
     const key = `enrich:${nodeId}`;
-    if (!sessionId || ui.fixture || ui.pending[key]) return;
+    if (!sessionId || ui.pending[key]) return;
     const analysis = analyses[nodeId];
     if (!analysis || analysis === "PENDING" || analysis === "FAILED") return;
     const state = progress?.nodes[nodeId];
@@ -422,7 +514,9 @@ export const useWorkbenchStore = create<WorkbenchStore>()((set, get) => {
 
     setPending(key, true);
     if (!force) set((s) => ({ ui: { ...s.ui, submit_error: null } }));
-    const res = await enrichNodeSafe(sessionId, nodeId, "LEARN");
+    const res = isLocal()
+      ? cloneOk(offlineEnrichNode(nodeId, "LEARN", ui.offline_persona))
+      : await enrichNodeSafe(sessionId, nodeId, "LEARN");
     setPending(key, false);
     if (!sameSession(sessionId)) return;
     if (!res.ok) {
@@ -452,6 +546,11 @@ export const useWorkbenchStore = create<WorkbenchStore>()((set, get) => {
 
     // ---- Hồ sơ, danh sách phiên ----
     loadMe: (options) => {
+      if (get().is_offline_mode) {
+        // Offline: 0 request, hồ sơ do `offline.ts` dựng.
+        const offlineProfile = get().profile ?? getOfflineProfile();
+        return Promise.resolve({ ok: true, data: { profile: offlineProfile, server_now: Date.now() } });
+      }
       if (mePromise) return mePromise; // đang chờ ⇒ trả lại đúng promise đó
       const { profile, server_clock_offset_ms } = get();
       if (profile && !options?.force) {
@@ -477,7 +576,7 @@ export const useWorkbenchStore = create<WorkbenchStore>()((set, get) => {
     },
 
     loadSessions: async () => {
-      if (get().ui.fixture) return;
+      if (get().ui.fixture || get().is_offline_mode) return;
       const res = await getSessionsSafe();
       if (res.ok) set((s) => ({ ui: { ...s.ui, sessions: res.data.sessions } }));
       else if (res.code === "ERR_UNAUTHENTICATED") set((s) => ({ ui: { ...s.ui, auth: "SIGNED_OUT" } }));
@@ -487,15 +586,26 @@ export const useWorkbenchStore = create<WorkbenchStore>()((set, get) => {
     ingest: async (req) => {
       set((s) => ({ ui: { ...s.ui, ingesting: true, ingest_error: null } }));
       let res: ApiResult<IngestResponse>;
-      if (get().ui.fixture) {
+      if (get().is_offline_mode) {
+        // Offline: phiên lấy từ bundle, 0 request.
+        res = cloneOk(offlineIngestRepo(req));
+      } else if (get().ui.fixture) {
         // `?fixture=1`: không gọi API, trả bản đồ shop-api sau một khoảng ngắn để thấy đồng hồ quét.
         await new Promise((resolve) => setTimeout(resolve, FIXTURE_INGEST_DELAY_MS));
         res = { ok: true, data: await buildFixtureIngest() };
+        // Kịch bản A của bài N3 chạy trên `offline.ts`; bản đồ không có N3 thì chỉ có bản đồ (như trước).
+        if (res.ok) {
+          const bundle = buildFixtureBundle(res.data);
+          resetOfflineRuntime();
+          if (bundle) setOfflineRuntime(true, bundle);
+        }
       } else {
         res = await ingestRepoSafe(req);
       }
-      if (res.ok) get().applyIngest(res.data);
-      else set((s) => ({ ui: { ...s.ui, ingesting: false, ingest_error: toUiError(res) } }));
+      if (res.ok) {
+        get().applyIngest(res.data);
+        if (get().is_offline_mode || (get().ui.fixture && getOfflineBundle())) seedOfflineSession();
+      } else set((s) => ({ ui: { ...s.ui, ingesting: false, ingest_error: toUiError(res) } }));
       return res;
     },
 
@@ -569,6 +679,15 @@ export const useWorkbenchStore = create<WorkbenchStore>()((set, get) => {
      */
     requestAnalysis: (nodeId, retry) => {
       const { session_id: sessionId, ui, analyses, result } = get();
+      if (sessionId && isLocal()) {
+        // Offline: bản phân tích đọc thẳng từ bundle, không có hàng chờ, 0 request.
+        const found = offlineGetAnalysis(nodeId);
+        // `?fixture=1` chỉ có bản phân tích của N3: bài khác để nguyên (tour dựng từ `trace_steps`), không báo lỗi.
+        if (!found.ok && !get().is_offline_mode) return Promise.resolve();
+        set((s) => ({ analyses: { ...s.analyses, [nodeId]: found.ok ? structuredClone(found.data) : "FAILED" } }));
+        if (found.ok && get().active_node_id === nodeId) void get().loadRun(nodeId);
+        return Promise.resolve();
+      }
       if (!sessionId || ui.fixture || ui.quota_stopped) return Promise.resolve();
 
       const own = analyses[nodeId];
@@ -622,7 +741,7 @@ export const useWorkbenchStore = create<WorkbenchStore>()((set, get) => {
     submitAnswer: async (nodeId, questionIndex, answer) => {
       const { session_id: sessionId, runs, ui } = get();
       const run = runs[nodeId];
-      if (!sessionId || !run || ui.fixture) return null;
+      if (!sessionId || !run) return null;
       const question = run.questions.find((q) => q.question_index === questionIndex);
       if (!question) return null;
 
@@ -631,13 +750,16 @@ export const useWorkbenchStore = create<WorkbenchStore>()((set, get) => {
       setPending(`submit:${key}`, true);
       set((s) => ({ ui: { ...s.ui, submit_error: null } }));
       const before = get().progress?.nodes[nodeId]?.status;
-      const res = await evaluateFeynmanSafe({
-        session_id: sessionId,
-        run_id: run.run_id,
-        question_index: questionIndex,
-        student_answer: answer,
-        attempt_number: question.state.attempts_used + 1,
-      });
+      const attemptNumber = question.state.attempts_used + 1;
+      const res = isLocal()
+        ? cloneOk(offlineEvaluateFeynman(nodeId, run.mode, questionIndex, attemptNumber, answer, ui.offline_persona))
+        : await evaluateFeynmanSafe({
+            session_id: sessionId,
+            run_id: run.run_id,
+            question_index: questionIndex,
+            student_answer: answer,
+            attempt_number: attemptNumber,
+          });
       setPending(`submit:${key}`, false);
       if (!sameSession(sessionId)) return null;
 
@@ -684,13 +806,15 @@ export const useWorkbenchStore = create<WorkbenchStore>()((set, get) => {
     skipQuestion: async (nodeId, questionIndex) => {
       const { session_id: sessionId, runs, ui } = get();
       const run = runs[nodeId];
-      if (!sessionId || !run || ui.fixture) return;
+      if (!sessionId || !run) return;
       const key = answerKey(run.run_id, questionIndex);
       if (ui.pending[`submit:${key}`]) return;
       const before = get().progress?.nodes[nodeId]?.status;
 
       setPending(`submit:${key}`, true);
-      const res = await revealSafe({ session_id: sessionId, run_id: run.run_id, question_index: questionIndex });
+      const res = isLocal()
+        ? cloneOk(offlineRevealQuestion(nodeId, run.mode, questionIndex, ui.offline_persona))
+        : await revealSafe({ session_id: sessionId, run_id: run.run_id, question_index: questionIndex });
       setPending(`submit:${key}`, false);
       if (!sameSession(sessionId)) return;
 
@@ -720,17 +844,23 @@ export const useWorkbenchStore = create<WorkbenchStore>()((set, get) => {
       await afterAnswer(sessionId, r, before);
     },
 
+    /** Thay `progress.nodes[node_id]` bằng bản server; mở khóa hoặc đổi trạng thái ⇒ tải lại tiến độ (UI-76). */
     applyNodeState: (state, unlockedNodeIds = []) => {
+      const sessionId = get().session_id;
+      if (!sessionId) return;
+      const before = get().progress?.nodes[state.node_id]?.status;
       mergeNodeState(state);
-      if (unlockedNodeIds.length > 0) {
-        set((s) => ({ ui: { ...s.ui, newly_unlocked: unlockedNodeIds } }));
-        void get().refreshProgress();
-      }
+      void settleNodeState(sessionId, state, unlockedNodeIds, before);
     },
 
+    /** `GET /api/sessions/{id}/progress` ⇒ thay nguyên `progress`; lỗi thì giữ bản đang có (UI-76). */
     refreshProgress: async () => {
-      const { session_id: sessionId, ui } = get();
-      if (!sessionId || ui.fixture) return;
+      const { session_id: sessionId } = get();
+      if (!sessionId) return;
+      if (isLocal()) {
+        set({ progress: structuredClone(offlineProgress()) });
+        return;
+      }
       const res = await getSessionProgressSafe(sessionId);
       if (res.ok && sameSession(sessionId)) set({ progress: res.data.progress });
     },
@@ -777,42 +907,78 @@ export const useWorkbenchStore = create<WorkbenchStore>()((set, get) => {
     setDraft: (key, text) => set((s) => ({ ui: { ...s.ui, drafts: { ...s.ui.drafts, [key]: text } } })),
 
     explainSelection: async (nodeId, stepNumber, range, selectedText) => {
-      const { session_id: sessionId, ui } = get();
-      if (!sessionId || ui.fixture) return null;
-      const res = await explainSelectionSafe({
-        session_id: sessionId,
-        node_id: nodeId,
-        step_number: stepNumber,
-        range,
-        selected_text: selectedText,
-      });
+      const { session_id: sessionId, ui, result } = get();
+      if (!sessionId || get().is_offline_mode) return null; // Offline không có nút "Giải thích", 0 request
+      // Bôi lại đúng vùng đã giải thích ⇒ hiện liền, 0 request (UI-34).
+      const key = explanationKey(nodeId, stepNumber, range);
+      const cached = ui.explanations[key];
+      if (cached) return { ok: true, data: cached };
+
+      let res: ApiResult<ExplainSelectionResponse>;
+      if (ui.fixture) {
+        // `?fixture=1`: không gọi API, trả 1 kết quả mẫu đúng kiểu ExplainSelectionResponse.
+        await new Promise((resolve) => setTimeout(resolve, FIXTURE_EXPLAIN_DELAY_MS));
+        res = { ok: true, data: buildFixtureExplanation(result, nodeId, selectedText, get().progress?.tokens_used ?? 0) };
+      } else {
+        res = await explainSelectionSafe({
+          session_id: sessionId,
+          node_id: nodeId,
+          step_number: stepNumber,
+          range,
+          selected_text: selectedText,
+        });
+      }
       if (!sameSession(sessionId)) return null;
       if (res.ok) {
-        const key = `${nodeId}:${stepNumber}:${range.line_start}:${range.col_start}:${range.line_end}:${range.col_end}`;
+        const data = res.data;
         set((s) => ({
-          ui: { ...s.ui, explanations: { ...s.ui.explanations, [key]: res.data } },
-          progress: s.progress
-            ? { ...s.progress, tokens_used: res.data.tokens_used }
-            : s.progress,
+          ui: {
+            ...s.ui,
+            // Không nhớ `explanation = null` (cổng gác chặn) và lỗi: lần sau bôi lại vẫn được thử lại.
+            explanations: data.explanation ? { ...s.ui.explanations, [key]: data } : s.ui.explanations,
+          },
+          progress: s.progress ? { ...s.progress, tokens_used: data.tokens_used } : s.progress,
         }));
       }
       return res;
     },
 
     // ---- Offline, persona ----
+    /**
+     * Bật ⇒ nạp `public/demo/mock_bundle.json`, dựng phiên từ bundle, mọi action đổi sang `offline.ts` (Mục 8).
+     * Bundle hỏng ⇒ toast, store giữ nguyên, app vẫn chạy chế độ thật. Tắt ⇒ xóa store; `Boot` thấy
+     * `is_offline_mode` hạ xuống và chạy lại khởi động (Mục 7.2). Cần biết kết quả bật thì dùng `activateOffline()`.
+     */
     setOfflineMode: (enabled) => {
-      // Tắt Offline ⇒ xóa store, chạy lại khởi động (Mục 8). Dữ liệu bundle nối ở PH-12 / NH-10.
-      set((s) => ({ ...emptySession(), profile: null, is_offline_mode: enabled, ui: { ...initialUi(), offline_persona: s.ui.offline_persona } }));
+      if (enabled) void activateOffline();
+      else deactivateOffline();
     },
 
-    setOfflinePersona: (p) =>
+    setOfflinePersona: (p) => {
+      // Đang Offline: `offline.ts` dựng lại hồ sơ và tiến độ theo persona mới (spec Mục 9), store lấy lại từ đó.
+      // Chưa Offline: chỉ nhớ lựa chọn, `runOfflineActivation` áp persona khi bật.
+      const offline = get().is_offline_mode;
+      if (offline) setOfflineRuntimePersona(p);
       set((s) => ({
         runs: {},
         active_node_id: null,
         ui: { ...s.ui, offline_persona: p },
-      })),
+        ...(offline
+          ? { profile: structuredClone(getOfflineProfile()), progress: structuredClone(offlineProgress()) }
+          : {}),
+      }));
+    },
 
     switchPersona: async (mode) => {
+      if (get().is_offline_mode) {
+        // Offline đổi persona bằng `setOfflinePersona`; API persona tắt, 0 request.
+        return {
+          ok: false,
+          code: "ERR_DEMO_MODE_DISABLED",
+          message: formatErrorMessage("ERR_DEMO_MODE_DISABLED"),
+          retryable: false,
+        };
+      }
       const res = await switchPersonaSafe(mode);
       if (res.ok) {
         applyProfile(res.data);
@@ -828,6 +994,101 @@ export const useWorkbenchStore = create<WorkbenchStore>()((set, get) => {
     dismissToast: (id) => set((s) => ({ ui: { ...s.ui, toasts: s.ui.toasts.filter((t) => t.id !== id) } })),
   };
 });
+
+// ---------- Offline (docs/spec/30_UI.md Mục 8) ----------
+
+/** Bundle tối thiểu để dựng được phiên; thiếu là coi như hỏng (không đoán, không vào Offline nửa vời). */
+function isUsableBundle(b: unknown): boolean {
+  const x = b as Partial<OfflineMockBundle> | null;
+  const isObject = (v: unknown) => typeof v === "object" && v !== null;
+  return (
+    isObject(x) &&
+    isObject(x?.ingest) &&
+    typeof x?.ingest?.session_id === "string" &&
+    Array.isArray(x?.ingest?.result?.nodes) &&
+    isObject(x?.analyses) &&
+    isObject(x?.overview) &&
+    isObject(x?.enrich) &&
+    isObject(x?.scripted_answers) &&
+    isObject(x?.reveals)
+  );
+}
+
+/** Phân tích và tổng quan có sẵn trong bundle ⇒ nhịp 2 hiện ngay, hồ sơ dựng từ persona. */
+function seedOfflineSession(): void {
+  const bundle = getOfflineBundle();
+  if (!bundle) return;
+  useWorkbenchStore.setState((s) => ({
+    analyses: { ...s.analyses, ...structuredClone(bundle.analyses) },
+    overview: structuredClone(bundle.overview),
+    profile: structuredClone(getOfflineProfile()),
+  }));
+}
+
+let offlineSeq = 0;
+let offlineActivation: Promise<boolean> | null = null;
+
+async function runOfflineActivation(): Promise<boolean> {
+  const seq = ++offlineSeq;
+  const persona = useWorkbenchStore.getState().ui.offline_persona;
+  try {
+    const bundle = await loadOfflineBundle();
+    if (seq !== offlineSeq) {
+      // Người dùng tắt Offline trong lúc đang nạp.
+      setOfflineRuntime(false);
+      return false;
+    }
+    if (!isUsableBundle(bundle)) throw new Error("Gói demo Offline không đúng định dạng");
+    setOfflineRuntimePersona(persona);
+    // Chỉ xóa store thật sau khi bundle đã dùng được.
+    useWorkbenchStore.setState((s) => ({
+      ...emptySession(),
+      profile: null,
+      is_offline_mode: true,
+      server_clock_offset_ms: 0,
+      ui: { ...initialUi(), offline_persona: s.ui.offline_persona },
+    }));
+    const res = await useWorkbenchStore.getState().ingest({ session_id: bundle.ingest.session_id });
+    if (!res.ok) throw new Error(res.message);
+    return true;
+  } catch {
+    // Không khóa người dùng: quay về chế độ thật, chỉ báo bằng toast.
+    if (useWorkbenchStore.getState().is_offline_mode) deactivateOffline();
+    else setOfflineRuntime(false);
+    useWorkbenchStore
+      .getState()
+      .pushToast("Không đọc được gói demo Offline. Ứng dụng vẫn chạy ở chế độ thật.", "error");
+    return false;
+  }
+}
+
+/**
+ * Bật Offline, trả `true` khi đã vào được. Gọi lại khi đang nạp ⇒ dùng chung lần nạp đó.
+ * `Boot` dùng kết quả để chạy tiếp khởi động thật khi bundle hỏng.
+ */
+export function activateOffline(): Promise<boolean> {
+  if (useWorkbenchStore.getState().is_offline_mode) return Promise.resolve(true);
+  offlineActivation ??= runOfflineActivation().finally(() => {
+    offlineActivation = null;
+  });
+  return offlineActivation;
+}
+
+/** Tắt Offline: hủy lần nạp đang chờ, xóa store; chưa Offline thì không đụng vào phiên thật. */
+function deactivateOffline(): void {
+  offlineSeq++;
+  setOfflineRuntime(false);
+  // `offline.ts` giữ lại bundle vừa nạp dù hỏng; dựng lại tiến độ trên bundle hỏng sẽ ném lỗi.
+  if (isUsableBundle(getOfflineBundle())) resetOfflineRuntime();
+  if (!useWorkbenchStore.getState().is_offline_mode) return;
+  useWorkbenchStore.setState((s) => ({
+    ...emptySession(),
+    profile: null,
+    is_offline_mode: false,
+    server_clock_offset_ms: 0,
+    ui: { ...initialUi(), offline_persona: s.ui.offline_persona },
+  }));
+}
 
 /** Gọi 1 lần ở `Boot` khi URL có `?fixture=1`. */
 export function enableFixtureModeFromUrl(): boolean {

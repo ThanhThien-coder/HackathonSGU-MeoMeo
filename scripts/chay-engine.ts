@@ -1,10 +1,8 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
-import type { IngestionReport, LanguageAdapter, LanguageId } from "@/contracts";
-import { parseAll } from "../src/server/engine/graph/parser";
-import { LANGUAGE_REGISTRY } from "../src/server/engine/graph/registry";
-import { collectSymbols, resolveImports } from "../src/server/engine/graph/symbols";
-import { buildCallGraph, findEntries } from "../src/server/engine/graph/callgraph";
+import type { IngestOutput, IngestionReport, LanguageAdapter, LanguageId } from "@/contracts";
+import { buildGraph } from "@/server/engine/graph";
+import { LANGUAGE_REGISTRY } from "@/server/engine/graph/registry";
 
 const IGNORED_DIRS = new Set([
   "node_modules",
@@ -13,6 +11,8 @@ const IGNORED_DIRS = new Set([
   "build",
   ".next",
   "target",
+  "coverage",
+  ".kb",
 ]);
 
 function getLanguageForFile(filePath: string): LanguageAdapter | undefined {
@@ -28,7 +28,7 @@ async function collectFiles(baseDir: string, currentDir: string = baseDir): Prom
 
   for (const entry of entries) {
     if (entry.isDirectory()) {
-      if (!IGNORED_DIRS.has(entry.name)) {
+      if (!IGNORED_DIRS.has(entry.name) && !entry.name.startsWith(".")) {
         const subFiles = await collectFiles(baseDir, path.join(currentDir, entry.name));
         files.push(...subFiles);
       }
@@ -81,6 +81,19 @@ async function main(): Promise<void> {
     langs.set(relPosixPath, adapter.id);
   }
 
+  const techStack: string[] = [];
+  for (const manifestContent of manifests.values()) {
+    try {
+      const pkg = JSON.parse(manifestContent);
+      const deps = { ...pkg.dependencies, ...pkg.devDependencies };
+      for (const dep of Object.keys(deps)) {
+        techStack.push(dep.toLowerCase());
+      }
+    } catch {
+      // Bỏ qua lỗi parse JSON
+    }
+  }
+
   const report: IngestionReport = {
     truncated: false,
     selective_fetch: false,
@@ -103,69 +116,51 @@ async function main(): Promise<void> {
     suspicious_instruction_files: [],
   };
 
-  const parsedFiles = await parseAll(code, langs, report);
+  const input: IngestOutput = {
+    repo_name: path.basename(resolvedBaseDir),
+    snapshot: {
+      source: "ZIP",
+      repo_key: path.basename(resolvedBaseDir),
+      snapshot_id: "local",
+      snapshot_id_kind: "ARCHIVE_HASH",
+      subdir: "",
+      ref_label: null,
+    },
+    fingerprint: {
+      archetype: "WEB_BACKEND",
+      primary_language: "TYPESCRIPT",
+      language_breakdown: [],
+      graph_confidence: "HIGH",
+      detected_framework: techStack.includes("express") ? "Express" : null,
+      tech_stack: techStack,
+      is_monorepo: false,
+      root_dir_offset: "",
+    },
+    report,
+    code,
+    file_language: langs,
+    manifests,
+    source_map: new Map(),
+    module_info: {
+      go_module_path: null,
+      dart_package_name: null,
+      package_entry_files: [],
+    },
+    readme_excerpt: null,
+    manifest_description: null,
+  };
 
-  console.log(`Số file đọc: ${code.size}`);
-  console.log(`Số file parse được: ${parsedFiles.length}`);
-  console.log(`Số file bỏ: ${report.skipped.parse_error}`);
+  const result = await buildGraph(input);
 
-  if (report.warnings.length > 0) {
-    console.log("Các warning:");
-    for (const warning of report.warnings) {
-      console.log(`- ${warning}`);
-    }
-  }
+  console.log(`Số bài: ${result.nodes.length}`);
+  console.log(`Số cạnh: ${result.edges.length}`);
+  console.log(`Số nhóm: ${result.groups.length}`);
+  console.log(`engine_ms: ${result.ingestion_report.engine_ms}`);
 
-  const idx = collectSymbols(parsedFiles);
-  resolveImports(parsedFiles, idx, manifests, {
-    go_module_path: null,
-    dart_package_name: null,
-    package_entry_files: [],
-  });
-
-  let a = 0;
-  let b = 0;
-  for (const fileImports of idx.imports.values()) {
-    for (const imp of fileImports.values()) {
-      if (
-        imp.source.startsWith("./") ||
-        imp.source.startsWith("../") ||
-        imp.source.startsWith("@/") ||
-        imp.source.startsWith("~/")
-      ) {
-        b++;
-        if (imp.resolved_file !== null) {
-          a++;
-        }
-      }
-    }
-  }
-
-  const percentage = b === 0 ? 0 : Math.round((a / b) * 100);
-
-  console.log(`Số định nghĩa: ${idx.symbols.size}`);
-  console.log(`Số hàm: ${idx.functions.size}`);
-  console.log(`Import nội bộ nối được: ${a}/${b} (${percentage}%)`);
-
-  const graph = buildCallGraph(parsedFiles, idx);
-  const entries = findEntries(parsedFiles, idx, graph, "");
-
-  const resolvedEdges = graph.edges.filter((e) => e.confidence === "RESOLVED");
-  console.log(`Số cạnh hàm: ${graph.edges.length}`);
-  console.log(`Số cạnh RESOLVED: ${resolvedEdges.length}`);
-
-  const sourceCounts = new Map<string, number>();
-  for (const entry of entries) {
-    sourceCounts.set(entry.source, (sourceCounts.get(entry.source) ?? 0) + 1);
-  }
-  const sourceStr = Array.from(sourceCounts.entries())
-    .map(([src, count]) => `${src}: ${count}`)
-    .join(", ");
-  console.log(`Số entry theo source: ${sourceStr || "0"}`);
-
-  console.log("10 route đầu:");
-  for (const b of graph.bindings.slice(0, 10)) {
-    console.log(`${b.method ?? "ANY"} ${b.path ?? ""} -> ${b.handler}`);
+  for (const node of result.nodes) {
+    const stepCount = node.trace_steps.length;
+    const prereqStr = node.prerequisites.length > 0 ? node.prerequisites.join(", ") : "không có";
+    console.log(`- ${node.title} | ${stepCount} bước | prerequisites: [${prereqStr}]`);
   }
 }
 

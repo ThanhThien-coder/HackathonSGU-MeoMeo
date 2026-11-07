@@ -6,7 +6,10 @@ import { StatusPill } from "@/components/ui/Page";
 import { Chip } from "@/components/ui/common";
 import { cardAction } from "@/lib/lesson-map";
 
-/** Vạch màu bên trái + viền theo trạng thái (INV-11); chữ trạng thái luôn kèm theo trong `StatusPill`. */
+/**
+ * Vạch màu bên trái + viền theo trạng thái (INV-11); chữ trạng thái luôn kèm theo trong `StatusPill`.
+ * Đổi trạng thái (xong bài, mở khóa, chưa đạt) chỉ đổi màu có `transition`, không hiệu ứng phóng node (B20).
+ */
 const STATUS_CARD: Record<NodeStatus, string> = {
   LOCKED: "border-st-lock-border border-dashed border-l-st-lock-fg opacity-80",
   AVAILABLE: "border-st-ready-border border-l-st-ready-fg",
@@ -92,7 +95,7 @@ export function LessonCard({
         aria-current={active ? "true" : undefined}
         onClick={() => (action.kind === "OPEN" ? onOpen(node.id) : onBlocked(node.id))}
         className={clsx(
-          "block w-full rounded-[10px] border border-l-4 bg-panel px-3 py-2 text-left transition-colors hover:border-muted",
+          "block w-full rounded-[10px] border border-l-4 bg-panel px-3 py-2 text-left transition-[color,background-color,border-color,opacity] duration-300 ease-out motion-reduce:transition-none hover:border-muted",
           STATUS_CARD[status],
           active && "outline-2 outline-offset-0 outline-ink",
         )}

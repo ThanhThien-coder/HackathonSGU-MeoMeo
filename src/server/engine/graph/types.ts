@@ -9,6 +9,7 @@ import type {
 } from "@/contracts";
 
 export interface ExternalCall {
+  is_data_sink?: boolean;
   caller: string;
   line: number;
   receiver_chain: string[];
@@ -121,4 +122,8 @@ export interface EngineContext {
   files: ParsedFile[];
   index: SymbolIndex;
   call_edges: FunctionCallEdge[];
+  call_sites: Map<string, CallSite[]>;
+  external_calls: Map<string, ExternalCall[]>;
+  bindings: RouteBinding[];
+  file_rank: Map<string, number>;
 }

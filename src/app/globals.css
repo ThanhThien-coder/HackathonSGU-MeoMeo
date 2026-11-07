@@ -187,14 +187,20 @@ body {
     color 0.2s;
 }
 
-button {
-  font: inherit;
-  color: inherit;
-  cursor: pointer;
-}
+/*
+ * Nằm trong @layer base: quy tắc ngoài layer luôn thắng class tiện ích của Tailwind, làm các class
+ * `text-*`, `font-*` trên <button> (chữ tối trên nút chính, chữ nhạt của tab) không có tác dụng.
+ */
+@layer base {
+  button {
+    font: inherit;
+    color: inherit;
+    cursor: pointer;
+  }
 
-button:disabled {
-  cursor: not-allowed;
+  button:disabled {
+    cursor: not-allowed;
+  }
 }
 
 [hidden] {

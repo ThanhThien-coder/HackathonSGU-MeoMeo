@@ -41,7 +41,7 @@ type Receiver =
   | { kind: "field"; name: string }
   | { kind: "name"; name: string; shadowed: boolean };
 
-function isCallable(idx: SymbolIndex, key: string): boolean {
+export function isCallable(idx: SymbolIndex, key: string): boolean {
   const sym = idx.symbols.get(key);
   return sym !== undefined && (sym.kind === "FUNCTION" || sym.kind === "METHOD");
 }
@@ -64,7 +64,7 @@ function importTarget(imp: { is_namespace: boolean; imported_name: string }): st
 }
 
 // Tìm file và tên thật của lớp hoặc interface mà `name` trỏ tới khi đứng trong `file`.
-function resolveClassRef(
+export function resolveClassRef(
   idx: SymbolIndex,
   file: string,
   name: string,
@@ -100,7 +100,7 @@ function resolveClassRef(
 }
 
 // Tìm method ở lớp rồi đi dần lên lớp cha. `visited` chặn chuỗi kế thừa trỏ vòng.
-function findMethod(
+export function findMethod(
   idx: SymbolIndex,
   file: string,
   className: string,
@@ -124,7 +124,7 @@ function findMethod(
 }
 
 // ENG-31 (3) và ENG-32: gọi `m` trên biến có kiểu `typeName`, viết trong `file`.
-function resolveTypedCall(
+export function resolveTypedCall(
   idx: SymbolIndex,
   file: string,
   typeName: string,
@@ -371,10 +371,11 @@ export function buildCallGraph(
     }
   }
 
-  // Hàm theo file, bỏ bí danh #default để lời gọi luôn gắn vào khóa thật.
+  // Hàm theo file, bỏ bí danh #default để lời gọi luôn gắn vào khóa thật. Bỏ cả <module>:
+  // nó là mặc định khi không có hàm nào chứa, và có thể trùng khoảng dòng với hàm duy nhất của file.
   const functionsByFile = new Map<string, FunctionInfo[]>();
   for (const [key, fn] of idx.functions) {
-    if (canonicalKey(idx, key) !== key) {
+    if (canonicalKey(idx, key) !== key || key.endsWith("#<module>")) {
       continue;
     }
     const list = functionsByFile.get(fn.file_path);

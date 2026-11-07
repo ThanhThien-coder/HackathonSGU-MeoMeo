@@ -23,6 +23,7 @@ import {
 import { callLLMWithRetry, isAiDisabled } from "../gemini";
 import { logGuardBlocked } from "@/server/log";
 import { sql } from "@/server/db";
+import { addSessionTokens } from "@/server/quota";
 
 const graph = shopApiJson as unknown as StaticEngineResult;
 
@@ -327,6 +328,7 @@ describe("explain selection unit tests", () => {
       expect(res.explanation).not.toBeNull();
       expect(res.explanation?.kind).toBe("KEYWORD");
       expect(res.tokens_used).toBe(210);
+      expect(addSessionTokens).not.toHaveBeenCalled();
     });
   });
 

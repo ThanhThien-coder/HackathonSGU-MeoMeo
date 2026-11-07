@@ -1,3 +1,4 @@
+import type postgres from "postgres";
 import {
   CONFIG,
   type ExplainSelectionRequest,
@@ -10,10 +11,7 @@ import {
 } from "@/contracts";
 import { sql } from "@/server/db";
 import { ApiHttpError } from "@/server/errors";
-import {
-  addSessionTokens,
-  assertSessionTokenQuota,
-} from "@/server/quota";
+import { assertSessionTokenQuota } from "@/server/quota";
 import { aiCostUsd, callLLMWithRetry, isAiDisabled } from "./gemini";
 import { IDENT_RE, LANGUAGE_WORDS } from "./guard/text";
 import { explainScope } from "./guard/names";
@@ -229,7 +227,6 @@ export async function explainSelection(
   const totalTokens = outcome.tokens_in + outcome.tokens_out;
 
   try {
-    await addSessionTokens(session.id, outcome.tokens_in, outcome.tokens_out);
     await sql`
       INSERT INTO ai_usage (session_id, call_kind, tokens_in, tokens_out, cost_usd)
       VALUES (${session.id}, 'EXPLAIN', ${outcome.tokens_in}, ${outcome.tokens_out}, ${
@@ -265,7 +262,7 @@ export async function explainSelection(
   try {
     await sql`
       INSERT INTO ai_cache (cache_key, kind, payload, model, prompt_version, tokens_in, tokens_out)
-      VALUES (${cacheKey}, 'SELECTION_EXPLAIN', ${JSON.stringify(verified)}, ${outcome.model}, ${CONFIG.PROMPT_VERSION}, ${outcome.tokens_in}, ${outcome.tokens_out})
+      VALUES (${cacheKey}, 'SELECTION_EXPLAIN', ${sql.json(verified as unknown as postgres.JSONValue)}, ${outcome.model}, ${CONFIG.PROMPT_VERSION}, ${outcome.tokens_in}, ${outcome.tokens_out})
       ON CONFLICT (cache_key) DO NOTHING
     `;
   } catch {

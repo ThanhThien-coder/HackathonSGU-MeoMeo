@@ -2,7 +2,10 @@
 
 import { useRouter } from "next/navigation";
 import { CONFIG } from "@/contracts/config";
+import { AccountMenu } from "@/components/layout/AccountMenu";
 import { ThemeToggle } from "@/components/layout/Navbar";
+import { PersonaSelect } from "@/components/layout/PersonaSelect";
+import { RepoOverviewModal, setOverviewOpen } from "@/components/learn/RepoOverviewModal";
 import { useWorkbenchStore } from "@/store/workbench";
 
 const TBTN =
@@ -77,7 +80,13 @@ export function CockpitHeader({
           {repo}
         </span>
       ) : null}
-      <button type="button" className={`${TBTN} px-2.5`} disabled title="Tổng quan (sẽ có ở bước sau)">
+      <button
+        type="button"
+        className={`${TBTN} px-2.5`}
+        disabled={!result}
+        title="Bức tranh chung của repo"
+        onClick={() => setOverviewOpen(true)}
+      >
         Tổng quan
       </button>
       <span className="flex-1" />
@@ -92,6 +101,8 @@ export function CockpitHeader({
       <button type="button" className={`${TBTN} px-2.5`} onClick={otherRepo}>
         Repo khác
       </button>
+      <PersonaSelect />
+      <AccountMenu />
       <ThemeToggle />
       <button
         type="button"
@@ -103,6 +114,7 @@ export function CockpitHeader({
       >
         <PaneIcon side="right" />
       </button>
+      <RepoOverviewModal />
     </header>
   );
 }

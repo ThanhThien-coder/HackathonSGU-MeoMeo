@@ -1,17 +1,36 @@
 "use client";
 
+import { usePathname } from "next/navigation";
 import { useEffect } from "react";
-import { enableFixtureModeFromUrl, FIXTURE_SESSION_ID, useWorkbenchStore } from "@/store/workbench";
+import { OfflineBadge } from "@/components/layout/OfflineBadge";
+import {
+  activateOffline,
+  enableFixtureModeFromUrl,
+  FIXTURE_SESSION_ID,
+  useWorkbenchStore,
+} from "@/store/workbench";
 
 const resumeTried = new Set<string>();
 let startup: Promise<void> | null = null;
 
 const urlParam = (name: string) => new URLSearchParams(window.location.search).get(name);
 
+/** Bỏ `?offline=1` khỏi thanh địa chỉ để khởi động lại không tự bật Offline lần nữa. */
+function dropOfflineParam(): void {
+  try {
+    const url = new URL(window.location.href);
+    if (!url.searchParams.has("offline")) return;
+    url.searchParams.delete("offline");
+    window.history.replaceState(window.history.state, "", url);
+  } catch {
+    // Không đổi được URL: bỏ qua, khởi động vẫn chạy.
+  }
+}
+
 /**
- * Khởi động đúng 1 lần cho cả app (docs/spec/30_UI.md Mục 7.2): fixture / Offline ⇒ dừng,
- * ngược lại `loadMe()` đúng 1 lần rồi `loadSessions()`. Chủ đề đã được `theme-script.ts` nạp trước khi vẽ.
- * Phím `Ctrl+Shift+D` gắn ở PH-12.
+ * Khởi động đúng 1 lần cho cả app (docs/spec/30_UI.md Mục 7.2): fixture ⇒ dừng; `?offline=1` ⇒ bật Offline
+ * ngay rồi dừng (bundle hỏng ⇒ toast và đi tiếp chế độ thật, không khóa người dùng); ngược lại `loadMe()`
+ * đúng 1 lần rồi `loadSessions()`. Chủ đề đã được `theme-script.ts` nạp trước khi vẽ.
  */
 function startOnce(): Promise<void> {
   startup ??= (async () => {
@@ -23,8 +42,8 @@ function startOnce(): Promise<void> {
       return;
     }
     if (urlParam("offline") === "1") {
-      store.setOfflineMode(true);
-      return;
+      if (await activateOffline()) return;
+      dropOfflineParam();
     }
     const me = await store.loadMe();
     if (me.ok) await store.loadSessions();
@@ -60,9 +79,41 @@ async function openSessionFromUrl(): Promise<void> {
   }
 }
 
+/** Tắt Offline ⇒ store đã xóa, chạy lại khởi động từ đầu (Mục 7.2). */
+function restartStartup(): void {
+  dropOfflineParam();
+  startup = null;
+  resumeTried.clear();
+  void startOnce().then(openSessionFromUrl);
+}
+
+/** `Ctrl+Shift+D` bật/tắt Offline; `preventDefault` trước mọi việc khác để trình duyệt không mở hộp bookmark. */
+function onHotkey(e: KeyboardEvent): void {
+  const isD = e.code === "KeyD" || e.key.toLowerCase() === "d";
+  if (!isD || !e.ctrlKey || !e.shiftKey || e.altKey || e.metaKey) return;
+  e.preventDefault();
+  if (e.repeat) return;
+  const store = useWorkbenchStore.getState();
+  if (store.is_offline_mode) store.setOfflineMode(false);
+  else void activateOffline();
+}
+
 export function Boot() {
+  const pathname = usePathname();
+
   useEffect(() => {
     void startOnce().then(openSessionFromUrl);
+    window.addEventListener("keydown", onHotkey, { capture: true });
+    // Mọi đường tắt Offline (phím tắt, menu tài khoản) đều dẫn tới việc hạ cờ này ⇒ khởi động lại một chỗ.
+    const unsubscribe = useWorkbenchStore.subscribe((state, prev) => {
+      if (prev.is_offline_mode && !state.is_offline_mode) restartStartup();
+    });
+    return () => {
+      window.removeEventListener("keydown", onHotkey, { capture: true });
+      unsubscribe();
+    };
   }, []);
-  return null;
+
+  // Trang có `Navbar` tự hiện nhãn Offline; trang học dùng `CockpitHeader` nên nhãn cố định gắn ở đây.
+  return pathname?.startsWith("/learn") ? <OfflineBadge /> : null;
 }

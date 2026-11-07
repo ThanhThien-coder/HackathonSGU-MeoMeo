@@ -3,9 +3,12 @@
 // Khung code cột giữa: hàng tab file (.ftab), dòng đường dẫn (.fpath), Monaco của bước đang xem.
 // docs/spec/30_UI.md Mục 5, docs/prototype.html `.ftabs` / `.fpath`. Không có hàng chip bước, không nút "Xem cả file".
 import dynamic from "next/dynamic";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { CONFIG } from "@/contracts/config";
+import { SelectionPopover } from "@/components/code/SelectionPopover";
 import { buildFileTabs, findStep, type CodeSelection } from "@/components/code/slice-model";
+import { RepoOverview } from "@/components/learn/RepoOverview";
+import { explanationKey } from "@/lib/selection-explain";
 import { useWorkbenchStore } from "@/store/workbench";
 
 // Monaco chỉ tải khi vào /learn và mở một bài (chunk riêng, không SSR).
@@ -38,13 +41,16 @@ export function CodeSnippetViewer() {
   const [zoomed, setZoomed] = useState(false);
   // Tab "Kiểu dữ liệu" mở cho đúng (bài, bước) này; đổi bước hay bài ⇒ tự về tab file của bước.
   const [dtoKey, setDtoKey] = useState<string | null>(null);
+  // Vùng chọn mới nhất do MonacoPane phát (kể cả vùng không hợp lệ: nút Giải thích hiện nhưng tắt, ghi chú 4).
+  const [selection, setSelection] = useState<CodeSelection | null>(null);
+  const closeSelection = useCallback(() => setSelection(null), []);
 
   const node = useMemo(() => result?.nodes.find((n) => n.id === activeNodeId) ?? null, [result, activeNodeId]);
   const analysis = activeNodeId ? analyses[activeNodeId] : undefined;
   const tabs = useMemo(() => (node ? buildFileTabs(node, analysis) : []), [node, analysis]);
 
   if (!node) {
-    return <p className="p-4 text-sm text-muted">Chọn một bài ở bản đồ bên trái để bắt đầu.</p>;
+    return <RepoOverview />;
   }
   if (node.trace_steps.length === 0) {
     return <p className="p-4 text-sm text-muted">Bài này chưa có code để hiển thị.</p>;
@@ -73,8 +79,6 @@ export function CodeSnippetViewer() {
   const beforeLines = showDto ? 0 : step.line_start - 1;
   const fontSize = zoomed ? PRESENTATION_FONT_SIZE : BASE_FONT_SIZE;
 
-  // PH-10 nối vùng chọn vào SelectionPopover; ở đây MonacoPane đã phát đủ (kể cả vùng không hợp lệ).
-  const handleSelect = (selection: CodeSelection | null) => void selection;
 
   return (
     <div className="sf-code flex h-full min-h-0 flex-col bg-[var(--code-bg)] text-[var(--code-text)]">
@@ -144,7 +148,7 @@ export function CodeSnippetViewer() {
           hl={hl}
           showDto={showDto}
           fontSize={fontSize}
-          onSelect={handleSelect}
+          onSelect={setSelection}
           tourTint={xrayStage === "TOUR"}
         />
       </div>
@@ -153,6 +157,16 @@ export function CodeSnippetViewer() {
         <p className={`${MONO} flex-none bg-[var(--code-bg)] py-0.5 pl-14 text-xs italic text-[var(--gutter)]`}>
           ⋯ phần còn lại của file
         </p>
+      ) : null}
+
+      {/* Portal vào document.body: không nằm trong khung có transform/filter nên `position: fixed` không lệch. */}
+      {selection && selection.step_number === step.step_number ? (
+        <SelectionPopover
+          key={`${node.id}:${explanationKey(node.id, selection.step_number, selection.range)}`}
+          node={node}
+          selection={selection}
+          onClose={closeSelection}
+        />
       ) : null}
     </div>
   );
