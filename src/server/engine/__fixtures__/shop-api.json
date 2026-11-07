@@ -31,7 +31,7 @@
     "is_monorepo": false,
     "root_dir_offset": ""
   },
-  "total_files": 4,
+  "total_files": 7,
   "nodes": [
     {
       "id": "slice-register",
@@ -125,16 +125,125 @@
           ]
         }
       ]
+    },
+    {
+      "id": "slice-profile",
+      "title": "Get Profile",
+      "title_source": "ROUTE",
+      "title_evidence": "GET /profile",
+      "node_type": "ARCHITECTURAL_DATA_FLOW",
+      "entry_symbol": "src/routes/user.routes.ts#GET /profile",
+      "prerequisites": [
+        "slice-register"
+      ],
+      "position": {
+        "x": 280,
+        "y": 0
+      },
+      "files": [
+        "src/routes/user.routes.ts",
+        "src/middlewares/auth.middleware.ts",
+        "src/services/user.service.ts"
+      ],
+      "languages": [
+        "TYPESCRIPT"
+      ],
+      "support_tier": "RESOLVED",
+      "cognitive_complexity": 4,
+      "rank_score": 0.1388,
+      "is_vip_algorithm": false,
+      "is_capstone": false,
+      "uncle_bob": {
+        "instability": 0.5,
+        "abstractness": 0.5,
+        "distance": 0,
+        "diagnosis": "BALANCED",
+        "is_exempt": false
+      },
+      "trace_steps": [
+        {
+          "step_number": 1,
+          "layer": "ENTRY_POINT",
+          "file_path": "src/routes/user.routes.ts",
+          "function_name": "GET /profile",
+          "line_start": 5,
+          "line_end": 9,
+          "snippet": "// Liên hệ hỗ trợ: *** (email giả để test maskSensitive)\nrouter.get('/profile', authMiddleware, async (req, res) => {\n  const user = await userService.getProfile(req.user.id);\n  res.json(user);\n});",
+          "snippet_line_map": [
+            5,
+            6,
+            7,
+            8,
+            9
+          ]
+        },
+        {
+          "step_number": 2,
+          "layer": "MIDDLEWARE",
+          "file_path": "src/middlewares/auth.middleware.ts",
+          "function_name": "authMiddleware",
+          "line_start": 3,
+          "line_end": 12,
+          "snippet": "const JWT_SECRET = \"<REDACTED_SECRET>\";\nexport function authMiddleware(req, res, next) {\n  const token = req.headers.authorization?.split(' ')[1];\n  try {\n    req.user = jwt.verify(token, JWT_SECRET);\n    next();\n  } catch {\n    res.status(401).json({ message: 'Unauthorized' });\n  }\n}",
+          "snippet_line_map": [
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12
+          ]
+        },
+        {
+          "step_number": 3,
+          "layer": "DATA_ACCESS",
+          "file_path": "src/services/user.service.ts",
+          "function_name": "UserService.getProfile",
+          "line_start": 10,
+          "line_end": 12,
+          "snippet": "async getProfile(id) {\n  return userRepo.findOne({ where: { id }, select: ['id', 'name', 'email'] });\n}",
+          "snippet_line_map": [
+            10,
+            11,
+            12
+          ]
+        }
+      ],
+      "dto_snippet": "",
+      "group_id": "grp-acc",
+      "entities": [
+        {
+          "name": "User",
+          "ops": [
+            "READ"
+          ]
+        }
+      ]
     }
   ],
-  "edges": [],
+  "edges": [
+    {
+      "id": "slice-register->slice-profile",
+      "source": "slice-register",
+      "target": "slice-profile",
+      "confidence": "RESOLVED",
+      "via_entities": [
+        "User"
+      ]
+    }
+  ],
   "groups": [
     {
       "group_id": "grp-acc",
       "key": "Tài khoản",
       "key_kind": "ENTITY",
       "node_ids": [
-        "slice-register"
+        "slice-register",
+        "slice-profile"
       ]
     }
   ],
@@ -172,16 +281,19 @@
     "userService"
   ],
   "file_index": [
+    "src/middlewares/auth.middleware.ts",
     "src/repos/user.repo.ts",
     "src/routes/auth.routes.ts",
-    "src/services/auth.service.ts"
+    "src/routes/user.routes.ts",
+    "src/services/auth.service.ts",
+    "src/services/user.service.ts"
   ],
   "readme_excerpt": "shop-api: web bán hàng mẫu viết bằng Express, TypeORM và Postgres.",
   "manifest_description": "Web bán hàng mẫu: đăng ký, giỏ hàng, thanh toán, báo cáo doanh thu.",
   "ingestion_report": {
     "truncated": false,
     "selective_fetch": false,
-    "code_file_count": 3,
+    "code_file_count": 6,
     "manifest_count": 1,
     "omitted_node_count": 0,
     "skipped": {
