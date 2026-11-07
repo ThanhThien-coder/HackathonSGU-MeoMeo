@@ -7,6 +7,7 @@ import type {
   RepoOverviewView,
   SessionProgress,
 } from "@/contracts";
+import { CONFIG } from "@/contracts/config";
 import { deriveNodeStates } from "@/lib/derive";
 
 /** Phần trạng thái node mà bản đồ bài học cần (đủ cho cả bản suy ra ở client). */
@@ -192,4 +193,102 @@ export function firstOpenableBlocker(
     }
   }
   return null;
+}
+
+// ---------- Cây bài học: thư mục con trong nhóm ----------
+
+/** Chép từ `ACTION_SEGMENTS` của engine (`naming.ts` dùng `node:crypto` nên client không import được). */
+const ROUTE_ACTION_SEGMENTS = new Set([
+  "cancel",
+  "login",
+  "logout",
+  "register",
+  "search",
+  "verify",
+  "refresh",
+  "reset",
+  "health",
+]);
+
+/** Như `staticRouteSegments` của engine: bỏ tham số, `api`, `v1`… */
+function routeSegments(path: string): string[] {
+  return path
+    .split("/")
+    .filter(Boolean)
+    .filter((seg) => {
+      if (/^(:|\{|<|\[)/.test(seg)) return false;
+      const clean = seg.toLowerCase();
+      return (
+        clean !== "api" &&
+        !/^v\d+$/.test(clean) &&
+        /^[A-Za-z0-9_-]+$/.test(seg) &&
+        seg.length <= CONFIG.ROUTE_SEGMENT_MAX_CHARS
+      );
+    });
+}
+
+/**
+ * Thư mục con của bài theo đúng luật `sub` của engine (`data-deps.ts`): đoạn route tĩnh
+ * đầu tiên sau thực thể, bỏ đoạn hành động. Không phải route HTTP ⇒ `""`.
+ * VD "PUT /api/v1/projects/{id}/phases/{phaseId}" ⇒ "phases".
+ */
+export function routeSubOf(titleEvidence: string | null | undefined): string {
+  const m = titleEvidence?.match(/^(GET|POST|PUT|PATCH|DELETE)\s+(\S+)/i);
+  if (!m) return "";
+  const segs = routeSegments(m[2]);
+  return segs.slice(1).find((s) => !ROUTE_ACTION_SEGMENTS.has(s.toLowerCase()))?.toLowerCase() ?? "";
+}
+
+/** "phases" ⇒ "Phases", "project-members" ⇒ "Project members". */
+function subLabel(key: string): string {
+  const words = key.split(/[-_]+/).filter(Boolean);
+  const text = words.join(" ");
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+type TreeNode = Pick<HybridArchitecturalNode, "id" | "title_evidence">;
+
+export interface GroupTree {
+  /** Bài nằm thẳng trong nhóm, giữ thứ tự engine. */
+  direct: string[];
+  /** Thư mục con, xếp sau `direct`, theo thứ tự bài đầu tiên của mỗi thư mục. */
+  subs: Array<{ key: string; label: string; node_ids: string[] }>;
+}
+
+/**
+ * Chia bài của 1 nhóm thành bài thẳng và thư mục con. Chỉ tạo thư mục khi có ≥ 2 bài cùng `sub`
+ * (bài lẻ như "Thêm artifact vào dự án" vẫn nằm thẳng), và không tạo khi mọi bài cùng 1 `sub`.
+ */
+export function groupTree(nodeIds: string[], byId: Map<string, TreeNode>): GroupTree {
+  const subOf = new Map(nodeIds.map((id) => [id, routeSubOf(byId.get(id)?.title_evidence)]));
+  const counts = new Map<string, number>();
+  for (const sub of subOf.values()) {
+    if (sub !== "") counts.set(sub, (counts.get(sub) ?? 0) + 1);
+  }
+  const folderKeys = new Set([...counts].filter(([, n]) => n >= 2).map(([k]) => k));
+  const allInOne = folderKeys.size === 1 && counts.get([...folderKeys][0]) === nodeIds.length;
+  if (allInOne) folderKeys.clear();
+
+  const direct: string[] = [];
+  const subs = new Map<string, string[]>();
+  for (const id of nodeIds) {
+    const sub = subOf.get(id) ?? "";
+    if (folderKeys.has(sub)) {
+      const list = subs.get(sub) ?? [];
+      list.push(id);
+      subs.set(sub, list);
+    } else {
+      direct.push(id);
+    }
+  }
+  return {
+    direct,
+    subs: [...subs].map(([key, node_ids]) => ({ key, label: subLabel(key), node_ids })),
+  };
+}
+
+/** Bài cha chưa thông nằm ở NHÓM KHÁC ⇒ dòng "cần thêm: …" trên cây (bài cha cùng nhóm chỉ hiện ổ khóa). */
+export function crossGroupBlockers(node: MapNode, states: NodeStates, groups: LessonGroupView[]): string[] {
+  const own = groupOfNode(groups, node.id);
+  return blockedBy(node, states).filter((id) => groupOfNode(groups, id) !== own);
 }
