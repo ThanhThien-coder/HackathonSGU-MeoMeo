@@ -31,7 +31,7 @@
     "is_monorepo": false,
     "root_dir_offset": ""
   },
-  "total_files": 7,
+  "total_files": 10,
   "nodes": [
     {
       "id": "slice-register",
@@ -223,6 +223,104 @@
           ]
         }
       ]
+    },
+    {
+      "id": "slice-product-list",
+      "title": "List Products",
+      "title_source": "ROUTE",
+      "title_evidence": "GET /products",
+      "node_type": "ARCHITECTURAL_DATA_FLOW",
+      "entry_symbol": "src/controllers/product.controller.ts#GET /products",
+      "prerequisites": [],
+      "position": {
+        "x": 0,
+        "y": 160
+      },
+      "files": [
+        "src/controllers/product.controller.ts",
+        "src/services/product.service.ts",
+        "src/repos/category.repo.ts"
+      ],
+      "languages": [
+        "TYPESCRIPT"
+      ],
+      "support_tier": "RESOLVED",
+      "cognitive_complexity": 4,
+      "rank_score": 0.1311,
+      "is_vip_algorithm": false,
+      "is_capstone": false,
+      "uncle_bob": {
+        "instability": 0.5,
+        "abstractness": 0.4,
+        "distance": 0.1,
+        "diagnosis": "BALANCED",
+        "is_exempt": false
+      },
+      "trace_steps": [
+        {
+          "step_number": 1,
+          "layer": "ENTRY_POINT",
+          "file_path": "src/controllers/product.controller.ts",
+          "function_name": "GET /products",
+          "line_start": 8,
+          "line_end": 11,
+          "snippet": "router.get('/products', async (req, res) => {\n  const products = await productService.listProducts();\n  res.json(products);\n});",
+          "snippet_line_map": [
+            8,
+            9,
+            10,
+            11
+          ]
+        },
+        {
+          "step_number": 2,
+          "layer": "BUSINESS_LOGIC",
+          "file_path": "src/services/product.service.ts",
+          "function_name": "ProductService.listProducts",
+          "line_start": 14,
+          "line_end": 20,
+          "snippet": "async listProducts() {\n  const products = await productRepo.findAll();\n  for (const p of products) {\n    p.category = await categoryRepo.findById(p.categoryId);\n  }\n  return products;\n}",
+          "snippet_line_map": [
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20
+          ]
+        },
+        {
+          "step_number": 3,
+          "layer": "DATA_ACCESS",
+          "file_path": "src/repos/category.repo.ts",
+          "function_name": "CategoryRepo.findById",
+          "line_start": 5,
+          "line_end": 7,
+          "snippet": "findById(id) {\n  return this.repo.findOne({ where: { id } });\n}",
+          "snippet_line_map": [
+            5,
+            6,
+            7
+          ]
+        }
+      ],
+      "dto_snippet": "",
+      "group_id": "grp-buy",
+      "entities": [
+        {
+          "name": "Product",
+          "ops": [
+            "READ"
+          ]
+        },
+        {
+          "name": "Category",
+          "ops": [
+            "READ"
+          ]
+        }
+      ]
     }
   ],
   "edges": [
@@ -244,6 +342,14 @@
       "node_ids": [
         "slice-register",
         "slice-profile"
+      ]
+    },
+    {
+      "group_id": "grp-buy",
+      "key": "Mua hàng",
+      "key_kind": "ENTITY",
+      "node_ids": [
+        "slice-product-list"
       ]
     }
   ],
@@ -281,11 +387,14 @@
     "userService"
   ],
   "file_index": [
+    "src/controllers/product.controller.ts",
     "src/middlewares/auth.middleware.ts",
+    "src/repos/category.repo.ts",
     "src/repos/user.repo.ts",
     "src/routes/auth.routes.ts",
     "src/routes/user.routes.ts",
     "src/services/auth.service.ts",
+    "src/services/product.service.ts",
     "src/services/user.service.ts"
   ],
   "readme_excerpt": "shop-api: web bán hàng mẫu viết bằng Express, TypeORM và Postgres.",
@@ -293,7 +402,7 @@
   "ingestion_report": {
     "truncated": false,
     "selective_fetch": false,
-    "code_file_count": 6,
+    "code_file_count": 9,
     "manifest_count": 1,
     "omitted_node_count": 0,
     "skipped": {
