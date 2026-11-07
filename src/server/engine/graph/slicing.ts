@@ -481,6 +481,7 @@ interface DraftStep {
   lineMap: number[];
   signatureCount: number;
   milestone: number;
+  anchorRows: number[];
   commentPrefix: string;
   window: number;
 }
@@ -515,7 +516,95 @@ function elide(
   return { lines, lineMap };
 }
 
-// ENG-87: chữ ký, cửa sổ chứa mốc, dòng đóng, tối đa 2 marker.
+function indentOf(line: string): number {
+  return /^\s*/.exec(line)?.[0].length ?? 0;
+}
+
+// Lệnh nhiều dòng: tìm dòng đóng để snippet không hở ngoặc quanh marker.
+function closingIndexOf(step: DraftStep, index: number, closing: number): number | null {
+  const { lines, lineMap } = step;
+  if (!/[({[]\s*$/.test(lines[index])) {
+    return null;
+  }
+  for (let i = index + 1; i < closing; i++) {
+    if (lineMap[i] !== 0 && lines[i].trim() && indentOf(lines[i]) <= indentOf(lines[index])) {
+      return i;
+    }
+  }
+  return null;
+}
+
+function lastReturnIndex(step: DraftStep, closing: number): number {
+  for (let i = closing - 1; i >= 0; i--) {
+    if (step.lineMap[i] !== 0 && /^\s*return\b/.test(step.lines[i])) {
+      return i;
+    }
+  }
+  return -1;
+}
+
+// ENG-87: giữ mốc, rồi dòng dẫn sang bước sau và lệnh dữ liệu, rồi return cuối, phần
+// còn lại lấp quanh mốc. Một cửa sổ liền có thể giấu chính các dòng này.
+function pickIndexes(
+  step: DraftStep,
+  signature: number,
+  closing: number,
+  size: number,
+  milestoneIndex: number
+): number[] {
+  const picked = new Set<number>();
+  const cost = (candidate: Set<number>): number => {
+    const sorted = [...candidate].sort((a, b) => a - b);
+    let gaps = 0;
+    let next = signature;
+    for (const index of sorted) {
+      gaps += index > next ? 1 : 0;
+      next = index + 1;
+    }
+    return sorted.length + gaps + (next < closing ? 1 : 0);
+  };
+  const tryAdd = (indexes: number[]): boolean => {
+    const candidate = new Set([...picked, ...indexes]);
+    if (cost(candidate) > size + 2) {
+      return false;
+    }
+    indexes.forEach((index) => picked.add(index));
+    return true;
+  };
+
+  const anchors = [
+    milestoneIndex,
+    ...step.anchorRows.map((row) => step.lineMap.indexOf(row)),
+    lastReturnIndex(step, closing),
+  ].filter((index) => index >= signature && index < closing);
+
+  for (const index of anchors) {
+    const close = closingIndexOf(step, index, closing);
+    if (close === null || !tryAdd([index, close])) {
+      tryAdd([index]);
+    }
+  }
+
+  let left = milestoneIndex - 1;
+  let right = milestoneIndex + 1;
+  while (left >= signature || right < closing) {
+    if (right < closing) {
+      right = tryAdd([right]) ? right + 1 : closing;
+    }
+    if (left >= signature) {
+      left = tryAdd([left]) ? left - 1 : signature - 1;
+    }
+  }
+
+  // Marker cũ sát chỗ cắt sẽ thành 2 marker liền nhau, chỗ cắt đã tính cả phần của nó.
+  return [...picked]
+    .filter((index) => {
+      const shown = (i: number): boolean => i < signature || i >= closing || picked.has(i);
+      return step.lineMap[index] !== 0 || (shown(index - 1) && shown(index + 1));
+    })
+    .sort((a, b) => a - b);
+}
+
 function renderStep(step: DraftStep): { lines: string[]; lineMap: number[] } {
   const { lines, lineMap, commentPrefix, window } = step;
   if (lines.length <= CONFIG.STEP_MAX_LINES && window >= CONFIG.CLAMP_WINDOW_LINES) {
@@ -524,33 +613,41 @@ function renderStep(step: DraftStep): { lines: string[]; lineMap: number[] } {
 
   const closing = lines.length - 1;
   let signature = step.signatureCount;
+  if (signature > closing) {
+    return { lines, lineMap };
+  }
   let size = Math.min(window, CONFIG.STEP_MAX_LINES - signature - 1 - 2);
   if (size < 1) {
     signature = 1;
     size = Math.max(1, Math.min(window, CONFIG.STEP_MAX_LINES - signature - 1 - 2));
   }
 
-  const milestoneIndex = Math.max(lineMap.indexOf(step.milestone), signature);
-  let start = Math.max(signature, milestoneIndex - Math.floor(size / 2));
-  const end = Math.min(closing, start + size);
-  start = Math.max(signature, end - size);
+  const found = lineMap.indexOf(step.milestone);
+  const milestoneIndex = Math.min(Math.max(found, signature), Math.max(signature, closing - 1));
 
   const outLines = lines.slice(0, signature);
   const outMap = lineMap.slice(0, signature);
 
   const pushMarker = (from: number, to: number): void => {
-    const hidden = lines.slice(from, to).filter((_, i) => lineMap[from + i] !== 0).length;
-    const omitted = lineMap.slice(from, to).filter((n) => n === 0).length;
-    if (to > from) {
-      outLines.push(markerFor(lines[from], commentPrefix, hidden + omitted));
-      outMap.push(0);
+    if (to <= from) {
+      return;
     }
+    const count = lines.slice(from, to).reduce((sum, line, i) => {
+      const inner = lineMap[from + i] === 0 ? /\((\d+) dòng\)$/.exec(line)?.[1] : undefined;
+      return sum + Number(inner ?? 1);
+    }, 0);
+    outLines.push(markerFor(lines[from], commentPrefix, count));
+    outMap.push(0);
   };
 
-  pushMarker(signature, start);
-  outLines.push(...lines.slice(start, end));
-  outMap.push(...lineMap.slice(start, end));
-  pushMarker(end, closing);
+  let next = signature;
+  for (const index of pickIndexes(step, signature, closing, size, milestoneIndex)) {
+    pushMarker(next, index);
+    outLines.push(lines[index]);
+    outMap.push(lineMap[index]);
+    next = index + 1;
+  }
+  pushMarker(next, closing);
   outLines.push(lines[closing]);
   outMap.push(lineMap[closing]);
 
@@ -610,7 +707,9 @@ function draftStep(
   const calleeRows = (ctx.call_sites.get(reached.key) ?? [])
     .filter((site) => keptKeys.has(site.callee))
     .map((site) => site.line);
-  const externalRows = (ctx.external_calls.get(reached.key) ?? [])
+  const externalCalls = ctx.external_calls.get(reached.key) ?? [];
+  const sinkRows = externalCalls.filter((c) => isDataSinkCall(c, techStack)).map((c) => c.line);
+  const externalRows = externalCalls
     .filter((c) => isDataSinkCall(c, techStack) || isOutputCall(c))
     .map((c) => c.line);
 
@@ -638,6 +737,7 @@ function draftStep(
     lineMap,
     signatureCount: Math.max(1, lineMap.indexOf(signatureEnd) + 1),
     milestone,
+    anchorRows: [...calleeRows, ...sinkRows],
     commentPrefix,
     window: CONFIG.CLAMP_WINDOW_LINES,
   };
