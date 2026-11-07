@@ -204,12 +204,13 @@ export function computeEdgesOnKept(
   return edges;
 }
 
+// Bài có luồng ngắn hơn học trước. Không dùng độ phức tạp của hàm: nó đo code rối, không đo luồng.
 export function isEasier(
-  a: Pick<Candidate, "cognitive_complexity" | "rank_score" | "id">,
-  b: Pick<Candidate, "cognitive_complexity" | "rank_score" | "id">
+  a: Pick<Candidate, "trace_steps" | "rank_score" | "id">,
+  b: Pick<Candidate, "trace_steps" | "rank_score" | "id">
 ): boolean {
-  if (a.cognitive_complexity !== b.cognitive_complexity) {
-    return a.cognitive_complexity < b.cognitive_complexity;
+  if (a.trace_steps.length !== b.trace_steps.length) {
+    return a.trace_steps.length < b.trace_steps.length;
   }
   if (a.rank_score !== b.rank_score) {
     return a.rank_score > b.rank_score;
@@ -289,8 +290,8 @@ export function assembleGraph(
       if (a.rank_score !== b.rank_score) {
         return b.rank_score - a.rank_score; // rank_score giảm
       }
-      if (a.cognitive_complexity !== b.cognitive_complexity) {
-        return b.cognitive_complexity - a.cognitive_complexity; // cognitive_complexity giảm
+      if (a.trace_steps.length !== b.trace_steps.length) {
+        return b.trace_steps.length - a.trace_steps.length; // luồng dài hơn trước
       }
       return a.id < b.id ? -1 : a.id > b.id ? 1 : 0; // id tăng
     });

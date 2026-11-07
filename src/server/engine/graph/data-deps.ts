@@ -245,7 +245,7 @@ export function toNodeEntities(
 
 /**
  * ENG-119: Nhóm (groups).
- * - STANDALONE: ALGORITHMIC_CORE, node không có cạnh hoặc không có thực thể chính
+ * - STANDALONE: node không có cạnh (không chung dữ liệu, không chung hàm) hoặc không có thực thể chính
  *   key = "Bài độc lập", group_id = "group-standalone"
  * - ROUTE_PREFIX: theo thực thể chính, group_id = "group-route-<slug(key)>"
  * - depth = đường dài nhất từ điểm bắt đầu
@@ -268,7 +268,6 @@ export function buildGroups(
   for (const n of nodes) {
     const ld = dataById.get(n.id);
     const isStandalone =
-      n.node_type === "ALGORITHMIC_CORE" ||
       !connectedNodeIds.has(n.id) ||
       !ld?.primary_entity;
 

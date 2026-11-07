@@ -4,6 +4,7 @@ import type { IngestionReport } from "@/contracts";
 import {
   assembleGraph,
   computeEdgesOnKept,
+  isEasier,
   isTestCandidate,
   transitiveReduction, assignCapstone } from "./nodes";
 import type { Candidate, EngineContext } from "./types";
@@ -274,6 +275,14 @@ describe("nodes (Spec 11 §11, ENG-110 -> ENG-114)", () => {
 
     expect(JSON.stringify(resA)).toBe(JSON.stringify(resB));
     expect(resA.nodes.map((n) => n.id)).toEqual(resB.nodes.map((n) => n.id));
+  });
+
+  it("isEasier: luồng ít bước hơn học trước, không xét độ phức tạp của hàm", () => {
+    const steps = (n: number) => Array.from({ length: n }, () => ({}));
+    const short = { id: "b", rank_score: 0, cognitive_complexity: 40, trace_steps: steps(2) };
+    const long = { id: "a", rank_score: 0, cognitive_complexity: 1, trace_steps: steps(5) };
+    expect(isEasier(short as unknown as Candidate, long as unknown as Candidate)).toBe(true);
+    expect(isEasier(long as unknown as Candidate, short as unknown as Candidate)).toBe(false);
   });
 
   it("Capstone là bài phức tạp nhất toàn đồ thị, kể cả khi bài đó có cạnh ra", () => {
