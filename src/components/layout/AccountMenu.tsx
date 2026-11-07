@@ -207,6 +207,9 @@ export function AccountMenu() {
             </button>
           ) : (
             <>
+              <a href="/profile" role="menuitem" className={ITEM} onClick={() => closeMenu(false)}>
+                Hồ sơ kỹ năng
+              </a>
               <button
                 type="button"
                 role="menuitem"
