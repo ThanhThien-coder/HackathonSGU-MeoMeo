@@ -31,7 +31,7 @@
     "is_monorepo": false,
     "root_dir_offset": ""
   },
-  "total_files": 14,
+  "total_files": 16,
   "nodes": [
     {
       "id": "slice-register",
@@ -540,6 +540,105 @@
           ]
         }
       ]
+    },
+    {
+      "id": "slice-send-email",
+      "title": "Send Confirmation Email",
+      "title_source": "ENTRY_SYMBOL",
+      "title_evidence": "OrderPlaced",
+      "node_type": "ARCHITECTURAL_DATA_FLOW",
+      "entry_symbol": "src/events/order-placed.handler.ts#OrderPlaced",
+      "prerequisites": [
+        "slice-order-checkout"
+      ],
+      "position": {
+        "x": 1120,
+        "y": 0
+      },
+      "files": [
+        "src/events/order-placed.handler.ts",
+        "src/services/email.service.ts",
+        "src/repos/user.repo.ts"
+      ],
+      "languages": [
+        "TYPESCRIPT"
+      ],
+      "support_tier": "RESOLVED",
+      "cognitive_complexity": 3,
+      "rank_score": 0.0914,
+      "is_vip_algorithm": false,
+      "is_capstone": false,
+      "uncle_bob": {
+        "instability": 0.6,
+        "abstractness": 0.3,
+        "distance": 0.1,
+        "diagnosis": "BALANCED",
+        "is_exempt": false
+      },
+      "trace_steps": [
+        {
+          "step_number": 1,
+          "layer": "ENTRY_POINT",
+          "file_path": "src/events/order-placed.handler.ts",
+          "function_name": "OrderPlaced",
+          "line_start": 5,
+          "line_end": 11,
+          "snippet": "orderEvents.on('OrderPlaced', async (order) => {\n  try {\n    await emailService.sendConfirmation(order);\n  } catch (err) {\n    logger.error('Gửi email thất bại', err);\n  }\n});",
+          "snippet_line_map": [
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11
+          ]
+        },
+        {
+          "step_number": 2,
+          "layer": "BUSINESS_LOGIC",
+          "file_path": "src/services/email.service.ts",
+          "function_name": "EmailService.sendConfirmation",
+          "line_start": 11,
+          "line_end": 19,
+          "snippet": "async sendConfirmation(order) {\n  const user = await userRepo.findById(order.userId);\n  const html = renderTemplate('order-confirmation', { order, user });\n  await this.transport.sendMail({\n    to: user.email,\n    subject: `Đơn hàng #${order.id}`,\n    html,\n  });\n}",
+          "snippet_line_map": [
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19
+          ]
+        },
+        {
+          "step_number": 3,
+          "layer": "DATA_ACCESS",
+          "file_path": "src/repos/user.repo.ts",
+          "function_name": "UserRepo.findById",
+          "line_start": 13,
+          "line_end": 15,
+          "snippet": "findById(id) {\n  return this.repo.findOne({ where: { id } });\n}",
+          "snippet_line_map": [
+            13,
+            14,
+            15
+          ]
+        }
+      ],
+      "dto_snippet": "",
+      "group_id": "grp-after",
+      "entities": [
+        {
+          "name": "User",
+          "ops": [
+            "READ"
+          ]
+        }
+      ]
     }
   ],
   "edges": [
@@ -576,6 +675,15 @@
       "via_entities": [
         "Product"
       ]
+    },
+    {
+      "id": "slice-order-checkout->slice-send-email",
+      "source": "slice-order-checkout",
+      "target": "slice-send-email",
+      "confidence": "INFERRED",
+      "via_entities": [
+        "Order"
+      ]
     }
   ],
   "groups": [
@@ -596,6 +704,14 @@
         "slice-product-list",
         "slice-cart",
         "slice-order-checkout"
+      ]
+    },
+    {
+      "group_id": "grp-after",
+      "key": "Sau khi mua",
+      "key_kind": "STANDALONE",
+      "node_ids": [
+        "slice-send-email"
       ]
     }
   ],
@@ -634,6 +750,7 @@
   ],
   "file_index": [
     "src/controllers/product.controller.ts",
+    "src/events/order-placed.handler.ts",
     "src/middlewares/auth.middleware.ts",
     "src/repos/category.repo.ts",
     "src/repos/user.repo.ts",
@@ -643,6 +760,7 @@
     "src/routes/user.routes.ts",
     "src/services/auth.service.ts",
     "src/services/cart.service.ts",
+    "src/services/email.service.ts",
     "src/services/order.service.ts",
     "src/services/product.service.ts",
     "src/services/user.service.ts"
@@ -652,7 +770,7 @@
   "ingestion_report": {
     "truncated": false,
     "selective_fetch": false,
-    "code_file_count": 13,
+    "code_file_count": 15,
     "manifest_count": 1,
     "omitted_node_count": 0,
     "skipped": {
