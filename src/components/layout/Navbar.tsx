@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useSyncExternalStore } from "react";
+import { AccountMenu } from "@/components/layout/AccountMenu";
 import { AnimatedGradientText } from "@/components/ui/animated-gradient-text";
 import { BrandLogo } from "@/components/ui/brand-logo";
 import { NAV_EXTRA_LINKS } from "@/lib/nav";
@@ -70,10 +71,8 @@ export function Navbar() {
   const sessionId = useWorkbenchStore((s) => s.session_id);
   const offline = useWorkbenchStore((s) => s.is_offline_mode);
   const user = useWorkbenchStore((s) => s.ui.user);
-  const tier = useWorkbenchStore((s) => s.profile?.overall_tier);
 
   const sessionQuery = sessionId ? `?session=${encodeURIComponent(sessionId)}` : "";
-  const account = offline ? "Offline" : user ? [user.display_name, tier].filter(Boolean).join(" · ") : null;
 
   return (
     <header className="sticky top-0 z-30 border-b border-border bg-panel/85 backdrop-blur-xl">
@@ -113,11 +112,8 @@ export function Navbar() {
             Chế độ Offline — dữ liệu ghi lại, không lưu tiến độ
           </span>
         ) : null}
-        {account ? (
-          <span className="rounded-lg bg-panel-2/70 px-2.5 py-1 text-xs font-medium text-muted ring-1 ring-inset ring-border">
-            {account}
-          </span>
-        ) : null}
+        {/* Cùng menu tài khoản với trang học (avatar, tên, bậc; trong menu có "Hồ sơ kỹ năng"). */}
+        {offline || user ? <AccountMenu /> : null}
         <ThemeToggle />
       </nav>
     </header>
