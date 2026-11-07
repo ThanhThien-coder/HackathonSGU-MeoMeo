@@ -1,17 +1,82 @@
+"use client";
+
+import { useSearchParams } from "next/navigation";
+import { useEffect, useState } from "react";
+import { EmptyState } from "@/components/ui/Page";
+import { Button } from "@/components/ui/common";
 import type { AttemptHistoryItem } from "@/contracts/storage";
+import { fetchHistory, type HistoryResult } from "./fetch-history";
 import { HistoryItem } from "./HistoryItem";
 
+type HistoryDisplayItem = AttemptHistoryItem & { question?: string };
+
 interface HistoryListProps {
-  items: readonly (AttemptHistoryItem & { question?: string })[];
+  items: readonly HistoryDisplayItem[];
   sample: boolean;
 }
 
-export function HistoryList({ items, sample }: HistoryListProps) {
-  const newestFirst = items.toSorted((a, b) => b.created_at - a.created_at);
+export function HistoryList(props: HistoryListProps) {
+  const sessionId = useSearchParams().get("session")?.trim() ?? "";
+
+  return <SessionHistory key={sessionId} sessionId={sessionId} {...props} />;
+}
+
+function SessionHistory({
+  sessionId,
+  items,
+  sample,
+}: HistoryListProps & { sessionId: string }) {
+  const [result, setResult] = useState<HistoryResult | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
+
+  useEffect(() => {
+    let active = true;
+    void fetchHistory(sessionId).then((next) => {
+      if (active) setResult(next);
+    });
+    return () => {
+      active = false;
+    };
+  }, [sessionId, retryCount]);
+
+  if (!result) {
+    return (
+      <div role="status" className="rounded-lg border border-line bg-panel p-4">
+        <p className="text-sm text-muted">Đang tải lịch sử…</p>
+        <div aria-hidden="true" className="mt-3 space-y-2 motion-safe:animate-pulse">
+          <div className="h-3 w-2/5 rounded bg-line" />
+          <div className="h-3 w-4/5 rounded bg-line" />
+        </div>
+      </div>
+    );
+  }
+
+  if (!result.ok) {
+    return (
+      <div className="rounded-lg border border-line bg-panel p-4">
+        <p role="alert" className="text-sm text-text">{result.message}</p>
+        <Button
+          className="mt-3"
+          onClick={() => {
+            setResult(null);
+            setRetryCount((count) => count + 1);
+          }}
+        >
+          Thử lại
+        </Button>
+      </div>
+    );
+  }
+
+  const displayItems: readonly HistoryDisplayItem[] = result.sample && sample ? items : result.items;
+  const newestFirst = displayItems.toSorted((a, b) => b.created_at - a.created_at);
+  if (newestFirst.length === 0) {
+    return <EmptyState title="Chưa có lượt nộp bài" />;
+  }
 
   return (
     <>
-      {sample && (
+      {result.sample && (
         <p className="mb-4 text-sm text-muted">
           <strong className="font-semibold text-text">Dữ liệu mẫu</strong>
           <span> · Các lượt bên dưới minh họa cách trang hiển thị lịch sử.</span>
