@@ -23,3 +23,11 @@ Mỗi mã phiếu là 1 file trong thư mục [`phieu/nhan/`](phieu/nhan/). Đ�
 | [NH-11](phieu/nhan/NH-11.md) | Duyệt tay output AI trên repo demo đã chốt | 02:30 → 04:00 | Không dùng Claude |
 | [NH-12](phieu/nhan/NH-12.md) | Ghi bundle Offline trên bản đóng băng | 04:00 → 05:00 | Không dùng Claude |
 | [NH-13](phieu/nhan/NH-13.md) | Tập nói và commit cuối | 08:30 → 09:00 | Claude (mẫu sửa lỗi, điền lỗi trước khi dán) |
+
+### Phiếu tăng tốc (thêm sau, xem [`09_PHIEU_TANG_TOC.md`](09_PHIEU_TANG_TOC.md))
+
+| Mã | Tên việc | Giờ | Cách làm |
+| :-- | :-- | :-- | :-- |
+| [NH-14](phieu/nhan/NH-14.md) | Chấm bài và giải thích đoạn chọn dùng flash-lite (T1) | Ngay, làm tiếp trên PR #39 | Claude |
+| [NH-15](phieu/nhan/NH-15.md) | Giới hạn thời gian chờ tối đa của lời gọi AI (T2) | Ngay sau NH-14, cùng PR #39 | Claude |
+| [NH-16](phieu/nhan/NH-16.md) | Chạy trước repo demo để làm nóng cache (T4, phần Nhân) | 04:00 → 05:00, cùng NH-12 | Không dùng Claude |
