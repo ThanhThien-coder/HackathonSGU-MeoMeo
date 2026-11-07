@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import type { LearningSessionSummary } from "@/contracts";
@@ -40,13 +41,17 @@ function progressLine(s: LearningSessionSummary, now: number): string {
 }
 
 type LoadState = "idle" | "loading" | "failed";
+
+/** Trang chủ chỉ hiện chừng này phiên gần nhất còn học tiếp được; trang Lịch sử hiện đủ. */
+const HOME_SESSION_LIMIT = 3;
 type ResumeError = { session_id: string; message: string; retryable: boolean };
 
 /**
  * "Tiếp tục học" (docs/spec/30_UI.md Mục 2.1). Tự đọc `ui.sessions` nên đổi danh sách chỉ vẽ lại khối này,
  * không vẽ lại cả trang. Lỗi tải danh sách chỉ hiện một dòng nhỏ có "Thử lại", ô link bên trên vẫn dùng được.
  */
-export function SessionList() {
+export function SessionList({ variant = "home" }: { variant?: "home" | "history" } = {}) {
+  const isHistory = variant === "history";
   const router = useRouter();
   const sessions = useWorkbenchStore((s) => s.ui.sessions);
   const loadSessions = useWorkbenchStore((s) => s.loadSessions);
@@ -144,7 +149,15 @@ export function SessionList() {
     );
   }
 
-  if (sessions.length === 0) return null;
+  // Trang chủ: chỉ phiên còn học tiếp được (phiên của engine cũ không mở lại được), tối đa 3 phiên gần nhất.
+  const shown = isHistory ? sessions : sessions.filter((s) => s.can_resume).slice(0, HOME_SESSION_LIMIT);
+  if (shown.length === 0) {
+    return isHistory ? (
+      <p className="mx-auto max-w-xl text-center text-sm text-muted">
+        Bạn chưa có phiên học nào. Quét một repo ở trang chủ để bắt đầu.
+      </p>
+    ) : null;
+  }
 
   const now = Date.now();
   return (
@@ -162,14 +175,20 @@ export function SessionList() {
       ) : null}
       <div className="flex items-center justify-between">
         <h2 id="session-list-title" className="text-lg font-bold tracking-tight text-text">
-          Tiếp tục học
+          {isHistory ? "Chọn phiên để xem lịch sử" : "Tiếp tục học"}
         </h2>
-        <span className="rounded-full bg-panel-2 px-2.5 py-0.5 text-xs font-medium text-muted ring-1 ring-border">
-          {sessions.length} phiên
-        </span>
+        {isHistory ? (
+          <span className="rounded-full bg-panel-2 px-2.5 py-0.5 text-xs font-medium text-muted ring-1 ring-border">
+            {sessions.length} phiên
+          </span>
+        ) : sessions.length > shown.length ? (
+          <Link href="/history" className="text-xs font-medium text-muted transition-colors hover:text-text">
+            Xem tất cả {sessions.length} phiên →
+          </Link>
+        ) : null}
       </div>
       <ul className="flex flex-col gap-2.5">
-        {sessions.map((s, idx) => {
+        {shown.map((s, idx) => {
           const busyHere = opening === s.session_id;
           const err = resumeError?.session_id === s.session_id ? resumeError : null;
           const pct = s.total_nodes > 0 ? Math.min(100, Math.round((s.completed_count / s.total_nodes) * 100)) : 0;
@@ -189,13 +208,22 @@ export function SessionList() {
                           />
                         </div>
                       </div>
-                      <Button
-                        variant="primary"
-                        disabled={!s.can_resume || ingesting || opening !== null}
-                        onClick={() => void resume(s)}
-                      >
-                        {busyHere ? "Đang mở…" : "Học tiếp"}
-                      </Button>
+                      {isHistory ? (
+                        <Button
+                          variant="primary"
+                          onClick={() => router.push(`/history?session=${encodeURIComponent(s.session_id)}`)}
+                        >
+                          Xem lịch sử
+                        </Button>
+                      ) : (
+                        <Button
+                          variant="primary"
+                          disabled={!s.can_resume || ingesting || opening !== null}
+                          onClick={() => void resume(s)}
+                        >
+                          {busyHere ? "Đang mở…" : "Học tiếp"}
+                        </Button>
+                      )}
                     </div>
                     {err ? (
                       <div role="alert" className="mt-2.5 flex flex-wrap items-center gap-3 rounded-xl bg-fail-bg px-3 py-2 text-sm text-red">
