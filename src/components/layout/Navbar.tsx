@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useSyncExternalStore } from "react";
 import { AnimatedGradientText } from "@/components/ui/animated-gradient-text";
 import { BrandLogo } from "@/components/ui/brand-logo";
@@ -52,12 +53,20 @@ export function ThemeToggle() {
 
 const LINK_CLASS =
   "rounded-xl px-3 py-1.5 text-sm font-medium text-muted transition-all hover:bg-panel-2 hover:text-text";
+/** Tab đang mở: pill xám nổi chữ. */
+const LINK_ACTIVE_CLASS =
+  "rounded-xl px-3 py-1.5 text-sm font-semibold text-text bg-panel-2 ring-1 ring-inset ring-border transition-all";
 
 /**
  * Thanh menu cho các trang khác `/learn` (trang học có `CockpitHeader`).
  * Chỉ đọc store, không gọi API.
  */
 export function Navbar() {
+  const pathname = usePathname();
+  const linkProps = (href: string) => {
+    const active = href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(href + "/");
+    return { className: active ? LINK_ACTIVE_CLASS : LINK_CLASS, "aria-current": active ? ("page" as const) : undefined };
+  };
   const sessionId = useWorkbenchStore((s) => s.session_id);
   const offline = useWorkbenchStore((s) => s.is_offline_mode);
   const user = useWorkbenchStore((s) => s.ui.user);
@@ -81,11 +90,11 @@ export function Navbar() {
             SimpliFey
           </AnimatedGradientText>
         </Link>
-        <Link href="/" className={LINK_CLASS}>
+        <Link href="/" {...linkProps("/")}>
           Trang chủ
         </Link>
         {sessionId ? (
-          <Link href={`/learn${sessionQuery}`} className={LINK_CLASS}>
+          <Link href={`/learn${sessionQuery}`} {...linkProps("/learn")}>
             Trang học
           </Link>
         ) : null}
@@ -93,7 +102,7 @@ export function Navbar() {
           <Link
             key={l.href}
             href={l.href === "/history" ? `${l.href}${sessionQuery}` : l.href}
-            className={LINK_CLASS}
+            {...linkProps(l.href)}
           >
             {l.label}
           </Link>
