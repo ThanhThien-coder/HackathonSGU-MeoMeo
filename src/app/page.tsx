@@ -1,15 +1,13 @@
 "use client";
 
-import Link from "next/link";
 import { IngestBox } from "@/components/home/IngestBox";
 import { LoginScreen, OfflineCard } from "@/components/home/LoginScreen";
 import { SessionList } from "@/components/home/SessionList";
 import { Boot } from "@/components/layout/Boot";
 import { Navbar } from "@/components/layout/Navbar";
 import { AmbientBackground } from "@/components/ui/ambient-background";
-import { AnimatedGradientText, MagicBadge } from "@/components/ui/animated-gradient-text";
+import { AnimatedGradientText } from "@/components/ui/animated-gradient-text";
 import { BlurFade } from "@/components/ui/blur-fade";
-import { BrandLogo } from "@/components/ui/brand-logo";
 import { Button } from "@/components/ui/common";
 import { DotPattern } from "@/components/ui/dot-pattern";
 import { useWorkbenchStore } from "@/store/workbench";
@@ -66,18 +64,6 @@ export default function Home() {
       <main className="relative z-10 mx-auto max-w-5xl px-4 pt-12 pb-16 sm:px-6 sm:pt-16 sm:pb-24">
         <BlurFade duration={0.4}>
           <div className="mx-auto mb-10 flex max-w-3xl flex-col items-center text-center sm:mb-12">
-            <Link href="/how-it-works" className="mb-5 inline-block">
-              <MagicBadge>
-                <BrandLogo size={14} />
-                <span className="font-medium text-text/85">
-                  SimpliFey · X-Ray & Feynman Code Studio
-                </span>
-                <span aria-hidden="true" className="text-muted transition-transform duration-200 group-hover:translate-x-0.5">
-                  →
-                </span>
-              </MagicBadge>
-            </Link>
-
             <h1 className="text-balance text-4xl leading-[1.16] font-bold tracking-tight sm:text-5xl md:text-6xl">
               <AnimatedGradientText className="py-1.5">
                 Cách thế hệ mới làm chủ
