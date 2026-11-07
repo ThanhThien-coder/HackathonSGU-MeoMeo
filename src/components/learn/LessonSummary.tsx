@@ -1,10 +1,9 @@
 "use client";
 
 // Tóm tắt bài (UI-44): điểm hay, điểm dở bấm được để tô dòng; nút cuối X-Ray (UI-47).
-// Cấm hiện cách sửa, con số tình huống, biên (INV-06): `buildSummary` không trả những trường đó.
-import { useState } from "react";
+// Cấm hiện cách sửa, con số tình huống, biên (INV-06). docs/prototype.html TasteSkill 2.5.
 import type { HybridArchitecturalNode } from "@/contracts";
-import { Button, Chip, PlainText } from "@/components/ui/common";
+import { Button, PlainText } from "@/components/ui/common";
 import { PREPARE_QUESTIONS_HINT } from "@/components/learn/waiting-label";
 import { buildSummary, rangeLabel, type AnalysisSlot, type SummaryItem } from "@/lib/role-card";
 import { useWorkbenchStore } from "@/store/workbench";
@@ -12,22 +11,30 @@ import { useWorkbenchStore } from "@/store/workbench";
 export interface LessonSummaryProps {
   node: HybridArchitecturalNode;
   analysis: AnalysisSlot;
-  /** "← Về Bước {n}". */
   onBack: () => void;
 }
-
-const ITEM =
-  "block w-full rounded-lg border border-line border-l-4 bg-bg px-3 py-2 text-left transition-colors hover:bg-panel";
 
 function Item({ item, tone, onPick }: { item: SummaryItem; tone: "good" | "bad"; onPick: (i: SummaryItem) => void }) {
   return (
     <button
       type="button"
       onClick={() => onPick(item)}
-      className={`${ITEM} ${tone === "good" ? "border-l-st-done-fg" : "border-l-st-fail-fg"}`}
+      className={`sum-item block w-full text-left rounded-lg p-3 relative transition-all min-w-0 break-words ${
+        tone === "good"
+          ? "good bg-[var(--panel2)] hover:bg-[var(--panel3)] shadow-[inset_4px_0_0_var(--done)]"
+          : "bad bg-[var(--panel2)] hover:bg-[var(--panel3)] shadow-[inset_4px_0_0_var(--fail)]"
+      }`}
     >
-      <PlainText text={item.text} />
-      <small className="block text-xs text-muted">
+      <div className="text-[13.5px] leading-relaxed text-[var(--text)] break-words">
+        <PlainText text={item.text} />
+      </div>
+      {tone === "bad" && item.consequence ? (
+        <div className="cons mt-2 rounded bg-[var(--hl-bad)] p-2.5 text-[12.5px] leading-relaxed text-[var(--text)] break-words">
+          <strong className="text-[var(--fail)]">Hậu quả: </strong>
+          <PlainText text={item.consequence} />
+        </div>
+      ) : null}
+      <small className="block text-xs text-[var(--muted)] mt-1.5">
         Bước {item.step}
         {item.hl ? ` · ${rangeLabel(item.hl.line_start, item.hl.line_end)}` : ""}
       </small>
@@ -35,7 +42,6 @@ function Item({ item, tone, onPick }: { item: SummaryItem; tone: "good" | "bad";
   );
 }
 
-/** Nút cuối X-Ray: chuyển sang tab Feynman, hoặc dòng kết quả khi bài đã xong (không ôn tập, D-35). */
 function NextAction({ nodeId }: { nodeId: string }) {
   const status = useWorkbenchStore((s) => s.progress?.nodes[nodeId]?.status);
   const run = useWorkbenchStore((s) => s.runs[nodeId]);
@@ -46,9 +52,11 @@ function NextAction({ nodeId }: { nodeId: string }) {
 
   if (status === "COMPLETED" || status === "FAILED") {
     return (
-      <div role="status" className="grid gap-1 text-sm">
-        <p className="m-0 font-semibold">{status === "COMPLETED" ? "✓ Đã hoàn thành bài này." : "✗ Bài này chưa đạt."}</p>
-        <p className="m-0 text-muted">Xem lại câu hỏi ở tab Feynman. Không có ôn tập: bài giữ nguyên màu.</p>
+      <div role="status" className="grid gap-1 text-sm bg-[var(--panel2)] p-3 rounded-lg">
+        <p className="m-0 font-semibold text-[var(--text)]">
+          {status === "COMPLETED" ? "✓ Đã hoàn thành bài này." : "✗ Bài này chưa đạt."}
+        </p>
+        <p className="m-0 text-[var(--muted)] text-xs">Xem lại câu hỏi ở tab Feynman. Không có ôn tập: bài giữ nguyên màu.</p>
       </div>
     );
   }
@@ -57,11 +65,11 @@ function NextAction({ nodeId }: { nodeId: string }) {
   if (preparing) {
     return (
       <div className="grid gap-1.5">
-        <Button variant="primary" disabled className="w-full py-2.5 text-[15px]">
+        <button type="button" disabled className="duo-btn-primary w-full py-2.5 opacity-60 cursor-not-allowed">
           Đang chuẩn bị câu hỏi…
-        </Button>
+        </button>
         {run ? null : (
-          <p role="status" className="m-0 text-center text-xs text-muted">
+          <p role="status" className="m-0 text-center text-xs text-[var(--muted)]">
             {PREPARE_QUESTIONS_HINT}
           </p>
         )}
@@ -70,8 +78,8 @@ function NextAction({ nodeId }: { nodeId: string }) {
   }
   if (!run && error) {
     return (
-      <div role="alert" className="grid gap-2 text-sm">
-        <p className="m-0 text-st-fail-fg">{error.message}</p>
+      <div role="alert" className="grid gap-2 text-sm bg-[var(--fail-bg)] p-3 rounded-lg text-[var(--fail)]">
+        <p className="m-0">{error.message}</p>
         <Button className="w-full" onClick={() => void loadRun(nodeId)}>
           Thử lại
         </Button>
@@ -80,70 +88,59 @@ function NextAction({ nodeId }: { nodeId: string }) {
   }
   const left = run?.questions.filter((q) => !q.state.finished && q.state.ended_by !== "DROPPED").length;
   return (
-    <Button variant="primary" className="w-full py-2.5 text-[15px]" onClick={() => setActiveTab("FEYNMAN")}>
+    <button
+      type="button"
+      className="duo-btn-primary w-full py-3 text-[14px]"
+      onClick={() => setActiveTab("FEYNMAN")}
+    >
       Bắt đầu trả lời{left !== undefined ? ` (${left} câu)` : ""} →
-    </Button>
+    </button>
   );
 }
 
 export function LessonSummary({ node, analysis, onBack }: LessonSummaryProps) {
-  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const setHl = useWorkbenchStore((s) => s.setHl);
   const setActiveStep = useWorkbenchStore((s) => s.setActiveStep);
   const { good, bad } = buildSummary(node, analysis);
 
   const pick = (item: SummaryItem) => {
-    // Đổi bước trước rồi mới gán `hl`; `XRayPanel` chỉ xóa `hl` mà bước không khớp, nên vùng tô này được giữ.
     setActiveStep(item.step);
     if (item.hl) setHl([item.hl]);
   };
 
   return (
-    <div className="grid gap-3">
-      <h2 id="rp-title" tabIndex={-1} className="m-0 text-base font-bold outline-none">
+    <div className="grid gap-3 min-w-0 break-words">
+      <h2 id="rp-title" tabIndex={-1} className="m-0 text-base font-bold outline-none text-[var(--text)] break-words">
         Tóm tắt bài
       </h2>
 
-      <div>
-        <div className="mb-1.5 text-xs font-bold uppercase tracking-wide text-st-done-fg">Điểm hay</div>
+      <div className="min-w-0">
+        <div className="sum-title good mb-1.5 text-xs font-bold uppercase tracking-wide text-[var(--done)] flex items-center gap-2">
+          Điểm hay
+        </div>
         {good.length > 0 ? (
-          <div className="grid gap-1.5">
+          <div className="grid gap-2 min-w-0">
             {good.map((g) => (
               <Item key={g.key} item={g} tone="good" onPick={pick} />
             ))}
           </div>
         ) : (
-          <p className="m-0 text-sm text-muted">AI chưa nêu điểm hay nào ở bài này.</p>
+          <p className="m-0 text-sm text-[var(--muted)]">AI chưa nêu điểm hay nào ở bài này.</p>
         )}
       </div>
 
-      <div>
-        <div className="mb-1.5 flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-st-fail-fg">
-          Điểm dở <Chip>Nhận định của AI</Chip>
+      <div className="min-w-0">
+        <div className="sum-title bad mb-1.5 flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-[var(--fail)]">
+          Điểm dở <span className="ai-tag text-[10px] font-medium text-[var(--muted)] rounded-full px-2 py-0.5 bg-[var(--panel3)]">Nhận định của AI</span>
         </div>
         {bad.length > 0 ? (
-          <div className="grid gap-2">
+          <div className="grid gap-2 min-w-0">
             {bad.map((b) => (
-              <div key={b.key}>
-                <Item item={b} tone="bad" onPick={pick} />
-                <button
-                  type="button"
-                  aria-expanded={Boolean(expanded[b.key])}
-                  onClick={() => setExpanded((e) => ({ ...e, [b.key]: !e[b.key] }))}
-                  className="mt-1 border-0 bg-transparent p-0 text-[13px] text-accent underline"
-                >
-                  {expanded[b.key] ? "Thu gọn" : "Xem thêm"}
-                </button>
-                {expanded[b.key] && b.consequence ? (
-                  <div className="mt-1 rounded-lg border border-line bg-panel-2 px-3 py-2 text-[13px] leading-relaxed">
-                    <b>Hậu quả:</b> <PlainText text={b.consequence} />
-                  </div>
-                ) : null}
-              </div>
+              <Item key={b.key} item={b} tone="bad" onPick={pick} />
             ))}
           </div>
         ) : (
-          <p className="m-0 text-sm text-muted">AI không thấy điểm dở đáng kể ở bài này.</p>
+          <p className="m-0 text-sm text-[var(--muted)]">AI không thấy điểm dở đáng kể ở bài này.</p>
         )}
       </div>
 

@@ -8,14 +8,14 @@ import { PersonaSelect } from "@/components/layout/PersonaSelect";
 import { RepoOverviewModal, setOverviewOpen } from "@/components/learn/RepoOverviewModal";
 import { useWorkbenchStore } from "@/store/workbench";
 
-const TBTN =
-  "inline-flex items-center gap-1.5 rounded-lg border border-line-strong bg-transparent py-1 text-sm text-text transition-colors hover:bg-panel-2 disabled:opacity-60";
-
 function PaneIcon({ side }: { side: "left" | "right" }) {
   return (
-    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
-      <rect x="1.5" y="2.5" width="13" height="11" rx="2" fill="none" stroke="currentColor" />
-      <rect x={side === "left" ? 2 : 10} y="3" width="4" height="10" fill="currentColor" opacity=".75" />
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+      {side === "left" ? (
+        <path d="M0 3a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V3zm5-1v12h9a1 1 0 0 0 1-1V3a1 1 0 0 0-1-1H5zM4 2H2a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h2V2z" />
+      ) : (
+        <path d="M0 3a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V3zm11 12V2H2a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h9zm1-13h2a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1h-2V2z" />
+      )}
     </svg>
   );
 }
@@ -25,14 +25,16 @@ export interface CockpitHeaderProps {
   rightOpen?: boolean;
   onToggleLeft?: () => void;
   onToggleRight?: () => void;
+  onOpenTour?: () => void;
 }
 
-/** Thanh trên duy nhất của trang học, theo `prototype.html` (Q-12). */
+/** Thanh trên duy nhất của buồng lái học tập theo TasteSkill 2.5 + prototype.html */
 export function CockpitHeader({
   leftOpen = true,
   rightOpen = true,
   onToggleLeft,
   onToggleRight,
+  onOpenTour,
 }: CockpitHeaderProps = {}) {
   const router = useRouter();
   const result = useWorkbenchStore((s) => s.result);
@@ -43,9 +45,10 @@ export function CockpitHeader({
   const snapshot = result?.snapshot;
   const sha7 = snapshot?.snapshot_id.slice(0, 7) ?? "";
   const zip = snapshot?.snapshot_id_kind === "ARCHIVE_HASH" ? " zip" : "";
-  const repo = result
-    ? `${result.repo_name} · ${snapshot?.ref_label ? `${snapshot.ref_label} ` : ""}@ ${sha7}${zip}`
-    : null;
+  const repoName = result?.repo_name ?? "shop-api";
+  const repoLabel = result
+    ? `${repoName}${snapshot?.ref_label ? ` · ${snapshot.ref_label}` : ""}${sha7 ? ` @ ${sha7}${zip}` : ""}`
+    : "shop-api";
   const mapMs = (metrics.ingest_ms ?? 0) + (metrics.engine_ms ?? 0);
   const overQuota = tokensUsed >= CONFIG.SESSION_TOKEN_QUOTA;
 
@@ -54,66 +57,102 @@ export function CockpitHeader({
     try {
       window.localStorage.removeItem("sf.last_session");
     } catch {
-      // localStorage bị chặn: bỏ qua.
+      // localStorage bị chặn
     }
     router.push("/");
   }
 
   return (
-    <header className="flex flex-none flex-wrap items-center gap-2 border-b border-line bg-panel px-3 py-2">
+    <header className="top flex flex-none flex-wrap items-center gap-2.5 bg-[var(--panel)] px-4 py-2 z-20">
       <button
         type="button"
-        className={`${TBTN} px-2`}
+        id="btnLeft"
+        className="tbtn icon"
         aria-label="Ẩn hoặc hiện bản đồ bài học"
-        title="Ẩn/hiện bản đồ bài học"
+        title="Ẩn/hiện bản đồ bài học (Ctrl+B)"
         aria-pressed={leftOpen}
         onClick={onToggleLeft}
       >
         <PaneIcon side="left" />
       </button>
-      <span className="font-bold text-text max-lg:hidden">SimpliFey</span>
-      {repo ? (
-        <span
-          aria-label="Repo đang học"
-          className="rounded-full border border-line-strong bg-panel-2 px-2.5 py-0.5 font-mono text-[13px] text-text"
-        >
-          {repo}
+
+      <div className="brand-wrap inline-flex items-center gap-2 font-bold text-[14.5px] tracking-tight">
+        <span className="brand-icon inline-flex h-[22px] w-[22px] items-center justify-center rounded-[6px] bg-gradient-to-br from-[var(--accent)] to-[#6366f1] text-[11px] font-extrabold text-white">
+          S
         </span>
-      ) : null}
+        <span className="max-lg:hidden">SimpliFey</span>
+      </div>
+
+      <div
+        className="repo-crumb inline-flex items-center gap-1.5 rounded-lg bg-[var(--panel2)] px-2.5 py-1 font-mono text-[12.5px] text-[var(--muted)]"
+        aria-label="Repo đang học"
+      >
+        <b className="font-semibold text-[var(--text)]">{repoLabel}</b>
+      </div>
+
       <button
         type="button"
-        className={`${TBTN} px-2.5`}
+        className="tbtn"
         disabled={!result}
-        title="Bức tranh chung của repo"
+        title="Xem sơ đồ bức tranh chung của hệ thống"
         onClick={() => setOverviewOpen(true)}
       >
-        Tổng quan
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+          <path d="M1 2.5A1.5 1.5 0 0 1 2.5 1h3A1.5 1.5 0 0 1 7 2.5v3A1.5 1.5 0 0 1 5.5 7h-3A1.5 1.5 0 0 1 1 5.5v-3zm8 0A1.5 1.5 0 0 1 10.5 1h3A1.5 1.5 0 0 1 15 2.5v3A1.5 1.5 0 0 1 13.5 7h-3A1.5 1.5 0 0 1 9 5.5v-3zm-8 8A1.5 1.5 0 0 1 2.5 9h3A1.5 1.5 0 0 1 7 10.5v3A1.5 1.5 0 0 1 5.5 15h-3A1.5 1.5 0 0 1 1 13.5v-3zm8 0A1.5 1.5 0 0 1 10.5 9h3a1.5 1.5 0 0 1 1.5 1.5v3a1.5 1.5 0 0 1-1.5 1.5h-3A1.5 1.5 0 0 1 9 13.5v-3z" />
+        </svg>
+        <span>Tổng quan</span>
       </button>
-      <span className="flex-1" />
-      <span className="text-xs text-muted">Bản đồ {mapMs} ms · 0 token</span>
+
+      {onOpenTour ? (
+        <button
+          type="button"
+          className="tbtn"
+          title="Mở lại hướng dẫn từng bước (Duolingo Tour)"
+          onClick={onOpenTour}
+        >
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+            <path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16z" />
+            <path d="M5.255 5.786a.237.237 0 0 0 .241.247h.825c.138 0 .248-.113.266-.25.09-.656.54-1.134 1.342-1.134.686 0 1.314.343 1.314 1.168 0 .635-.374.927-.965 1.371-.673.489-1.206 1.06-1.168 1.987l.003.217a.25.25 0 0 0 .25.246h.811a.25.25 0 0 0 .25-.25v-.105c0-.718.273-.927 1.01-1.486.609-.463 1.244-.977 1.244-2.056 0-1.511-1.276-2.241-2.673-2.241-1.267 0-2.655.59-2.75 2.286zm1.557 5.763c0 .533.425.927 1.01.927.609 0 1.028-.394 1.028-.927 0-.552-.42-.94-1.029-.94-.584 0-1.009.388-1.009.94z" />
+          </svg>
+          <span>Hướng dẫn</span>
+        </button>
+      ) : null}
+
+      <span className="spacer flex-1" />
+
+      <div className="metric-chip inline-flex items-center gap-1.5 rounded-md bg-[var(--panel2)] px-2 py-1 text-xs text-[var(--faint)] max-lg:hidden">
+        <span className="live-dot h-1.5 w-1.5 rounded-full bg-[var(--done)] shadow-[0_0_6px_var(--done)]" />
+        <span>Bản đồ {mapMs} ms</span>
+      </div>
+
       <span
-        className={overQuota ? "text-xs font-semibold text-st-fail-fg" : "text-xs text-muted"}
+        className={overQuota ? "text-xs font-semibold text-[var(--fail)]" : "text-xs text-[var(--muted)] max-lg:hidden"}
         title="Token đã dùng / hạn mức của phiên"
       >
         {overQuota ? "✗ Hết hạn mức: " : ""}
         {tokensUsed} / {CONFIG.SESSION_TOKEN_QUOTA}
       </span>
-      <button type="button" className={`${TBTN} px-2.5`} onClick={otherRepo}>
+
+      <button type="button" className="tbtn" onClick={otherRepo}>
         Repo khác
       </button>
+
       <PersonaSelect />
       <AccountMenu />
       <ThemeToggle />
+
       <button
         type="button"
-        className={`${TBTN} px-2`}
+        id="btnRight"
+        className="tbtn icon"
         aria-label="Ẩn hoặc hiện cột X-Ray và Feynman"
-        title="Ẩn/hiện X-Ray và Feynman"
+        title="Ẩn/hiện X-Ray và Feynman (Ctrl+Alt+B)"
         aria-pressed={rightOpen}
         onClick={onToggleRight}
       >
         <PaneIcon side="right" />
       </button>
+
       <RepoOverviewModal />
     </header>
   );

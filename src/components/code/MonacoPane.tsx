@@ -127,6 +127,9 @@ html[data-theme="light"] .sf-code{--code-bg:#f8f9fb;--code-text:#1f2733;--gutter
 .sf-code .sf-marker{opacity:.55;font-style:italic}
 .sf-code .sf-glyph-weak{display:flex;align-items:center;justify-content:center;cursor:help}
 .sf-code .sf-glyph-weak::before{content:"\\26A0";color:var(--amber);font-size:12px}
+@keyframes sfFlash{0%,100%{background:transparent}25%,75%{background:rgba(56,189,248,0.35)}50%{background:rgba(56,189,248,0.15)}}
+.sf-code .sf-flash-line{animation:sfFlash .5s ease-in-out 3}
+.sf-code .sf-bar-flash{box-shadow:inset 4px 0 0 var(--accent)}
 `;
 
 const HL_CLASS = {
@@ -164,6 +167,9 @@ export default function MonacoPane({
   const theme = useSyncExternalStore(subscribeTheme, themeSnapshot, themeServerSnapshot);
   const [editor, setEditor] = useState<monaco.editor.IStandaloneCodeEditor | null>(null);
   const decorations = useRef<monaco.editor.IEditorDecorationsCollection | null>(null);
+  const flashDecorations = useRef<monaco.editor.IEditorDecorationsCollection | null>(null);
+  const flashTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingFlashStep = useRef<number | null>(null);
 
   // Model chỉ đổi khi node / bước / tab DTO đổi — dựng lại mỗi lần vẽ sẽ xóa vùng chọn đang có.
   const model: StepModel = useMemo(
@@ -307,10 +313,86 @@ export default function MonacoPane({
     if (ranges.length > 0) editor.revealLineInCenterIfOutsideViewport(ranges[0].start_line);
   }, [editor, node, analysis, activeStep, showDto, hl, tourTint, model]);
 
-  // Đổi bước ⇒ về đầu code (trừ khi có dòng tô cuộn tới).
+  // Thực thi hiệu ứng cuộn tới dòng đầu bước và nháy sáng 1.5 giây
+  const executeFlashStep = useCallback(() => {
+    if (!editor) return;
+    const firstIndex = model.lineMap.findIndex((orig) => orig > 0);
+    const targetLine = firstIndex >= 0 ? firstIndex + 1 : 1;
+    editor.revealLineInCenter(targetLine);
+
+    if (flashTimeoutRef.current) clearTimeout(flashTimeoutRef.current);
+    flashDecorations.current?.clear();
+
+    const flashDecs: monaco.editor.IModelDeltaDecoration[] = [];
+    for (let i = 0; i < model.lineMap.length; i++) {
+      if (model.lineMap[i] > 0) {
+        flashDecs.push({
+          range: new monaco.Range(i + 1, 1, i + 1, 1),
+          options: {
+            isWholeLine: true,
+            className: "sf-flash-line",
+            linesDecorationsClassName: "sf-bar-flash",
+          },
+        });
+      }
+    }
+    if (flashDecs.length === 0 && model.lineMap.length > 0) {
+      for (let i = 0; i < model.lineMap.length; i++) {
+        flashDecs.push({
+          range: new monaco.Range(i + 1, 1, i + 1, 1),
+          options: {
+            isWholeLine: true,
+            className: "sf-flash-line",
+            linesDecorationsClassName: "sf-bar-flash",
+          },
+        });
+      }
+    }
+
+    flashDecorations.current = editor.createDecorationsCollection(flashDecs);
+    flashTimeoutRef.current = setTimeout(() => {
+      flashDecorations.current?.clear();
+      flashDecorations.current = null;
+    }, 1500);
+  }, [editor, model]);
+
+  // Lắng nghe sự kiện sf:open-hint-step
   useEffect(() => {
+    const onHintStep = (e: Event) => {
+      const ce = e as CustomEvent<{ step: number }>;
+      const step = ce.detail?.step;
+      if (typeof step !== "number") return;
+      pendingFlashStep.current = step;
+      if (editor && activeStep === step) {
+        pendingFlashStep.current = null;
+        executeFlashStep();
+      }
+    };
+    window.addEventListener("sf:open-hint-step", onHintStep);
+    return () => window.removeEventListener("sf:open-hint-step", onHintStep);
+  }, [editor, activeStep, executeFlashStep]);
+
+  // Khi model hoặc activeStep thay đổi tới step đang chờ flash
+  useEffect(() => {
+    if (pendingFlashStep.current !== null && pendingFlashStep.current === activeStep) {
+      pendingFlashStep.current = null;
+      executeFlashStep();
+    }
+  }, [activeStep, model, executeFlashStep]);
+
+  // Dọn dẹp timeout khi unmount
+  useEffect(() => {
+    return () => {
+      if (flashTimeoutRef.current) clearTimeout(flashTimeoutRef.current);
+      flashDecorations.current?.clear();
+    };
+  }, []);
+
+  // Đổi bước ⇒ về đầu code (trừ khi là bước hint đang cần cuộn tới dòng đầu).
+  useEffect(() => {
+    if (pendingFlashStep.current === activeStep) return;
     editor?.setScrollTop(0);
-  }, [editor, model.text]);
+  }, [editor, model.text, activeStep]);
 
   return (
     <div className="sf-code relative h-full min-h-0 w-full bg-[var(--code-bg)]">

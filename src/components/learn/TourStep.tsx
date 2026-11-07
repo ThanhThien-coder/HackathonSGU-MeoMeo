@@ -1,80 +1,134 @@
 "use client";
 
 // Một bước của tour (UI-42), theo prototype `#xray` stage "tour".
-// Chưa có chữ của AI ⇒ hiện tên hàm từ `trace_steps` + shimmer: người học vẫn đi tour được (ghi chú 3, 6).
+// Tích hợp Mini-diagram 3 tầng kiến trúc: Controller → Service → Database Repo (TasteSkill 2.5).
+// Đảm bảo min-w-0, break-words và overflow-x-auto cho khối code để không bao giờ tràn cột.
 import type { ReactNode } from "react";
 import { Button, PlainText } from "@/components/ui/common";
 import { rangeLabel, type TourStepView } from "@/lib/role-card";
 
 export interface TourStepProps {
   step: TourStepView;
-  /** `true` ⇒ đang chờ AI: shimmer "đang phân tích…" dưới chữ dự phòng. */
   pending?: boolean;
-  /** Hàng chip kỹ năng (`SkillChips`), có thể rỗng. */
   chips?: ReactNode;
   onPrev: () => void;
   onNext: () => void;
+  onJumpStep?: (stepNumber: number) => void;
 }
 
-export function TourStep({ step, pending = false, chips, onPrev, onNext }: TourStepProps) {
+export function TourStep({
+  step,
+  pending = false,
+  chips,
+  onPrev,
+  onNext,
+  onJumpStep,
+}: TourStepProps) {
   const first = step.step === 1;
   const last = step.step === step.total;
+
+  let activeNode = 0;
+  if (
+    step.layer === "BUSINESS_LOGIC" ||
+    step.layer === "ALGO_EXECUTION" ||
+    (step.step === 2 && step.total >= 2)
+  ) {
+    activeNode = 1;
+  } else if (
+    step.layer === "DATA_ACCESS" ||
+    step.layer === "ALGO_TERMINATION" ||
+    step.step >= 3
+  ) {
+    activeNode = 2;
+  }
+
   return (
-    <div className="grid gap-3">
-      <div className="flex items-center justify-between gap-2.5">
-        <h2 id="rp-title" tabIndex={-1} className="m-0 flex items-baseline gap-1.5 text-[15px] font-bold outline-none">
+    <div className="grid gap-3 min-w-0">
+      {/* Mini-diagram 3 tầng kiến trúc theo prototype.html */}
+      <div className="arch-diagram min-w-0 overflow-x-auto" role="navigation" aria-label="Sơ đồ 3 tầng kiến trúc">
+        <button
+          type="button"
+          onClick={() => onJumpStep?.(1)}
+          className={`arch-node whitespace-nowrap ${activeNode === 0 ? "active" : ""}`}
+        >
+          1. Route / Controller
+        </button>
+        <span className="arch-arrow">→</span>
+        <button
+          type="button"
+          onClick={() => onJumpStep?.(Math.min(2, step.total))}
+          className={`arch-node whitespace-nowrap ${activeNode === 1 ? "active" : ""}`}
+        >
+          2. Service Logic
+        </button>
+        <span className="arch-arrow">→</span>
+        <button
+          type="button"
+          onClick={() => onJumpStep?.(Math.min(3, step.total))}
+          className={`arch-node whitespace-nowrap ${activeNode === 2 ? "active" : ""}`}
+        >
+          3. Database Repo
+        </button>
+      </div>
+
+      <div className="stephead flex items-center justify-between gap-2.5 min-w-0">
+        <h2 id="rp-title" tabIndex={-1} className="m-0 flex items-baseline gap-1.5 text-[15px] font-bold outline-none text-[var(--text)] min-w-0 break-words">
           {step.has_weak ? (
             <span
               role="img"
               aria-label="Có điểm dở do AI nhận định"
               title={`Nhận định của AI: ${step.weak_what ?? ""}`}
-              className="text-amber"
+              className="text-[var(--ready)] flex-none"
             >
               ⚠
             </span>
           ) : null}
-          Bước {step.step}/{step.total} · {step.layer_label}
+          <span className="min-w-0 break-words">
+            Bước {step.step}/{step.total} · {step.layer_label}
+          </span>
         </h2>
-        <div className="flex gap-[5px]" aria-hidden="true">
+        <div className="dots flex gap-1.5 flex-none" aria-hidden="true">
           {Array.from({ length: step.total }, (_, i) => (
             <i
               key={i}
-              className={`h-[5px] w-[22px] rounded-[3px] transition-colors ${i < step.step ? "bg-accent" : "bg-line"}`}
+              className={`h-[5px] w-[20px] rounded-[3px] transition-all duration-200 ${
+                i < step.step ? "on bg-[var(--accent)] scale-y-110" : "bg-[var(--panel3)]"
+              }`}
             />
           ))}
         </div>
       </div>
 
-      <div className="font-mono text-[11.5px] text-muted">
+      <div className="where font-mono text-[11.5px] text-[var(--muted)] break-all overflow-x-auto">
         {step.file_path} · {rangeLabel(step.line_start, step.line_end)}
       </div>
 
       {step.text ? (
-        <p className="m-0 text-[15px] leading-[1.65]">
+        <p className="expl m-0 text-[14.5px] leading-[1.65] text-[var(--text)] break-words">
           <PlainText text={step.text} />
         </p>
       ) : (
-        <div>
-          <p className="m-0 font-mono text-[13px] text-muted">{step.function_name}</p>
+        <div className="min-w-0">
+          <p className="m-0 font-mono text-[13px] text-[var(--muted)] break-all overflow-x-auto">{step.function_name}</p>
           {pending ? (
-            <div role="status" className="mt-2 grid gap-1.5">
-              <span className="h-3 w-full animate-pulse rounded bg-line" />
-              <span className="h-3 w-4/5 animate-pulse rounded bg-line" />
-              <span className="text-xs text-muted">đang phân tích…</span>
+            <div role="status" className="mt-2 grid gap-1.5 min-w-0">
+              <span className="h-3 w-full animate-pulse rounded bg-[var(--panel3)]" />
+              <span className="h-3 w-4/5 animate-pulse rounded bg-[var(--panel3)]" />
+              <span className="text-xs text-[var(--muted)]">đang phân tích…</span>
             </div>
           ) : null}
         </div>
       )}
 
-      {chips}
+      <div className="min-w-0">{chips}</div>
 
-      <div className="flex justify-between gap-2.5">
+      <div className="navrow flex justify-between gap-2.5 pt-1 min-w-0 flex-wrap">
         <Button onClick={onPrev}>{first ? "← Thẻ vai trò" : "← Bước trước"}</Button>
         <Button variant="primary" onClick={onNext}>
           {last ? "Xem tóm tắt →" : "Bước sau →"}
         </Button>
       </div>
-      <p className="m-0 text-xs text-muted">Mẹo: bấm phím ← → để chuyển bước.</p>
+      <p className="keyhint m-0 text-xs text-[var(--faint)]">Mẹo: bấm phím ← → để chuyển bước.</p>
     </div>
   );
 }

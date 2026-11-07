@@ -2,20 +2,20 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useState, type CSSProperties, type ReactNode } from "react";
-import { CONFIG } from "@/contracts/config";
+import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { LoginScreen } from "@/components/home/LoginScreen";
 import { CockpitHeader } from "@/components/learn/CockpitHeader";
 import { CodeSnippetViewer } from "@/components/learn/CodeSnippetViewer";
+import { DuolingoTour } from "@/components/learn/DuolingoTour";
 import { LearnSidePanel } from "@/components/learn/LearnSidePanel";
 import { LessonGraphPanel } from "@/components/learn/LessonGraphPanel";
 import { Button } from "@/components/ui/common";
 import { EmptyState } from "@/components/ui/Page";
 import { useWorkbenchStore } from "@/store/workbench";
 
-const COLUMN = "min-w-0 rounded-xl border border-line bg-panel lg:min-h-0 lg:overflow-auto";
+const COLUMN = "col min-w-0 rounded-xl bg-[var(--panel)] shadow-sm lg:min-h-0 lg:overflow-auto";
 const HOME_LINK =
-  "inline-flex items-center justify-center rounded-lg border border-line-strong px-3 py-1.5 text-sm font-semibold text-text transition-colors hover:bg-btn-hover";
+  "inline-flex items-center justify-center rounded-lg bg-[var(--panel2)] px-3 py-1.5 text-sm font-semibold text-[var(--text)] transition-transform hover:-translate-y-0.5 hover:bg-[var(--panel3)]";
 
 function Centered({ children }: { children: ReactNode }) {
   return <main className="mx-auto flex max-w-xl flex-col gap-4 px-4 py-10 sm:px-6 sm:py-16">{children}</main>;
@@ -52,7 +52,7 @@ function NoSession({ sessionId }: { sessionId: string | null }) {
   if (ingestError) {
     return (
       <Centered>
-        <div role="alert" className="rounded-xl border border-st-fail-border bg-st-fail-bg p-4 text-sm text-text">
+        <div role="alert" className="rounded-xl bg-st-fail-bg p-4 text-sm text-[var(--text)]">
           <p>{ingestError.message}</p>
           <div className="mt-3 flex flex-wrap gap-2">
             {ingestError.retryable && sessionId ? (
@@ -81,7 +81,7 @@ function NoSession({ sessionId }: { sessionId: string | null }) {
   }
   return (
     <Centered>
-      <p role="status" className="text-center text-muted">
+      <p role="status" className="text-center text-[var(--muted)]">
         {bootError && !ingesting ? bootError.message : "Đang mở phiên học…"}
       </p>
       <div className="text-center">
@@ -93,46 +93,113 @@ function NoSession({ sessionId }: { sessionId: string | null }) {
   );
 }
 
-/** Khung trang học: 3 cột từ 1024 px (`CONFIG.UI_PANE_WIDTHS_PCT`), dưới đó 1 cột và khung code dính đầu. */
+/** Khung buồng lái 3 cột Cockpit IDE theo TasteSkill 2.5 + prototype.html */
 export function LearnShell() {
   const sessionParam = useSearchParams().get("session");
   const result = useWorkbenchStore((s) => s.result);
   const [leftOpen, setLeftOpen] = useState(true);
   const [rightOpen, setRightOpen] = useState(true);
+  const [tourOpen, setTourOpen] = useState(false);
+
+  // Phím tắt toàn cục: Ctrl+B (toggle cột trái), Ctrl+Alt+B (toggle cột phải)
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) {
+        return;
+      }
+      if ((e.ctrlKey || e.metaKey) && e.altKey && (e.key === "b" || e.key === "B")) {
+        e.preventDefault();
+        setRightOpen((v) => !v);
+      } else if ((e.ctrlKey || e.metaKey) && !e.altKey && (e.key === "b" || e.key === "B")) {
+        e.preventDefault();
+        setLeftOpen((v) => !v);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  // Tự động gợi ý mở tour Duolingo cho người học mới vào
+  useEffect(() => {
+    if (!result) return;
+    try {
+      const shown = window.sessionStorage.getItem("sf.tour_shown");
+      if (!shown) {
+        setTourOpen(true);
+      }
+    } catch {
+      // sessionStorage có thể bị chặn
+    }
+  }, [result]);
+
+  const handleCloseTour = () => {
+    setTourOpen(false);
+    try {
+      window.sessionStorage.setItem("sf.tour_shown", "true");
+    } catch {
+      // Không làm gián đoạn UI
+    }
+  };
+
+  const handleEnsureColumnsOpen = () => {
+    setLeftOpen(true);
+    setRightOpen(true);
+  };
 
   if (!result) return <NoSession sessionId={sessionParam} />;
 
-  const [left, mid, right] = CONFIG.UI_PANE_WIDTHS_PCT;
-  const cols = [leftOpen ? left : null, mid, rightOpen ? right : null]
-    .filter((w) => w !== null)
-    .map((w) => `minmax(0,${w}fr)`)
-    .join(" ");
+  // Tính tỷ lệ 3 cột linh hoạt theo prototype.html
+  let cols = "minmax(0, 24fr) minmax(0, 45fr) minmax(0, 31fr)";
+  if (!leftOpen && rightOpen) {
+    cols = "minmax(0, 69fr) minmax(0, 31fr)";
+  } else if (leftOpen && !rightOpen) {
+    cols = "minmax(0, 24fr) minmax(0, 76fr)";
+  } else if (!leftOpen && !rightOpen) {
+    cols = "minmax(0, 1fr)";
+  }
 
   return (
-    <div className="flex min-h-dvh flex-col lg:h-dvh lg:overflow-hidden">
+    <div className="flex min-h-dvh flex-col lg:h-dvh lg:overflow-hidden bg-[var(--bg)] text-[var(--text)]">
       <CockpitHeader
         leftOpen={leftOpen}
         rightOpen={rightOpen}
         onToggleLeft={() => setLeftOpen((v) => !v)}
         onToggleRight={() => setRightOpen((v) => !v)}
+        onOpenTour={() => {
+          handleEnsureColumnsOpen();
+          setTourOpen(true);
+        }}
       />
       <main
+        id="main"
         style={{ "--cols": cols } as CSSProperties}
-        className="flex flex-col gap-3 p-3 lg:grid lg:min-h-0 lg:flex-1 lg:grid-cols-[var(--cols)] lg:grid-rows-[minmax(0,1fr)]"
+        className="main flex flex-col gap-3 p-3 lg:grid lg:min-h-0 lg:flex-1 lg:grid-cols-[var(--cols)] lg:grid-rows-[minmax(0,1fr)]"
       >
-        <aside hidden={!leftOpen} aria-label="Bản đồ bài học" className={COLUMN}>
-          <LessonGraphPanel />
+        <aside id="colLeft" hidden={!leftOpen} aria-label="Bản đồ bài học" className={`col-left ${COLUMN}`}>
+          <div className="pane">
+            <LessonGraphPanel />
+          </div>
         </aside>
         <section
+          id="colMid"
           aria-label="Khung code"
-          className="min-w-0 overflow-hidden rounded-xl border border-line bg-panel max-lg:sticky max-lg:top-0 max-lg:z-[5] max-lg:h-[min(430px,52vh)] lg:min-h-0"
+          className="col col-mid min-w-0 overflow-hidden rounded-xl bg-[var(--panel)] shadow-sm max-lg:sticky max-lg:top-0 max-lg:z-10 max-lg:h-[min(440px,54vh)] lg:min-h-0"
         >
           <CodeSnippetViewer />
         </section>
-        <aside hidden={!rightOpen} aria-label="X-Ray và Feynman" className={COLUMN}>
-          <LearnSidePanel />
+        <aside id="colRight" hidden={!rightOpen} aria-label="X-Ray và Feynman" className={`col-right ${COLUMN}`}>
+          <div id="right">
+            <LearnSidePanel />
+          </div>
         </aside>
       </main>
+
+      <DuolingoTour
+        open={tourOpen}
+        onClose={handleCloseTour}
+        onEnsureColumnsOpen={handleEnsureColumnsOpen}
+      />
     </div>
   );
 }

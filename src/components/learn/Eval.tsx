@@ -1,7 +1,7 @@
 "use client";
 
 // Kết quả nộp hiện ngay trong cột (không hộp thoại, ghi chú 5): mỗi lượt 1 khối `<details>` "Lượt {k}",
-// lượt mới nhất mở sẵn. docs/spec/30_UI.md Mục 6.2 (kết quả nộp, UI-32b, K4).
+// lượt mới nhất mở sẵn. docs/spec/30_UI.md Mục 6.2 (kết quả nộp, UI-32b, K4), prototype.html.
 import type { EvaluateFeynmanResponse } from "@/contracts";
 import { CONFIG } from "@/contracts/config";
 import { Button, PlainText } from "@/components/ui/common";
@@ -14,23 +14,28 @@ export interface AttemptEntry {
 
 function ScoreBar({ value }: { value: number }) {
   const pct = Math.max(0, Math.min(100, value));
+  const passed = pct >= CONFIG.PASS_CORE_ACCURACY;
+
   return (
     <div className="grid gap-1">
       <div className="text-[13px]">
         Độ chính xác: <b>{Math.round(value)}</b>
-        <span className="text-muted"> / 100 · cần ≥ {CONFIG.PASS_CORE_ACCURACY} để đạt</span>
+        <span className="text-[var(--muted)]"> / 100 · cần ≥ {CONFIG.PASS_CORE_ACCURACY} để đạt</span>
       </div>
       <div
         role="img"
         aria-label={`Độ chính xác ${Math.round(value)} trên 100, ngưỡng đạt ${CONFIG.PASS_CORE_ACCURACY}`}
-        className="relative h-2.5 overflow-hidden rounded-[5px] bg-line"
+        className="bar relative h-2.5 overflow-hidden rounded-[5px] bg-[var(--panel3)]"
       >
         <i
-          className={`absolute inset-y-0 left-0 block ${pct >= CONFIG.PASS_CORE_ACCURACY ? "bg-st-done-fg" : "bg-st-ready-fg"}`}
-          style={{ width: `${pct}%` }}
+          className="absolute inset-y-0 left-0 block transition-all duration-300"
+          style={{
+            width: `${pct}%`,
+            background: passed ? "var(--done)" : "var(--ready)",
+          }}
         />
         <i
-          className="absolute inset-y-0 block w-0.5 bg-text"
+          className="absolute inset-y-0 block w-0.5 bg-[var(--text)]"
           style={{ left: `${CONFIG.PASS_CORE_ACCURACY}%` }}
           title={`Ngưỡng đạt ${CONFIG.PASS_CORE_ACCURACY}`}
         />
@@ -50,51 +55,54 @@ function Attempt({ index, entry, latest }: { index: number; entry: AttemptEntry;
   const r = entry.response;
   const note = intentNote(r);
   const step = r.follow_up?.type === "CODE_POINTER" ? r.follow_up.step_index : null;
+  const totalPoints = r.points_covered.length;
+  const passedPoints = r.points_covered.filter(Boolean).length;
 
   return (
-    <details open={latest} className="rounded-lg border border-line bg-bg px-2.5 py-1.5">
-      <summary className="cursor-pointer text-[13px] font-semibold">
+    <details open={latest} className="att rounded-lg bg-[var(--panel2)] p-3 text-[13px] border-none">
+      <summary className="cursor-pointer text-[13.5px] font-semibold text-[var(--text)]">
         Lượt {index}{" "}
         <span
-          className={`ml-1.5 inline-block rounded-full border border-current px-2 text-[11.5px] font-semibold ${
-            r.is_passed ? "text-st-done-fg" : "text-st-fail-fg"
-          }`}
+          className={`pill ${r.is_passed ? "ok" : "no"}`}
         >
           {r.is_passed ? "Đạt" : "Chưa đạt"}
         </span>
       </summary>
-      <div className="mt-1.5 grid gap-2 text-sm">
-        <div className="whitespace-pre-wrap break-words border-l-[3px] border-line px-2.5 py-1.5 text-muted">
+      <div className="mt-2.5 grid gap-2.5 text-sm">
+        <div className="said rounded-md bg-[var(--bg)] p-2.5 text-xs text-[var(--muted)] whitespace-pre-wrap break-words">
           {entry.answer}
         </div>
         <ScoreBar value={r.core_accuracy} />
-        <div className="text-xs text-muted">Đơn giản: {Math.round(r.simplicity)} (không ảnh hưởng Đạt)</div>
-        {note ? <p className="m-0 text-[13px] text-muted">{note}</p> : null}
-        <p className="m-0">
+        {totalPoints > 0 ? (
+          <div className="text-xs font-semibold text-[var(--text)]">
+            Đúng {passedPoints}/{totalPoints} ý
+          </div>
+        ) : null}
+        {note ? <p className="m-0 text-[13px] text-[var(--muted)]">{note}</p> : null}
+        <p className="fb m-0 text-[13.5px] text-[var(--text)]">
           <PlainText text={r.feedback} />
         </p>
         {r.detected_jargons.length > 0 ? (
-          <p className="m-0 text-[13px] text-muted">Thuật ngữ bạn dùng: {r.detected_jargons.join(", ")}</p>
+          <p className="m-0 text-[12.5px] text-[var(--muted)]">Thuật ngữ bạn dùng: {r.detected_jargons.join(", ")}</p>
         ) : null}
         {r.points_covered.length > 0 ? (
           <p
-            className="m-0 text-[13px]"
+            className="m-0 text-[12.5px]"
             aria-label={`Ý bắt buộc: ${r.points_covered.map((c, i) => `ý ${i + 1} ${c ? "đã có" : "chưa có"}`).join(", ")}`}
           >
             Ý bắt buộc:{" "}
             {r.points_covered.map((c, i) => (
-              <span key={i} className={c ? "text-st-done-fg" : "text-muted"} aria-hidden="true">
+              <span key={i} className={c ? "text-[var(--done)] font-bold" : "text-[var(--muted)]"} aria-hidden="true">
                 {c ? "●" : "○"}{" "}
               </span>
             ))}
           </p>
         ) : null}
-        {/* K4: lạc đề / bỏ cuộc có gợi ý thì hiện gợi ý như mọi lượt khác. */}
         {r.follow_up ? (
-          <div className="rounded-lg bg-hl-focus px-2.5 py-2 text-[13.5px]">
+          <div className="hint rounded-lg bg-[var(--hl-focus)] p-2.5 text-[13px] text-[var(--text)]">
             <b>Gợi ý:</b> <PlainText text={r.follow_up.question} />
             {latest && step !== null ? (
-              <div className="mt-1.5 flex flex-wrap gap-2">
+              <div className="hint-act mt-2 flex flex-wrap gap-2">
                 <Button variant="small" onClick={() => openHintStep(step)}>
                   Mở Bước {step} trong tour
                 </Button>
