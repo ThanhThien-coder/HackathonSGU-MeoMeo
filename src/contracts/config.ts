@@ -87,7 +87,16 @@ export const CONFIG = {
   LLM_PRIMARY_TIMEOUT_MS: 12000, // đo 07/11: 8/9 lần 3.8-flash ≤ 11,4 s; xấu nhất ~12 s + ~3 s flash-lite
   LLM_TEMPERATURE: 0,
   LLM_THINKING_BUDGET: 0,
-  LLM_TIMEOUT_MS: 30000,              // Đo lại ở H+1
+  LLM_TIMEOUT_MS: 30000,              // Đo lại ở H+1 (không còn dùng cho flash-lite, xem LLM_LITE_TIMEOUT_MS)
+  LLM_LITE_TIMEOUT_MS: 10000,         // NH-15: mọi lời gọi flash-lite (model chính của GRADE/EXPLAIN và fallback); đo 07/11 trung bình 2,8 s
+  // NH-14: model chính theo loại lời gọi. Chấm và giải thích cần nhanh ⇒ flash-lite; phân tích, tổng quan, câu hỏi được tính trước ⇒ 3.8-flash
+  LLM_MODEL_BY_KIND: {
+    ANALYZE: "gemini-3.8-flash",
+    OVERVIEW: "gemini-3.8-flash",
+    QUESTIONS: "gemini-3.8-flash",
+    GRADE: "gemini-3.5-flash-lite",
+    EXPLAIN: "gemini-3.5-flash-lite",
+  },
   LLM_MAX_RETRIES: 1,                 // Lỗi mạng / 429 / 503 / JSON hỏng / bị cổng gác chặn ⇒ gọi lại 1 lần; bị chặn thì kèm lý do (AI-37)
   LLM_RETRY_DELAY_MS: 500,            // Chờ trước khi gọi lại sau 429 / 503
   LLM_RETRY_DELAY_MAX_MS: 20000,      // Trần retryDelay từ server, vượt ⇒ không gọi lại (D-74 R1)
