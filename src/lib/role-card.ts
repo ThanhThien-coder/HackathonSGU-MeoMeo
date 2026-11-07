@@ -9,6 +9,7 @@ import type {
   LanguageSupportTier,
   NodeAnalysisView,
   RepoOverviewView,
+  StepBranch,
 } from "@/contracts";
 import { stepHl, weakPointHl } from "@/components/code/slice-model";
 import { displayTitle } from "@/lib/derive";
@@ -114,6 +115,23 @@ export interface TourStepView {
   has_weak: boolean;
   /** Mô tả điểm dở ở bước này, cho tooltip ⚠ "Nhận định của AI: {what}". */
   weak_what: string | null;
+  /** Bước nhánh phụ (engine ghi điều kiện từ code); null ⇒ luồng chính. */
+  branch: { label: string; condition: string } | null;
+}
+
+/** Câu dẫn cho nhãn nhánh phụ. ELSE đã được engine đảo điều kiện sẵn (`!(...)`). */
+const BRANCH_LABELS: Record<StepBranch["kind"], string> = {
+  IF: "Chỉ chạy khi",
+  ELSE: "Chỉ chạy khi",
+  TERNARY: "Chỉ chạy khi",
+  SWITCH: "Chỉ chạy ở trường hợp",
+  CATCH: "Chỉ chạy khi có lỗi",
+  LOOP: "Lặp lại theo",
+};
+
+function branchView(b: StepBranch | null | undefined): TourStepView["branch"] {
+  if (!b) return null;
+  return { label: BRANCH_LABELS[b.kind] ?? "Chỉ chạy khi", condition: b.condition };
 }
 
 /** Tour luôn dựng từ `trace_steps` (người học vẫn đi được khi chưa có phân tích); bản phân tích chỉ thêm chữ. */
@@ -134,6 +152,7 @@ export function buildTourSteps(node: HybridArchitecturalNode, analysis?: Analysi
       function_name: s.function_name,
       has_weak: weak !== null,
       weak_what: weak?.what ?? null,
+      branch: branchView(s.branch),
     };
   });
 }

@@ -109,6 +109,23 @@ describe("buildTourSteps", () => {
     expect(steps[1].weak_what).toBe("Hỏi database từng sản phẩm một.");
   });
 
+  it("bước nhánh phụ có nhãn và điều kiện; luồng chính là null", () => {
+    const node = {
+      ...list,
+      trace_steps: list.trace_steps.map((s, i) =>
+        i === 0
+          ? { ...s, branch: null }
+          : i === 1
+            ? { ...s, branch: { kind: "ELSE" as const, condition: "!(user == null)" } }
+            : { ...s, branch: { kind: "CATCH" as const, condition: "IOException e" } }
+      ),
+    };
+    const steps = buildTourSteps(node, undefined);
+    expect(steps[0].branch).toBeNull();
+    expect(steps[1].branch).toEqual({ label: "Chỉ chạy khi", condition: "!(user == null)" });
+    if (steps.length > 2) expect(steps[2].branch).toEqual({ label: "Chỉ chạy khi có lỗi", condition: "IOException e" });
+  });
+
   it("skillsAtStep chỉ lấy kỹ năng của đúng bước", () => {
     const a = analysisFor(list);
     expect(skillsAtStep(a, 1).map((s) => s.skill)).toEqual(["HTTP_ROUTING"]);
