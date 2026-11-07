@@ -4,8 +4,7 @@
 import type { QuestionFocus, QuestionState } from "@/contracts";
 import { CONCEPT_CARDS } from "@/components/how-it-works/concept-cards";
 
-const CIRCLED = ["①", "②", "③", "④", "⑤", "⑥", "⑦", "⑧", "⑨", "⑩"];
-export const circled = (k: number): string => CIRCLED[k - 1] ?? String(k);
+export const circled = (k: number): string => String(k);
 
 export const FOCUS_LABELS: Record<QuestionFocus, string> = {
   FLOW: "Luồng xử lý",
@@ -57,13 +56,12 @@ export function QuestionChips({ questions, activeIndex, onSelect }: QuestionChip
               aria-label={`Câu ${k}${state}${q.disputed ? ", đã báo sai" : ""}`}
               title={`${skillLabel(q.skill)} · ${TIER_LABELS[q.tier]}`}
               onClick={() => onSelect(q.question_index)}
-              className={`qchip min-w-[48px] rounded-full px-4 py-1.5 text-[14px] font-semibold transition-all border-none ${toneClass} ${
+              style={{ fontFamily: "var(--font-jakarta), 'Plus Jakarta Sans', system-ui, sans-serif" }}
+              className={`qchip min-w-[40px] h-[36px] rounded-full px-3.5 inline-flex items-center justify-center text-[15px] font-bold transition-all border-none ${toneClass} ${
                 locked ? "opacity-40 cursor-not-allowed" : "hover:-translate-y-0.5 hover:bg-[var(--panel3)]"
               }`}
             >
-              {circled(k)}
-              
-              
+              {k}
             </button>
           );
         })}

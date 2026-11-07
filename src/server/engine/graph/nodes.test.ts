@@ -1,9 +1,10 @@
-import type { HybridArchitecturalNode } from "@/contracts";
+import type { EntityOp, HybridArchitecturalNode } from "@/contracts";
 import { describe, expect, it } from "vitest";
 import type { IngestionReport } from "@/contracts";
 import {
   assembleGraph,
   computeEdgesOnKept,
+  isEasier,
   isTestCandidate,
   transitiveReduction, assignCapstone } from "./nodes";
 import type { Candidate, EngineContext } from "./types";
@@ -276,13 +277,46 @@ describe("nodes (Spec 11 §11, ENG-110 -> ENG-114)", () => {
     expect(resA.nodes.map((n) => n.id)).toEqual(resB.nodes.map((n) => n.id));
   });
 
-  it("Capstone là bài phức tạp nhất toàn đồ thị, kể cả khi bài đó có cạnh ra", () => {
-    const base = { position: { x: 0, y: 0 }, files: ["src/a.ts"], rank_score: 0 };
+  it("isEasier: luồng ít bước hơn học trước, không xét độ phức tạp của hàm", () => {
+    const steps = (n: number) => Array.from({ length: n }, () => ({}));
+    const short = { id: "b", rank_score: 0, cognitive_complexity: 40, trace_steps: steps(2) };
+    const long = { id: "a", rank_score: 0, cognitive_complexity: 1, trace_steps: steps(5) };
+    expect(isEasier(short as unknown as Candidate, long as unknown as Candidate)).toBe(true);
+    expect(isEasier(long as unknown as Candidate, short as unknown as Candidate)).toBe(false);
+  });
+
+  it("Trọng tâm là bài Sửa của thực thể có nhiều bài nhất, không theo độ phức tạp", () => {
+    const steps = (n: number) => Array.from({ length: n }, () => ({}));
+    const base = { position: { x: 0, y: 0 }, files: ["src/a.ts"], rank_score: 0, is_capstone: false };
     const nodes = [
-      { ...base, id: "a", cognitive_complexity: 20, is_capstone: false },
-      { ...base, id: "b", cognitive_complexity: 3, is_capstone: false },
+      { ...base, id: "create-article", cognitive_complexity: 90, trace_steps: steps(9) },
+      { ...base, id: "get-article", cognitive_complexity: 1, trace_steps: steps(7) },
+      { ...base, id: "update-article", cognitive_complexity: 2, trace_steps: steps(5) },
+      { ...base, id: "update-user", cognitive_complexity: 1, trace_steps: steps(8) },
+    ] as unknown as HybridArchitecturalNode[];
+    const data = (entity: string, op: EntityOp) => ({
+      primary_entity: entity,
+      entities: [{ name: entity, ops: [op] }],
+      sub: "",
+    });
+    const dataById = new Map([
+      ["create-article", data("Article", "CREATE")],
+      ["get-article", data("Article", "READ")],
+      ["update-article", data("Article", "UPDATE")],
+      ["update-user", data("User", "UPDATE")],
+    ]);
+    assignCapstone(nodes, dataById);
+    expect(nodes.filter((n) => n.is_capstone).map((n) => n.id)).toEqual(["update-article"]);
+  });
+
+  it("Trọng tâm: không có dữ liệu thực thể ⇒ bài có luồng dài nhất", () => {
+    const steps = (n: number) => Array.from({ length: n }, () => ({}));
+    const base = { position: { x: 0, y: 0 }, files: ["src/a.ts"], rank_score: 0, is_capstone: false };
+    const nodes = [
+      { ...base, id: "a", cognitive_complexity: 20, trace_steps: steps(2) },
+      { ...base, id: "b", cognitive_complexity: 3, trace_steps: steps(6) },
     ] as unknown as HybridArchitecturalNode[];
     assignCapstone(nodes);
-    expect(nodes.map((n) => n.is_capstone)).toEqual([true, false]);
+    expect(nodes.map((n) => n.is_capstone)).toEqual([false, true]);
   });
 });

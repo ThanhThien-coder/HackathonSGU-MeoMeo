@@ -7,6 +7,7 @@ import type {
   LanguageSupportTier,
 } from "@/contracts";
 import { dedupeTitles } from "./naming";
+import type { LessonData } from "./data-deps";
 import type { Candidate, EngineContext } from "./types";
 
 const TEST_SEGMENTS = new Set([
@@ -204,12 +205,13 @@ export function computeEdgesOnKept(
   return edges;
 }
 
+// Bài có luồng ngắn hơn học trước. Không dùng độ phức tạp của hàm: nó đo code rối, không đo luồng.
 export function isEasier(
-  a: Pick<Candidate, "cognitive_complexity" | "rank_score" | "id">,
-  b: Pick<Candidate, "cognitive_complexity" | "rank_score" | "id">
+  a: Pick<Candidate, "trace_steps" | "rank_score" | "id">,
+  b: Pick<Candidate, "trace_steps" | "rank_score" | "id">
 ): boolean {
-  if (a.cognitive_complexity !== b.cognitive_complexity) {
-    return a.cognitive_complexity < b.cognitive_complexity;
+  if (a.trace_steps.length !== b.trace_steps.length) {
+    return a.trace_steps.length < b.trace_steps.length;
   }
   if (a.rank_score !== b.rank_score) {
     return a.rank_score > b.rank_score;
@@ -221,13 +223,36 @@ function isTestPath(filePath: string | undefined): boolean {
   return filePath !== undefined && isTestCandidate({ trace_steps: [{ file_path: filePath }] } as Candidate);
 }
 
-// D-12: đúng 1 node, lớn nhất toàn đồ thị. Có node sạch thì chỉ xét node sạch.
-export function assignCapstone(nodes: HybridArchitecturalNode[]): void {
+/**
+ * Đúng 1 node Trọng tâm, là đích của vòng đời: thực thể có nhiều bài nhất ⇒ bài Sửa của chính
+ * thực thể đó có luồng dài nhất (`Update Article`). Không có ⇒ bài luồng dài nhất của thực thể,
+ * rồi của cả đồ thị. Có node sạch thì chỉ xét node sạch.
+ */
+export function assignCapstone(
+  nodes: HybridArchitecturalNode[],
+  dataById: Map<string, Pick<LessonData, "primary_entity" | "entities" | "sub">> = new Map()
+): void {
   const clean = nodes.filter((n) => !isTestPath(n.files[0]));
   const pool = clean.length > 0 ? clean : nodes;
-  const best = [...pool].sort(
+
+  const count = new Map<string, number>();
+  for (const n of pool) {
+    const entity = dataById.get(n.id)?.primary_entity;
+    if (entity) count.set(entity, (count.get(entity) ?? 0) + 1);
+  }
+  const core = [...count.entries()].sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1))[0]?.[0];
+  const ofCore = pool.filter((n) => core !== undefined && dataById.get(n.id)?.primary_entity === core);
+  const isUpdate = (n: HybridArchitecturalNode): boolean =>
+    dataById.get(n.id)?.entities.some((e) => e.name === core && e.ops.includes("UPDATE")) ?? false;
+  const updates = ofCore.filter(isUpdate);
+  // Ưu tiên Sửa chính thực thể (`PUT /articles/:slug`), không có thì Sửa nhánh con (`PUT .../phases/:id`).
+  const mainUpdates = updates.filter((n) => (dataById.get(n.id)?.sub ?? "") === "");
+  const candidates =
+    mainUpdates.length > 0 ? mainUpdates : updates.length > 0 ? updates : ofCore.length > 0 ? ofCore : pool;
+
+  const best = [...candidates].sort(
     (a, b) =>
-      b.cognitive_complexity - a.cognitive_complexity ||
+      b.trace_steps.length - a.trace_steps.length ||
       b.rank_score - a.rank_score ||
       (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)
   )[0];
@@ -289,8 +314,8 @@ export function assembleGraph(
       if (a.rank_score !== b.rank_score) {
         return b.rank_score - a.rank_score; // rank_score giảm
       }
-      if (a.cognitive_complexity !== b.cognitive_complexity) {
-        return b.cognitive_complexity - a.cognitive_complexity; // cognitive_complexity giảm
+      if (a.trace_steps.length !== b.trace_steps.length) {
+        return b.trace_steps.length - a.trace_steps.length; // luồng dài hơn trước
       }
       return a.id < b.id ? -1 : a.id > b.id ? 1 : 0; // id tăng
     });

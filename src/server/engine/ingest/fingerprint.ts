@@ -172,16 +172,78 @@ export function parseManifests(
   return parsed;
 }
 
-/** Bản tối giản (A05, B15): không tách monorepo, chỉ nhận thư mục người dùng chọn (ING-80). */
+// ING-80 bước 2: tên thư mục backend, frontend. Thêm đuôi `-backend`, `-frontend` ở gốc (VD `wpe-backend`).
+const SERVER_DIR = /^(server|backend|api)$|-(server|backend|api)$/i;
+const CLIENT_DIR = /^(client|frontend|web|ui|mobile|webapp|app-web)$|-(client|frontend|web|ui|mobile)$/i;
+
+/** Thư mục ứng viên của một file: `<x>/` ở gốc, hoặc `apps/<x>/`, `packages/<x>/`. */
+function candidateDirOf(path: string): { key: string; name: string } | null {
+  const seg = path.split("/");
+  const depth = seg.length > 2 && (seg[0] === "apps" || seg[0] === "packages") ? 2 : 1;
+  if (seg.length <= depth) {
+    return null;
+  }
+  return { key: `${seg.slice(0, depth).join("/")}/`, name: seg[depth - 1] };
+}
+
+/**
+ * ING-80 bước 2–4: repo có cả giao diện và backend thì chỉ phân tích backend, để trần
+ * `MAX_CLEAN_FILES` dành cho file backend (controller ⇒ service ⇒ repository).
+ */
+function autoScope(entries: ClassifiedEntry[], report?: IngestionReport): ScopeDecision {
+  const serverBytes = new Map<string, number>();
+  const clients = new Set<string>();
+  let totalBytes = 0;
+  for (const e of entries) {
+    if (e.cls !== "CODE") {
+      continue;
+    }
+    totalBytes += e.size;
+    const dir = candidateDirOf(e.path);
+    if (dir && SERVER_DIR.test(dir.name)) {
+      serverBytes.set(dir.key, (serverBytes.get(dir.key) ?? 0) + e.size);
+    } else if (dir && CLIENT_DIR.test(dir.name)) {
+      clients.add(dir.key);
+    }
+  }
+
+  const servers = [...serverBytes.keys()].sort(
+    (a, b) => (serverBytes.get(b) ?? 0) - (serverBytes.get(a) ?? 0) || (a < b ? -1 : a > b ? 1 : 0),
+  );
+  const best = servers[0];
+  const whole: ScopeDecision = { root_dir_offset: "", is_monorepo: false, candidates: servers, explicit: false };
+  if (best === undefined) {
+    return whole;
+  }
+
+  const isMonorepo = clients.size > 0 || servers.length >= 2;
+  const dominant = (serverBytes.get(best) ?? 0) / Math.max(1, totalBytes) > CONFIG.MONOREPO_DOMINANT_RATIO;
+  if (!isMonorepo && !dominant) {
+    return whole;
+  }
+
+  if (servers.length >= 2) {
+    report?.warnings.push(
+      `Phát hiện nhiều thư mục backend: ${servers.join(", ")}. Đang phân tích ${best}; có thể chọn thư mục khác.`,
+    );
+  } else if (clients.size > 0) {
+    report?.warnings.push(`Repo có cả giao diện và backend, SimpliFey đang phân tích phần backend ${best}.`);
+  }
+  return { root_dir_offset: best, is_monorepo: isMonorepo, candidates: servers, explicit: false };
+}
+
+/** ING-80: thư mục người dùng chọn; không chọn và `auto` ⇒ tự chọn backend (ING-80 bước 2–4). */
 export function detectScope(
   entries: ClassifiedEntry[],
   explicit_subdir: string | null,
   report?: IngestionReport,
+  auto = false,
 ): ScopeDecision {
-  void report; // Chữ ký theo phiếu, bản tối giản chưa có cảnh báo nào.
   const trimmed = (explicit_subdir ?? "").trim().replace(/\\/g, "/").replace(/^(\.?\/)+/, "");
   if (trimmed === "") {
-    return { root_dir_offset: "", is_monorepo: false, candidates: [], explicit: false };
+    return auto
+      ? autoScope(entries, report)
+      : { root_dir_offset: "", is_monorepo: false, candidates: [], explicit: false };
   }
 
   const subdir = trimmed.endsWith("/") ? trimmed : `${trimmed}/`;

@@ -11,6 +11,8 @@ import { LearnSidePanel } from "@/components/learn/LearnSidePanel";
 import { LessonGraphPanel } from "@/components/learn/LessonGraphPanel";
 import { Button } from "@/components/ui/common";
 import { EmptyState } from "@/components/ui/Page";
+import { LoadingAnimation } from "@/components/ui/LoadingAnimation";
+import { startNodeId } from "@/lib/overview-view";
 import { useWorkbenchStore } from "@/store/workbench";
 
 const COLUMN = "col min-w-0 rounded-xl bg-[var(--panel)] shadow-sm lg:min-h-0 lg:overflow-auto";
@@ -80,16 +82,20 @@ function NoSession({ sessionId }: { sessionId: string | null }) {
     );
   }
   return (
-    <Centered>
-      <p role="status" className="text-center text-[var(--muted)]">
-        {bootError && !ingesting ? bootError.message : "Đang mở phiên học…"}
-      </p>
-      <div className="text-center">
-        <Link href="/" className={HOME_LINK}>
-          Về trang chủ
-        </Link>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--bg)] p-4">
+      <div className="flex flex-col items-center gap-3">
+        <LoadingAnimation
+          size={180}
+          text="Đang tải bài học…"
+          subtext={bootError && !ingesting ? bootError.message : "Đang chuẩn bị buồng lái học tập"}
+        />
+        <div className="text-center mt-2">
+          <Link href="/" className={HOME_LINK}>
+            Về trang chủ
+          </Link>
+        </div>
       </div>
-    </Centered>
+    </div>
   );
 }
 
@@ -97,9 +103,22 @@ function NoSession({ sessionId }: { sessionId: string | null }) {
 export function LearnShell() {
   const sessionParam = useSearchParams().get("session");
   const result = useWorkbenchStore((s) => s.result);
+  const activeNodeId = useWorkbenchStore((s) => s.active_node_id);
+  const openNode = useWorkbenchStore((s) => s.openNode);
+  const progress = useWorkbenchStore((s) => s.progress);
   const [leftOpen, setLeftOpen] = useState(true);
   const [rightOpen, setRightOpen] = useState(true);
   const [tourOpen, setTourOpen] = useState(false);
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    if (result) {
+      const timer = setTimeout(() => setReady(true), 350);
+      return () => clearTimeout(timer);
+    } else {
+      setReady(false);
+    }
+  }, [result]);
 
   // Phím tắt toàn cục: Ctrl+B (toggle cột trái), Ctrl+Alt+B (toggle cột phải)
   useEffect(() => {
@@ -120,9 +139,9 @@ export function LearnShell() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  // Tự động gợi ý mở tour Duolingo cho người học mới vào
+  // Tự động mở hướng dẫn sử dụng (Duolingo Tour) khi người dùng đã chọn bài học
   useEffect(() => {
-    if (!result) return;
+    if (!result || !activeNodeId) return;
     try {
       const shown = window.sessionStorage.getItem("sf.tour_shown");
       if (!shown) {
@@ -131,7 +150,7 @@ export function LearnShell() {
     } catch {
       // sessionStorage có thể bị chặn
     }
-  }, [result]);
+  }, [result, activeNodeId]);
 
   const handleCloseTour = () => {
     setTourOpen(false);
@@ -148,6 +167,18 @@ export function LearnShell() {
   };
 
   if (!result) return <NoSession sessionId={sessionParam} />;
+
+  if (!ready) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--bg)]">
+        <LoadingAnimation
+          size={180}
+          text="Đang tải bài học…"
+          subtext="Đang chuẩn bị buồng lái học tập"
+        />
+      </div>
+    );
+  }
 
   // Tính tỷ lệ 3 cột linh hoạt theo prototype.html
   let cols = "minmax(0, 24fr) minmax(0, 45fr) minmax(0, 31fr)";
@@ -167,6 +198,12 @@ export function LearnShell() {
         onToggleLeft={() => setLeftOpen((v) => !v)}
         onToggleRight={() => setRightOpen((v) => !v)}
         onOpenTour={() => {
+          if (!activeNodeId && result) {
+            const startId = startNodeId(result, progress) ?? result.nodes[0]?.id;
+            if (startId) {
+              openNode(startId);
+            }
+          }
           handleEnsureColumnsOpen();
           setTourOpen(true);
         }}
@@ -189,7 +226,7 @@ export function LearnShell() {
           <CodeSnippetViewer />
         </section>
         <aside id="colRight" hidden={!rightOpen} aria-label="X-Ray và Feynman" className={`col-right ${COLUMN}`}>
-          <div id="right">
+          <div id="right" className="h-full">
             <LearnSidePanel />
           </div>
         </aside>

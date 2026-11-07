@@ -18,6 +18,7 @@ const fontMono = JetBrains_Mono({
 
 export const metadata: Metadata = {
   title: "SimpliFey",
+  icons: { icon: { url: "/simplifey.svg", type: "image/svg+xml" } },
 };
 
 export default function RootLayout({

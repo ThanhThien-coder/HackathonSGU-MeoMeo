@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import type { LearningSessionSummary } from "@/contracts";
 import { BlurFade } from "@/components/ui/blur-fade";
 import { Button } from "@/components/ui/common";
+import { LoadingAnimation } from "@/components/ui/LoadingAnimation";
 import { MagicCard } from "@/components/ui/magic-card";
 import { useWorkbenchStore } from "@/store/workbench";
 
@@ -137,8 +138,8 @@ export function SessionList() {
       );
     }
     return (
-      <section aria-label="Tiếp tục học" className="mx-auto w-full max-w-xl text-sm text-subtle">
-        <p role="status">Đang tải danh sách phiên…</p>
+      <section aria-label="Tiếp tục học" className="mx-auto flex w-full max-w-xl flex-col items-center justify-center py-6 text-sm">
+        <LoadingAnimation size={140} text="Đang tải danh sách phiên…" />
       </section>
     );
   }
@@ -148,6 +149,17 @@ export function SessionList() {
   const now = Date.now();
   return (
     <section aria-labelledby="session-list-title" className="mx-auto flex w-full max-w-xl flex-col gap-3.5">
+      {opening ? (
+        <div className="sf-fade-in fixed inset-0 z-50 flex items-center justify-center bg-[var(--bg)]/95 backdrop-blur-md p-4">
+          <div className="glass flex flex-col items-center gap-2 rounded-2xl p-8 text-text bg-[var(--panel2)] shadow-2xl border border-[var(--panel3)]">
+            <LoadingAnimation
+              size={170}
+              text="Đang mở lại phiên học…"
+              subtext="Đang nạp bài học và dữ liệu tiến độ"
+            />
+          </div>
+        </div>
+      ) : null}
       <div className="flex items-center justify-between">
         <h2 id="session-list-title" className="text-lg font-bold tracking-tight text-text">
           Tiếp tục học

@@ -385,30 +385,22 @@ export async function buildGraph(input: IngestOutput): Promise<StaticEngineResul
       a: HybridArchitecturalNode,
       b: HybridArchitecturalNode
     ): number => {
-      const aVip = a.cognitive_complexity > CONFIG.VIP_COMPLEXITY_MIN;
-      const bVip = b.cognitive_complexity > CONFIG.VIP_COMPLEXITY_MIN;
-      if (aVip !== bVip) {
-        return aVip ? -1 : 1;
-      }
+      // Chỉ xét luồng: file quan trọng hơn trước, rồi luồng dài hơn. Không ưu tiên hàm phức tạp.
       if (a.rank_score !== b.rank_score) {
         return b.rank_score - a.rank_score;
       }
-      if (a.cognitive_complexity !== b.cognitive_complexity) {
-        return b.cognitive_complexity - a.cognitive_complexity;
+      if (a.trace_steps.length !== b.trace_steps.length) {
+        return b.trace_steps.length - a.trace_steps.length;
       }
       return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
     };
 
-    const algoNodes: HybridArchitecturalNode[] = [];
     const apiNodes: HybridArchitecturalNode[] = [];
     const otherNodes: HybridArchitecturalNode[] = [];
 
     for (const n of remainingNodes) {
       const c = candidateMap.get(n.id);
-      const isAlgo = n.node_type === "ALGORITHMIC_CORE" || n.is_vip_algorithm;
-      if (isAlgo) {
-        algoNodes.push(n);
-      } else if (
+      if (
         c?.binding?.kind === "HTTP" ||
         /^(GET|POST|PUT|PATCH|DELETE)\s/i.test(n.title_evidence)
       ) {
@@ -418,33 +410,15 @@ export async function buildGraph(input: IngestOutput): Promise<StaticEngineResul
       }
     }
 
-    algoNodes.sort(compareForDisplay);
     apiNodes.sort(compareForDisplay);
     otherNodes.sort(compareForDisplay);
 
-    const currentAlgoCount = [...keptIdsSet].filter(
-      (id) =>
-        nodeMap.get(id)?.node_type === "ALGORITHMIC_CORE" ||
-        nodeMap.get(id)?.is_vip_algorithm
-    ).length;
-    let remainingAlgoSlots = Math.max(
-      0,
-      CONFIG.VIP_FALLBACK_TOP_K - currentAlgoCount
-    );
-
     while (keptIdsSet.size < CONFIG.DISPLAY_MAX_NODES) {
-      if (apiNodes.length > 0) {
-        keptIdsSet.add(apiNodes.shift()!.id);
-      } else if (algoNodes.length > 0 && remainingAlgoSlots > 0) {
-        keptIdsSet.add(algoNodes.shift()!.id);
-        remainingAlgoSlots--;
-      } else if (otherNodes.length > 0) {
-        keptIdsSet.add(otherNodes.shift()!.id);
-      } else if (algoNodes.length > 0) {
-        keptIdsSet.add(algoNodes.shift()!.id);
-      } else {
+      const next = apiNodes.shift() ?? otherNodes.shift();
+      if (!next) {
         break;
       }
+      keptIdsSet.add(next.id);
     }
 
     report.omitted_node_count = initialGraph.nodes.length - keptIdsSet.size;
@@ -498,7 +472,7 @@ export async function buildGraph(input: IngestOutput): Promise<StaticEngineResul
     n.entities = ld ? toNodeEntities(ld) : [];
   }
 
-  assignCapstone(keptNodes);
+  assignCapstone(keptNodes, dataById);
   dedupeTitles(keptNodes);
   const groups = buildGroups(keptNodes, edges, dataById);
   layoutGraph(keptNodes, edges);

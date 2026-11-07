@@ -128,6 +128,37 @@ describe("runEngine", () => {
     });
   });
 
+  it("repo có backend và frontend ⇒ chỉ phân tích backend", async () => {
+    const files: Record<string, string> = {};
+    for (const [path, content] of Object.entries(SHOP)) {
+      files[path.replace("shop-main/", "shop-main/shop-backend/")] = content;
+    }
+    files["shop-main/shop-frontend/src/main.tsx"] = "export const App = () => null;\n";
+
+    const result = await runEngine(upload(files));
+
+    expect(result.snapshot.subdir).toBe("shop-backend/");
+    expect(result.ingestion_report.warnings.join(" ")).toContain("giao diện");
+    expect(result.nodes.length).toBeGreaterThan(0);
+    expect(result.nodes.every((n) => n.files.every((f) => f.startsWith("shop-backend/")))).toBe(true);
+  });
+
+  it("thư mục backend tự chọn không có route ⇒ phân tích lại cả repo", async () => {
+    const files: Record<string, string> = {
+      "server/util.ts": `export function pad(s: string) {\n  return s.padStart(10, "0");\n}\n`.repeat(20),
+      "web/main.tsx": "export const App = () => null;\n",
+    };
+    for (const [path, content] of Object.entries(SHOP)) {
+      files[path.replace("shop-main/", "")] = content;
+    }
+
+    const result = await runEngine(upload(files));
+
+    expect(result.snapshot.subdir).toBe("");
+    expect(result.nodes.length).toBeGreaterThan(0);
+    expect(buildGraph).toHaveBeenCalledTimes(2);
+  });
+
   it("repo có code nhưng không có lát cắt báo ERR_NO_ARCHITECTURAL_SLICE", async () => {
     await expect(
       runEngine(upload({ "lib/a.ts": "export const a = 1;\n", "src/b.ts": "export const b = 2;\n" })),
