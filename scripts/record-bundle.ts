@@ -1,3 +1,33 @@
+/**
+ * Script ghi Offline Mock Bundle phục vụ demo offline (public/demo/mock_bundle.json).
+ *
+ * Quy trình chạy 2 bước để ghi bundle:
+ *
+ * Bước 1 (Lấy câu hỏi Feynman cho node khả dụng):
+ *   npx tsx scripts/record-bundle.ts <base-url> <repo-url> --persona NEWBIE --chi-cau-hoi
+ *   - Script sẽ ingest, analyze và enrich node đầu tiên đang AVAILABLE.
+ *   - Dừng ở node đó: KHÔNG gọi evaluate-feynman, KHÔNG gọi reveal.
+ *   - Tạo / cập nhật file câu trả lời mẫu (mặc định scripts/answers.<persona>.json hoặc theo --answers <file>).
+ *   - File chứa khóa "_cau_hoi" ghi nội dung câu hỏi để tiện soạn thảo, và các khóa "<node_id>:<q_index>" gán [].
+ *   - Các node phía sau còn LOCKED sẽ được ghi nhận trong log cảnh báo.
+ *
+ * Soạn kịch bản trả lời:
+ *   - Mở file answers đã sinh (vd: scripts/answers.newbie.json).
+ *   - Viết các câu trả lời dạng mảng chuỗi vào khóa của câu hỏi tương ứng.
+ *
+ * Bước 2 (Gửi câu trả lời và hoàn thành node):
+ *   npx tsx scripts/record-bundle.ts <base-url> <repo-url> --persona NEWBIE --answers scripts/answers.newbie.json [--reveal-con-lai]
+ *   - Script đọc lại run đang mở (enrich-node là idempotent).
+ *   - Bỏ qua các câu đã xong (state.finished === true).
+ *   - Gửi các câu trả lời từ lượt attempts_used + 1 trở đi cho đến khi hoàn thành câu.
+ *   - Nếu không có câu trả lời hoặc hết câu trả lời, mặc định bỏ qua (chỉ reveal khi truyền cờ --reveal-con-lai).
+ *   - Khi node hoàn thành, server mở khóa node tiếp theo trong DB.
+ *
+ * Lặp lại:
+ *   - Chạy lại Bước 1 để lấy câu hỏi cho node vừa được mở khóa.
+ *   - Soạn câu trả lời -> Chạy Bước 2 -> Lặp lại cho đến hết các node cần ghi.
+ */
+
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { CONFIG } from "../src/contracts/config";
@@ -26,6 +56,8 @@ interface CliOptions {
   answersFile?: string;
   nodes?: string[];
   outFile: string;
+  onlyQuestions: boolean;
+  revealRemaining: boolean;
 }
 
 export class ScriptApiError extends Error {
@@ -44,6 +76,13 @@ const RETRYABLE_CODES = new Set([
   "ERR_AI_UNAVAILABLE",
   "ERR_AI_REJECTED",
   "ERR_PERSISTENCE_UNAVAILABLE",
+]);
+
+const QUESTION_SKIPPABLE_ERRORS = new Set([
+  "ERR_QUESTION_FINISHED",
+  "ERR_ATTEMPT_OUT_OF_SYNC",
+  "ERR_ANSWER_DUPLICATE",
+  "ERR_ANSWER_TOO_SHORT",
 ]);
 
 function sleep(ms: number): Promise<void> {
@@ -127,6 +166,8 @@ function parseCliArgs(argv: string[]): CliOptions {
   let answersFile: string | undefined;
   let nodes: string[] | undefined;
   let outFile = "public/demo/mock_bundle.json";
+  let onlyQuestions = false;
+  let revealRemaining = false;
 
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
@@ -152,6 +193,10 @@ function parseCliArgs(argv: string[]): CliOptions {
       answersFile = argv[++i];
     } else if (arg.startsWith("--answers=")) {
       answersFile = arg.slice("--answers=".length);
+    } else if (arg === "--chi-cau-hoi" || arg === "--chi-cau-hoi=true") {
+      onlyQuestions = true;
+    } else if (arg === "--reveal-con-lai" || arg === "--reveal-con-lai=true") {
+      revealRemaining = true;
     } else if (arg === "--nodes") {
       const val = argv[++i];
       if (val) {
@@ -179,7 +224,16 @@ function parseCliArgs(argv: string[]): CliOptions {
 
   if (positional.length < 2) {
     console.error(
-      "Cách dùng: npx tsx scripts/record-bundle.ts <base-url> <repo-url> [--persona NEWBIE|MID_LEVEL|SENIOR_RUSTY] [--answers <file>] [--nodes N1,N2] [--out public/demo/mock_bundle.json]"
+      "Cách dùng: npx tsx scripts/record-bundle.ts <base-url> <repo-url> [--persona NEWBIE|MID_LEVEL|SENIOR_RUSTY] [--chi-cau-hoi] [--answers <file>] [--reveal-con-lai] [--nodes N1,N2] [--out public/demo/mock_bundle.json]"
+    );
+    console.error(
+      "\nQuy trình 2 bước ghi bundle:\n" +
+        "  Bước 1 (Lấy câu hỏi): npx tsx scripts/record-bundle.ts <base-url> <repo-url> --persona NEWBIE --chi-cau-hoi\n" +
+        "    -> Dừng sau enrich, ghi file câu trả lời mẫu vào scripts/answers.newbie.json (hoặc theo --answers).\n" +
+        "  Soạn câu trả lời: Điền câu trả lời vào file JSON vừa sinh.\n" +
+        "  Bước 2 (Gửi câu trả lời): npx tsx scripts/record-bundle.ts <base-url> <repo-url> --persona NEWBIE --answers scripts/answers.newbie.json [--reveal-con-lai]\n" +
+        "    -> Đánh giá câu trả lời, hoàn thành node và mở khóa node kế tiếp.\n" +
+        "  Lặp lại: Chạy lại Bước 1 cho node kế tiếp."
     );
     process.exit(1);
   }
@@ -194,6 +248,8 @@ function parseCliArgs(argv: string[]): CliOptions {
     answersFile,
     nodes,
     outFile,
+    onlyQuestions,
+    revealRemaining,
   };
 }
 
@@ -237,11 +293,26 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  let answersMap: AnswersMap = {};
+  const defaultAnswersFile = `scripts/answers.${options.persona.toLowerCase()}.json`;
+  const answersFilePath = path.resolve(
+    options.answersFile ?? defaultAnswersFile
+  );
+
+  const answersMap: AnswersMap = {};
   if (options.answersFile) {
     try {
       const raw = await fs.readFile(options.answersFile, "utf8");
-      answersMap = JSON.parse(raw) as AnswersMap;
+      const parsed = JSON.parse(raw) as Record<string, unknown>;
+      for (const [k, v] of Object.entries(parsed)) {
+        if (k === "_cau_hoi") {
+          continue;
+        }
+        if (Array.isArray(v)) {
+          answersMap[k] = v.filter(
+            (item): item is string => typeof item === "string"
+          );
+        }
+      }
       console.log(`Đã nạp file kịch bản trả lời từ: ${options.answersFile}`);
     } catch (err) {
       console.error(
@@ -249,6 +320,27 @@ async function main(): Promise<void> {
         err instanceof Error ? err.message : String(err)
       );
       process.exit(1);
+    }
+  }
+
+  let step1AnswersContent: Record<string, unknown> = {};
+  let step1CauHoiMap: Record<string, string> = {};
+
+  if (options.onlyQuestions) {
+    try {
+      const raw = await fs.readFile(answersFilePath, "utf8");
+      const parsed = JSON.parse(raw) as Record<string, unknown>;
+      step1AnswersContent = { ...parsed };
+      if (
+        parsed._cau_hoi &&
+        typeof parsed._cau_hoi === "object" &&
+        !Array.isArray(parsed._cau_hoi)
+      ) {
+        step1CauHoiMap = { ...(parsed._cau_hoi as Record<string, string>) };
+      }
+    } catch {
+      step1AnswersContent = {};
+      step1CauHoiMap = {};
     }
   }
 
@@ -347,9 +439,15 @@ async function main(): Promise<void> {
         err instanceof ScriptApiError &&
         err.code === "ERR_NODE_NOT_AVAILABLE"
       ) {
-        console.warn(
-          `  Cảnh báo: Node ${nodeId} chưa mở khóa (ERR_NODE_NOT_AVAILABLE), bỏ qua node.`
-        );
+        if (options.onlyQuestions) {
+          console.warn(
+            `  Node ${nodeId} chưa mở khóa — viết câu trả lời cho node trước rồi chạy bước 2, sau đó chạy lại bước 1 cho node kế`
+          );
+        } else {
+          console.warn(
+            `  Cảnh báo: Node ${nodeId} chưa mở khóa (ERR_NODE_NOT_AVAILABLE), bỏ qua node.`
+          );
+        }
         skippedNodesCount++;
         continue;
       }
@@ -366,22 +464,148 @@ async function main(): Promise<void> {
     processedNodesCount++;
     console.log(`  Enrich node ${nodeId} thành công. Run ID: ${enrichRes.run_id}`);
 
-    // 3. Xử lý các câu hỏi
+    // Bước 1 (--chi-cau-hoi): Thu thập câu hỏi mẫu, ghi file answers và dừng ở node đó (không evaluate, không reveal)
+    if (options.onlyQuestions) {
+      console.log(
+        `  [--chi-cau-hoi] Thu thập ${enrichRes.questions.length} câu hỏi cho node ${nodeId}...`
+      );
+      for (const question of enrichRes.questions) {
+        const qKey = `${nodeId}:${question.question_index}`;
+        step1CauHoiMap[qKey] = question.feynman_question;
+        if (!Array.isArray(step1AnswersContent[qKey])) {
+          step1AnswersContent[qKey] = [];
+        }
+      }
+
+      const fileToSave: Record<string, unknown> = {
+        _cau_hoi: step1CauHoiMap,
+      };
+      for (const [k, v] of Object.entries(step1AnswersContent)) {
+        if (k !== "_cau_hoi") {
+          fileToSave[k] = v;
+        }
+      }
+
+      await fs.mkdir(path.dirname(answersFilePath), { recursive: true });
+      await fs.writeFile(
+        answersFilePath,
+        JSON.stringify(fileToSave, null, 2),
+        "utf8"
+      );
+      console.log(
+        `  [--chi-cau-hoi] Đã lưu câu hỏi vào ${answersFilePath}. Dừng ở node ${nodeId}.`
+      );
+      continue;
+    }
+
+    // Bước 2: Xử lý các câu hỏi
     for (const question of enrichRes.questions) {
       const qIndex = question.question_index;
       const questionAnswersKey = `${nodeId}:${qIndex}`;
+
+      // a. Nếu câu đã xong (state.finished === true) -> bỏ qua, log "đã xong", KHÔNG gọi API
+      if (question.state.finished) {
+        console.log(`  Câu ${qIndex}: Đã xong, bỏ qua.`);
+        continue;
+      }
+
       const scriptAnswers = answersMap[questionAnswersKey];
+      const hasScriptAnswers =
+        Array.isArray(scriptAnswers) && scriptAnswers.length > 0;
 
-      if (scriptAnswers && scriptAnswers.length > 0) {
-        console.log(
-          `  Câu ${qIndex}: Tìm thấy ${scriptAnswers.length} câu trả lời trong kịch bản.`
-        );
-        let finished = false;
-        let attemptNumber = 1;
+      // b. Mảng rỗng hoặc không có khóa -> KHÔNG reveal mặc định; log "chưa có câu trả lời, bỏ qua". Chỉ reveal khi có --reveal-con-lai
+      if (!hasScriptAnswers) {
+        if (options.revealRemaining) {
+          console.log(
+            `  Câu ${qIndex}: Chưa có câu trả lời ⇒ Gọi /api/reveal do có cờ --reveal-con-lai.`
+          );
+          try {
+            const revRes = await call<RevealResponse>(
+              options.baseUrl,
+              token,
+              "/api/reveal",
+              {
+                session_id: sessionId,
+                run_id: enrichRes.run_id,
+                question_index: qIndex,
+              } satisfies RevealRequest
+            );
+            reveals[`${runKey}:${qIndex}`] = revRes;
+            revealsCount++;
+          } catch (err) {
+            if (
+              err instanceof ScriptApiError &&
+              QUESTION_SKIPPABLE_ERRORS.has(err.code)
+            ) {
+              console.warn(
+                `    Cảnh báo: Lỗi khi reveal câu ${qIndex}: ${err.code} - ${err.message}`
+              );
+            } else {
+              throw err;
+            }
+          }
+        } else {
+          console.log(`  Câu ${qIndex}: Chưa có câu trả lời, bỏ qua.`);
+        }
+        continue;
+      }
 
-        for (const answerText of scriptAnswers) {
-          console.log(`    Gửi đánh giá câu trả lời lượt ${attemptNumber}...`);
-          const evalRes = await call<EvaluateFeynmanResponse>(
+      // c. Có câu trả lời (mảng khác rỗng) -> bắt đầu từ attempt_number = state.attempts_used + 1, chỉ gửi câu trả lời từ state.attempts_used trở đi
+      const attemptsUsed = question.state.attempts_used ?? 0;
+      const answersToSend = scriptAnswers.slice(attemptsUsed);
+      let attemptNumber = attemptsUsed + 1;
+
+      console.log(
+        `  Câu ${qIndex}: Tìm thấy ${scriptAnswers.length} câu trả lời trong kịch bản (đã dùng: ${attemptsUsed}, cần gửi: ${answersToSend.length}).`
+      );
+
+      // Nếu đã hết câu trả lời trong mảng từ trước đó mà câu chưa xong
+      if (answersToSend.length === 0) {
+        if (options.revealRemaining) {
+          console.log(
+            `    Hết câu trả lời kịch bản nhưng câu ${qIndex} chưa xong ⇒ Gọi /api/reveal do có cờ --reveal-con-lai.`
+          );
+          try {
+            const revRes = await call<RevealResponse>(
+              options.baseUrl,
+              token,
+              "/api/reveal",
+              {
+                session_id: sessionId,
+                run_id: enrichRes.run_id,
+                question_index: qIndex,
+              } satisfies RevealRequest
+            );
+            reveals[`${runKey}:${qIndex}`] = revRes;
+            revealsCount++;
+          } catch (err) {
+            if (
+              err instanceof ScriptApiError &&
+              QUESTION_SKIPPABLE_ERRORS.has(err.code)
+            ) {
+              console.warn(
+                `    Cảnh báo: Lỗi khi reveal câu ${qIndex}: ${err.code} - ${err.message}`
+              );
+            } else {
+              throw err;
+            }
+          }
+        } else {
+          console.log(
+            `    Hết câu trả lời kịch bản nhưng câu ${qIndex} chưa xong ⇒ Để nguyên (không reveal).`
+          );
+        }
+        continue;
+      }
+
+      let isFinished = false;
+      let encounteredSkippableError = false;
+
+      for (const answerText of answersToSend) {
+        console.log(`    Gửi đánh giá câu trả lời lượt ${attemptNumber}...`);
+        let evalRes: EvaluateFeynmanResponse;
+        try {
+          evalRes = await call<EvaluateFeynmanResponse>(
             options.baseUrl,
             token,
             "/api/evaluate-feynman",
@@ -393,61 +617,77 @@ async function main(): Promise<void> {
               attempt_number: attemptNumber,
             } satisfies EvaluateFeynmanRequest
           );
-
-          const attemptKey = `${runKey}:${qIndex}:${attemptNumber}`;
-          if (!scripted_answers[attemptKey]) {
-            scripted_answers[attemptKey] = [];
-          }
-          scripted_answers[attemptKey].push({
-            answer: answerText,
-            response: evalRes,
-          });
-          scriptedAnswersCount++;
-
-          if (evalRes.question.finished) {
-            console.log(
-              `    Câu ${qIndex} đã hoàn thành ở lượt ${attemptNumber}.`
+        } catch (err) {
+          if (
+            err instanceof ScriptApiError &&
+            QUESTION_SKIPPABLE_ERRORS.has(err.code)
+          ) {
+            console.warn(
+              `    Cảnh báo: Câu ${qIndex} gặp lỗi ${err.code} (${err.message}), chuyển sang câu kế.`
             );
-            finished = true;
+            encounteredSkippableError = true;
             break;
           }
-
-          attemptNumber++;
+          throw err;
         }
 
-        if (!finished) {
+        const attemptKey = `${runKey}:${qIndex}:${attemptNumber}`;
+        if (!scripted_answers[attemptKey]) {
+          scripted_answers[attemptKey] = [];
+        }
+        scripted_answers[attemptKey].push({
+          answer: answerText,
+          response: evalRes,
+        });
+        scriptedAnswersCount++;
+
+        if (evalRes.question.finished) {
           console.log(
-            `    Hết câu trả lời kịch bản nhưng câu ${qIndex} chưa xong ⇒ Gọi /api/reveal.`
+            `    Câu ${qIndex} đã hoàn thành ở lượt ${attemptNumber}.`
           );
-          const revRes = await call<RevealResponse>(
-            options.baseUrl,
-            token,
-            "/api/reveal",
-            {
-              session_id: sessionId,
-              run_id: enrichRes.run_id,
-              question_index: qIndex,
-            } satisfies RevealRequest
-          );
-          reveals[`${runKey}:${qIndex}`] = revRes;
-          revealsCount++;
+          isFinished = true;
+          break;
         }
-      } else {
-        console.log(
-          `  Câu ${qIndex}: Không có câu trả lời trong kịch bản ⇒ Gọi /api/reveal.`
-        );
-        const revRes = await call<RevealResponse>(
-          options.baseUrl,
-          token,
-          "/api/reveal",
-          {
-            session_id: sessionId,
-            run_id: enrichRes.run_id,
-            question_index: qIndex,
-          } satisfies RevealRequest
-        );
-        reveals[`${runKey}:${qIndex}`] = revRes;
-        revealsCount++;
+
+        attemptNumber++;
+      }
+
+      // d. Hết câu trả lời mà câu chưa xong -> chỉ reveal khi có --reveal-con-lai, không thì để nguyên
+      if (!encounteredSkippableError && !isFinished) {
+        if (options.revealRemaining) {
+          console.log(
+            `    Hết câu trả lời kịch bản nhưng câu ${qIndex} chưa xong ⇒ Gọi /api/reveal do có cờ --reveal-con-lai.`
+          );
+          try {
+            const revRes = await call<RevealResponse>(
+              options.baseUrl,
+              token,
+              "/api/reveal",
+              {
+                session_id: sessionId,
+                run_id: enrichRes.run_id,
+                question_index: qIndex,
+              } satisfies RevealRequest
+            );
+            reveals[`${runKey}:${qIndex}`] = revRes;
+            revealsCount++;
+          } catch (err) {
+            if (
+              err instanceof ScriptApiError &&
+              QUESTION_SKIPPABLE_ERRORS.has(err.code)
+            ) {
+              console.warn(
+                `    Cảnh báo: Lỗi khi reveal câu ${qIndex}: ${err.code} - ${err.message}`
+              );
+            } else {
+              throw err;
+            }
+          }
+        } else {
+          console.log(
+            `    Hết câu trả lời kịch bản nhưng câu ${qIndex} chưa xong ⇒ Để nguyên (không reveal).`
+          );
+        }
       }
     }
   }
@@ -518,12 +758,27 @@ async function main(): Promise<void> {
 
   console.log("\n================ TÓM TẮT GHI BUNDLE ================");
   console.log(`- Persona: ${options.persona}`);
+  console.log(
+    `- Chế độ chỉ lấy câu hỏi (--chi-cau-hoi): ${
+      options.onlyQuestions ? "BẬT" : "TẮT"
+    }`
+  );
+  console.log(
+    `- Chế độ reveal còn lại (--reveal-con-lai): ${
+      options.revealRemaining ? "BẬT" : "TẮT"
+    }`
+  );
   console.log(`- Số node đã xử lý: ${processedNodesCount} / ${targetNodeIds.length}`);
   console.log(`- Số node bị bỏ qua: ${skippedNodesCount}`);
   console.log(`- Số run đã ghi (enrich): ${recordedRunsCount}`);
   console.log(`- Số câu có kịch bản đã ghi: ${scriptedAnswersCount}`);
   console.log(`- Số câu đã reveal: ${revealsCount}`);
-  console.log(`- File kết quả: ${outFilePath}`);
+  console.log(`- File kết quả bundle: ${outFilePath}`);
+  if (options.onlyQuestions) {
+    console.log(`- File câu hỏi mẫu: ${answersFilePath}`);
+  } else if (options.answersFile) {
+    console.log(`- File kịch bản câu trả lời: ${options.answersFile}`);
+  }
   console.log("====================================================\n");
 }
 
