@@ -31,7 +31,7 @@
     "is_monorepo": false,
     "root_dir_offset": ""
   },
-  "total_files": 16,
+  "total_files": 19,
   "nodes": [
     {
       "id": "slice-register",
@@ -639,6 +639,125 @@
           ]
         }
       ]
+    },
+    {
+      "id": "slice-revenue-report",
+      "title": "Revenue Report",
+      "title_source": "ROUTE",
+      "title_evidence": "GET /reports/revenue",
+      "node_type": "ARCHITECTURAL_DATA_FLOW",
+      "entry_symbol": "src/routes/report.routes.ts#GET /reports/revenue",
+      "prerequisites": [
+        "slice-order-checkout"
+      ],
+      "position": {
+        "x": 1120,
+        "y": 160
+      },
+      "files": [
+        "src/routes/report.routes.ts",
+        "src/middlewares/auth.middleware.ts",
+        "src/services/report.service.ts",
+        "src/repos/order.repo.ts"
+      ],
+      "languages": [
+        "TYPESCRIPT"
+      ],
+      "support_tier": "RESOLVED",
+      "cognitive_complexity": 3,
+      "rank_score": 0.0731,
+      "is_vip_algorithm": false,
+      "is_capstone": false,
+      "uncle_bob": {
+        "instability": 0.6,
+        "abstractness": 0.3,
+        "distance": 0.1,
+        "diagnosis": "BALANCED",
+        "is_exempt": false
+      },
+      "trace_steps": [
+        {
+          "step_number": 1,
+          "layer": "ENTRY_POINT",
+          "file_path": "src/routes/report.routes.ts",
+          "function_name": "GET /reports/revenue",
+          "line_start": 6,
+          "line_end": 9,
+          "snippet": "router.get('/reports/revenue', authMiddleware, async (req, res) => {\n  const report = await reportService.revenueByMonth(req.query.year);\n  res.json(report);\n});",
+          "snippet_line_map": [
+            6,
+            7,
+            8,
+            9
+          ]
+        },
+        {
+          "step_number": 2,
+          "layer": "MIDDLEWARE",
+          "file_path": "src/middlewares/auth.middleware.ts",
+          "function_name": "authMiddleware",
+          "line_start": 3,
+          "line_end": 12,
+          "snippet": "const JWT_SECRET = \"<REDACTED_SECRET>\";\nexport function authMiddleware(req, res, next) {\n  const token = req.headers.authorization?.split(' ')[1];\n  try {\n    req.user = jwt.verify(token, JWT_SECRET);\n    next();\n  } catch {\n    res.status(401).json({ message: 'Unauthorized' });\n  }\n}",
+          "snippet_line_map": [
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12
+          ]
+        },
+        {
+          "step_number": 3,
+          "layer": "BUSINESS_LOGIC",
+          "file_path": "src/services/report.service.ts",
+          "function_name": "ReportService.revenueByMonth",
+          "line_start": 9,
+          "line_end": 12,
+          "snippet": "async revenueByMonth(year) {\n  const rows = await orderRepo.sumByMonth(year);\n  return rows.map((r) => ({ month: r.month, total: Number(r.total) }));\n}",
+          "snippet_line_map": [
+            9,
+            10,
+            11,
+            12
+          ]
+        },
+        {
+          "step_number": 4,
+          "layer": "DATA_ACCESS",
+          "file_path": "src/repos/order.repo.ts",
+          "function_name": "OrderRepo.sumByMonth",
+          "line_start": 12,
+          "line_end": 20,
+          "snippet": "sumByMonth(year) {\n  return this.repo\n    .createQueryBuilder('o')\n    .select(\"date_trunc('month', o.created_at)\", 'month')\n    .addSelect('SUM(o.total)', 'total')\n    .where('EXTRACT(year FROM o.created_at) = :year', { year })\n    .groupBy('month')\n    .getRawMany();\n}",
+          "snippet_line_map": [
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20
+          ]
+        }
+      ],
+      "dto_snippet": "",
+      "group_id": "grp-after",
+      "entities": [
+        {
+          "name": "Order",
+          "ops": [
+            "READ"
+          ]
+        }
+      ]
     }
   ],
   "edges": [
@@ -684,6 +803,15 @@
       "via_entities": [
         "Order"
       ]
+    },
+    {
+      "id": "slice-order-checkout->slice-revenue-report",
+      "source": "slice-order-checkout",
+      "target": "slice-revenue-report",
+      "confidence": "RESOLVED",
+      "via_entities": [
+        "Order"
+      ]
     }
   ],
   "groups": [
@@ -711,7 +839,8 @@
       "key": "Sau khi mua",
       "key_kind": "STANDALONE",
       "node_ids": [
-        "slice-send-email"
+        "slice-send-email",
+        "slice-revenue-report"
       ]
     }
   ],
@@ -753,16 +882,19 @@
     "src/events/order-placed.handler.ts",
     "src/middlewares/auth.middleware.ts",
     "src/repos/category.repo.ts",
+    "src/repos/order.repo.ts",
     "src/repos/user.repo.ts",
     "src/routes/auth.routes.ts",
     "src/routes/cart.routes.ts",
     "src/routes/order.routes.ts",
+    "src/routes/report.routes.ts",
     "src/routes/user.routes.ts",
     "src/services/auth.service.ts",
     "src/services/cart.service.ts",
     "src/services/email.service.ts",
     "src/services/order.service.ts",
     "src/services/product.service.ts",
+    "src/services/report.service.ts",
     "src/services/user.service.ts"
   ],
   "readme_excerpt": "shop-api: web bán hàng mẫu viết bằng Express, TypeORM và Postgres.",
@@ -770,7 +902,7 @@
   "ingestion_report": {
     "truncated": false,
     "selective_fetch": false,
-    "code_file_count": 15,
+    "code_file_count": 18,
     "manifest_count": 1,
     "omitted_node_count": 0,
     "skipped": {
