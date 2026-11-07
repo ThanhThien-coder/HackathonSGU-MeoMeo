@@ -12,6 +12,7 @@ import { LessonGraphPanel } from "@/components/learn/LessonGraphPanel";
 import { Button } from "@/components/ui/common";
 import { EmptyState } from "@/components/ui/Page";
 import { LoadingAnimation } from "@/components/ui/LoadingAnimation";
+import { startNodeId } from "@/lib/overview-view";
 import { useWorkbenchStore } from "@/store/workbench";
 
 const COLUMN = "col min-w-0 rounded-xl bg-[var(--panel)] shadow-sm lg:min-h-0 lg:overflow-auto";
@@ -102,6 +103,9 @@ function NoSession({ sessionId }: { sessionId: string | null }) {
 export function LearnShell() {
   const sessionParam = useSearchParams().get("session");
   const result = useWorkbenchStore((s) => s.result);
+  const activeNodeId = useWorkbenchStore((s) => s.active_node_id);
+  const openNode = useWorkbenchStore((s) => s.openNode);
+  const progress = useWorkbenchStore((s) => s.progress);
   const [leftOpen, setLeftOpen] = useState(true);
   const [rightOpen, setRightOpen] = useState(true);
   const [tourOpen, setTourOpen] = useState(false);
@@ -135,9 +139,9 @@ export function LearnShell() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  // Tự động gợi ý mở tour Duolingo cho người học mới vào
+  // Tự động mở hướng dẫn sử dụng (Duolingo Tour) khi người dùng đã chọn bài học
   useEffect(() => {
-    if (!result) return;
+    if (!result || !activeNodeId) return;
     try {
       const shown = window.sessionStorage.getItem("sf.tour_shown");
       if (!shown) {
@@ -146,7 +150,7 @@ export function LearnShell() {
     } catch {
       // sessionStorage có thể bị chặn
     }
-  }, [result]);
+  }, [result, activeNodeId]);
 
   const handleCloseTour = () => {
     setTourOpen(false);
@@ -194,6 +198,12 @@ export function LearnShell() {
         onToggleLeft={() => setLeftOpen((v) => !v)}
         onToggleRight={() => setRightOpen((v) => !v)}
         onOpenTour={() => {
+          if (!activeNodeId && result) {
+            const startId = startNodeId(result, progress) ?? result.nodes[0]?.id;
+            if (startId) {
+              openNode(startId);
+            }
+          }
           handleEnsureColumnsOpen();
           setTourOpen(true);
         }}
@@ -216,7 +226,7 @@ export function LearnShell() {
           <CodeSnippetViewer />
         </section>
         <aside id="colRight" hidden={!rightOpen} aria-label="X-Ray và Feynman" className={`col-right ${COLUMN}`}>
-          <div id="right">
+          <div id="right" className="h-full">
             <LearnSidePanel />
           </div>
         </aside>

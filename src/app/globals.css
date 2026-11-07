@@ -349,6 +349,14 @@ body {
   border-radius: 6px;
 }
 
+[tabindex="-1"]:focus,
+[tabindex="-1"]:focus-visible,
+#rp-title:focus,
+#rp-title:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
 [hidden] {
   display: none !important;
 }
