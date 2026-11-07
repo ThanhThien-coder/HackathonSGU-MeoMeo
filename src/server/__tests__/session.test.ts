@@ -414,3 +414,28 @@ describe("session.ts", () => {
     });
   });
 });
+
+describe("loadSessionProgress", () => {
+  it("lấy tiến độ đầy đủ (có last_run) từ getSessionProgress, không trả last_run null cố định", async () => {
+    const full = {
+      session_id: "s1",
+      tokens_used: 7,
+      nodes: {
+        n1: {
+          node_id: "n1",
+          status: "FAILED" as const,
+          has_warning: false,
+          analysis_failed: false,
+          last_run: { run_id: "r1" } as unknown as import("@/contracts").NodeRunView,
+        },
+      },
+    };
+    const progressModule = await import("@/server/progress");
+    const spy = vi.spyOn(progressModule, "getSessionProgress").mockResolvedValue(full);
+    const { loadSessionProgress } = await import("@/server/session");
+    const res = await loadSessionProgress({ id: "s1", user_id: "u1" } as unknown as Parameters<typeof loadSessionProgress>[0]);
+    expect(spy).toHaveBeenCalledWith("s1", "u1");
+    expect(res.nodes.n1.last_run).not.toBeNull();
+    spy.mockRestore();
+  });
+});
