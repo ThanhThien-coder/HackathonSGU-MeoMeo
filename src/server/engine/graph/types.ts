@@ -59,6 +59,7 @@ export interface CallSite {
   callee: string;
   line: number;
   column: number;
+  end_index: number; // Vị trí kết thúc: lời gọi nằm trong đối số kết thúc trước hàm bọc nó
   confidence: "RESOLVED" | "INFERRED";
   ambiguous: boolean;
 }
