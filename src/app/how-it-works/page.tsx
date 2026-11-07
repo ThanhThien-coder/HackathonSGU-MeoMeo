@@ -1,3 +1,4 @@
+import { ConceptCardsSection } from "../../components/how-it-works/ConceptCardsSection";
 import { FaqSection } from "../../components/how-it-works/FaqSection";
 import { FourStepsSection } from "../../components/how-it-works/FourStepsSection";
 import { HowItWorksHero } from "../../components/how-it-works/HowItWorksHero";
@@ -8,6 +9,7 @@ export default function HowItWorksPage() {
       <HowItWorksHero />
       <FourStepsSection />
       <FaqSection />
+      <ConceptCardsSection />
     </main>
   );
 }
