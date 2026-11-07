@@ -3,6 +3,7 @@
 // Cột phải: 2 tab X-Ray / Feynman (`active_tab`). docs/spec/30_UI.md Mục 6.
 // Nội dung tab Feynman do PH-08 nối; ở đây chỉ giữ chỗ và cổng bật/tắt.
 import type { KeyboardEvent } from "react";
+import { FeynmanQuestionSection } from "@/components/learn/FeynmanQuestionSection";
 import { XRayPanel } from "@/components/learn/XRayPanel";
 import { displayTitle } from "@/lib/derive";
 import { mainPathOf } from "@/lib/lesson-map";
@@ -97,7 +98,7 @@ export function LearnSidePanel() {
         {tab === "XRAY" ? (
           <XRayPanel />
         ) : (
-          <p className="m-0 p-4 text-sm text-muted">Câu hỏi Feynman sẽ hiện ở bước sau.</p>
+          <FeynmanQuestionSection />
         )}
       </div>
     </div>
