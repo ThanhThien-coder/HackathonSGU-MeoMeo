@@ -4,102 +4,33 @@ import {
   type EnrichNodeRequest,
   type EnrichNodeResponse,
   type ExecutionTraceStep,
-  type GraphSkeletonNode,
   type NodeAnalysis,
   type NodeStateView,
-  type QuestionState,
   type QuestionView,
-  type RunMode,
   type RunQuestion,
   type RunStepRef,
   type SessionRow,
   type StaticEngineResult,
   type SWESkill,
 } from "@/contracts";
-import { sql, db } from "@/server/db";
+import { sql } from "@/server/db";
 import { ApiHttpError } from "@/server/errors";
 import { logAiCall, logger } from "@/server/log";
-import { deriveNodeStates, type NodeProgressRow } from "@/lib/derive";
 import { planNodeQuestions, type SkillMap } from "@/lib/plan";
 import { aiCostUsd, assertGeminiEnv } from "@/server/ai/gemini";
 import type { AnalyzeUsage } from "@/server/ai/analyze";
 import { generateQuestions } from "@/server/ai/questions";
 import { forbiddenKeywords } from "@/server/ai/guard/forbidden";
 import { nodeCodeText } from "@/server/ai/guard/text";
+import {
+  createRun,
+  findOpenRun,
+  loadNodeStateById,
+  toQuestionState,
+  type OpenRunRecord,
+} from "@/server/progress";
 
-// 1 dòng node_runs (spec 03 Mục 3) — CHỈ SERVER, chứa đáp án
-export interface RunRecord {
-  id: string;
-  session_id: string;
-  node_id: string;
-  mode: RunMode;
-  questions: RunQuestion[];
-  steps: RunStepRef[];
-  forbidden_external_keywords: string[];
-  started_at: number;
-  finished_at: number | null;
-}
-
-interface RunRow {
-  id: string;
-  session_id: string;
-  node_id: string;
-  mode: RunMode;
-  questions: RunQuestion[];
-  steps: RunStepRef[];
-  forbidden_external_keywords: string[];
-  started_at: Date | string;
-  finished_at: Date | string | null;
-}
-
-const ms = (v: Date | string) => new Date(v).getTime();
-
-function toRunRecord(r: RunRow): RunRecord {
-  return {
-    ...r,
-    started_at: ms(r.started_at),
-    finished_at: r.finished_at === null ? null : ms(r.finished_at),
-  };
-}
-
-export async function findOpenRun(
-  sessionId: string,
-  nodeId: string,
-): Promise<RunRecord | null> {
-  const rows = await sql<RunRow[]>`
-    SELECT id, session_id, node_id, mode, questions, steps,
-           forbidden_external_keywords, started_at, finished_at
-    FROM node_runs
-    WHERE session_id = ${sessionId} AND node_id = ${nodeId} AND finished_at IS NULL
-    LIMIT 1
-  `;
-  return rows[0] ? toRunRecord(rows[0]) : null;
-}
-
-// API-03 / D-36: câu chưa xong KHÔNG có reference_answer, must_have_points, fix
-export function toQuestionState(q: RunQuestion): QuestionState {
-  const reveal =
-    q.finished && q.ended_by !== "DROPPED"
-      ? {
-          reference_answer: q.reference_answer,
-          must_have_points: q.must_have_points,
-          fix: q.fix,
-        }
-      : null;
-  return {
-    question_index: q.question_index,
-    feynman_question: q.feynman_question,
-    skill: q.skill,
-    tier: q.tier,
-    focus: q.focus,
-    attempts_used: q.attempts_used,
-    finished: q.finished,
-    outcome: q.outcome,
-    ended_by: q.ended_by,
-    disputed: q.disputed,
-    reveal,
-  };
-}
+export type RunRecord = OpenRunRecord;
 
 export function toQuestionView(q: RunQuestion): QuestionView {
   return {
@@ -141,34 +72,13 @@ export function buildEnrichResponse(
   };
 }
 
-async function loadNodeState(
-  sessionId: string,
-  userId: string,
-  nodeId: string,
-): Promise<NodeStateView | null> {
-  const sessions = await sql<{ graph_skeleton: GraphSkeletonNode[] }[]>`
-    SELECT graph_skeleton FROM learning_sessions
-    WHERE id = ${sessionId} AND user_id = ${userId}
-  `;
-  if (sessions.length === 0) {
-    throw new ApiHttpError("ERR_SESSION_NOT_FOUND");
-  }
-  const progress = await sql<NodeProgressRow[]>`
-    SELECT node_id, status, analysis_failed FROM node_progress
-    WHERE session_id = ${sessionId}
-  `;
-  const states = deriveNodeStates(sessions[0].graph_skeleton, [...progress]);
-  const s = states[nodeId];
-  return s ? { ...s, last_run: null } : null;
-}
-
 // Bản thi: chỉ kiểm đơn giản (node có trong phiên và đang AVAILABLE)
 export async function checkNodeAvailable(
   sessionId: string,
   userId: string,
   nodeId: string,
 ): Promise<NodeStateView> {
-  const state = await loadNodeState(sessionId, userId, nodeId);
+  const state = await loadNodeStateById(sessionId, userId, nodeId);
   if (!state || state.status !== "AVAILABLE") {
     throw new ApiHttpError("ERR_NODE_NOT_AVAILABLE");
   }
@@ -230,7 +140,7 @@ export async function loadUserSkills(userId: string): Promise<SkillMap> {
     const state: CognitiveSkillState = {
       skill: r.skill,
       p_mastery: Number(r.p_mastery),
-      last_practiced_at: ms(r.last_practiced_at),
+      last_practiced_at: new Date(r.last_practiced_at).getTime(),
       practice_count: r.practice_count,
       correct_count: r.correct_count,
     };
@@ -246,41 +156,6 @@ export function createStepRefs(traceSteps: ExecutionTraceStep[]): RunStepRef[] {
     file_path: s.file_path,
     function_name: s.function_name,
   }));
-}
-
-// TẠM (trước TH-12 lúc 22:00): ghi thẳng bằng db.tx. NH-07 đổi sang saveRunQuestions của progress.ts.
-export async function createRun(
-  sessionId: string,
-  nodeId: string,
-  mode: RunMode,
-  questions: RunQuestion[],
-  steps: RunStepRef[],
-  forbiddenExternalKeywords: string[],
-): Promise<RunRecord> {
-  try {
-    return await db.tx(async (tx) => {
-      const rows = await tx<RunRow[]>`
-        INSERT INTO node_runs (session_id, node_id, mode, questions, steps, forbidden_external_keywords)
-        VALUES (
-          ${sessionId}, ${nodeId}, ${mode},
-          ${tx.json(JSON.parse(JSON.stringify(questions)))},
-          ${tx.json(JSON.parse(JSON.stringify(steps)))},
-          ARRAY(SELECT jsonb_array_elements_text(${tx.json(forbiddenExternalKeywords)}))
-        )
-        RETURNING id, session_id, node_id, mode, questions, steps,
-                  forbidden_external_keywords, started_at, finished_at
-      `;
-      await tx`UPDATE learning_sessions SET last_active_at = now() WHERE id = ${sessionId}`;
-      return toRunRecord(rows[0]);
-    });
-  } catch (e) {
-    // node_runs_one_open (2 tab cùng lúc) ⇒ trả run đang mở như nhánh idempotent
-    if ((e as { code?: string }).code === "23505") {
-      const open = await findOpenRun(sessionId, nodeId);
-      if (open) return open;
-    }
-    throw e;
-  }
 }
 
 async function recordAiUsage(sessionId: string, u: AnalyzeUsage): Promise<void> {
@@ -305,7 +180,7 @@ export async function enrichNode(
 ): Promise<EnrichNodeResponse> {
   const open = await findOpenRun(session.id, req.node_id);
   if (open) {
-    const state = await loadNodeState(session.id, session.user_id, req.node_id);
+    const state = await loadNodeStateById(session.id, session.user_id, req.node_id);
     if (!state) throw new ApiHttpError("ERR_NODE_NOT_AVAILABLE");
     return buildEnrichResponse(open, {
       node_state: state,
@@ -336,7 +211,7 @@ export async function enrichNode(
     session_id: session.id,
     node_id: node.id,
   });
-  await recordAiUsage(session.id, usage);
+  void recordAiUsage(session.id, usage);
 
   // K5: mọi câu DROPPED ⇒ không tạo run, UI hiện "Thử lại"
   if (questions.every((q) => q.ended_by === "DROPPED")) {

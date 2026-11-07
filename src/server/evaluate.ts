@@ -1,21 +1,14 @@
-import type postgres from "postgres";
 import { CONFIG } from "@/contracts/config";
 import type {
-  CognitiveSkillState,
   EvaluateFeynmanRequest,
   EvaluateFeynmanResponse,
   GradeContext,
   GradingRaw,
-  GraphSkeletonNode,
-  NodeOutcome,
-  NodeStateView,
   RunQuestion,
-  RunStepRef,
   SessionRow,
   SkillChange,
-  SWESkill,
 } from "@/contracts";
-import { db, sql, type TransactionSql } from "@/server/db";
+import { db, sql } from "@/server/db";
 import { ApiHttpError } from "@/server/errors";
 import { logger } from "@/server/log";
 import {
@@ -24,7 +17,17 @@ import {
   type RunRecord,
   type SessionRecord,
 } from "@/server/session";
-import { toQuestionState } from "@/server/enrich";
+import {
+  applyBkt,
+  finalizeRunIfDone,
+  insertAttempt,
+  loadNodeState,
+  lockRun,
+  readSkeleton,
+  saveRunQuestions,
+  toQuestionState,
+  withDbRetry,
+} from "@/server/progress";
 import { aiCostUsd } from "@/server/ai/gemini";
 import {
   coveredFlags,
@@ -41,8 +44,7 @@ import {
   type PreviousAttempt,
   type ReferencedStep,
 } from "@/server/ai/history";
-import { deriveNodeStates, type NodeProgressRow } from "@/lib/derive";
-import { computeSkillChange, outcomeOf } from "@/lib/bkt-engine";
+import { outcomeOf } from "@/lib/bkt-engine";
 import { similarity, validateAnswerLength } from "@/lib/similarity";
 import { hasInappropriateWords, maskSensitive } from "@/lib/moderation";
 
@@ -130,270 +132,24 @@ export async function readRunQuestion(
   return { run, session, question };
 }
 
-// ============================================================================
-// TẠM (NH-07): đổi sang src/server/progress.ts khi TH-12 merge
-// ============================================================================
-
-export async function withDbRetry<T>(fn: () => Promise<T>): Promise<T> {
-  const delays = CONFIG.DB_RETRY_DELAYS_MS;
-  let attempt = 0;
-  while (true) {
-    try {
-      return await fn();
-    } catch (err) {
-      if (err instanceof ApiHttpError) {
-        throw err;
-      }
-      if (attempt < delays.length) {
-        const delay = delays[attempt];
-        attempt++;
-        await new Promise((resolve) => setTimeout(resolve, delay));
-      } else {
-        throw new ApiHttpError("ERR_PERSISTENCE_UNAVAILABLE");
-      }
-    }
-  }
-}
-
-export async function lockRun(
-  tx: TransactionSql,
-  runId: string,
-): Promise<RunRecord> {
-  const rows = await tx<RunRecord[]>`
-    select * from node_runs where id = ${runId} for update
-  `;
-  if (rows.length === 0) {
-    throw new ApiHttpError("ERR_SESSION_NOT_FOUND");
-  }
-  const run = rows[0];
-  if (typeof run.questions === "string") {
-    run.questions = JSON.parse(run.questions) as RunQuestion[];
-  }
-  if (typeof run.steps === "string") {
-    run.steps = JSON.parse(run.steps) as RunStepRef[];
-  }
-  return run;
-}
-
-export async function insertAttempt(
-  tx: TransactionSql,
-  runId: string,
-  q: RunQuestion,
-  attemptNumber: number,
-  grading: GradingRaw,
-  isPassed: boolean,
-  flags: boolean[],
-  studentAnswer: string,
-): Promise<void> {
-  const flagsStr = `{${flags.map((f) => (f ? "true" : "false")).join(",")}}`;
-  await tx`
-    insert into question_attempts (
-      run_id,
-      question_index,
-      attempt_number,
-      skill,
-      core_accuracy,
-      simplicity,
-      intent,
-      is_passed,
-      points_covered,
-      student_answer
-    ) values (
-      ${runId},
-      ${q.question_index},
-      ${attemptNumber},
-      ${q.skill}::swe_skill,
-      ${grading.core_accuracy},
-      ${grading.simplicity},
-      ${grading.intent},
-      ${isPassed},
-      ${flagsStr}::text::boolean[],
-      ${studentAnswer}
-    )
-  `;
-}
-
-export async function applyBkt(
-  tx: TransactionSql,
-  userId: string,
-  skill: SWESkill,
-  outcome: NodeOutcome,
-  now: number,
-): Promise<SkillChange> {
-  const rows = await tx<
-    {
-      skill: SWESkill;
-      p_mastery: number;
-      last_practiced_at: Date | string | number;
-      practice_count: number;
-      correct_count: number;
-    }[]
-  >`
-    select skill::text as skill, p_mastery, last_practiced_at, practice_count, correct_count
-    from skill_states
-    where user_id = ${userId} and skill = ${skill}::swe_skill
-  `;
-
-  let state: CognitiveSkillState | undefined;
-  if (rows.length > 0) {
-    const r = rows[0];
-    const lpMs =
-      typeof r.last_practiced_at === "number"
-        ? r.last_practiced_at
-        : new Date(r.last_practiced_at).getTime();
-    state = {
-      skill: r.skill,
-      p_mastery: Number(r.p_mastery),
-      last_practiced_at: lpMs,
-      practice_count: Number(r.practice_count),
-      correct_count: Number(r.correct_count),
-    };
-  }
-
-  const { next, change } = computeSkillChange(skill, state, outcome, now);
-
-  await tx`
-    insert into skill_states (
-      user_id,
-      skill,
-      p_mastery,
-      last_practiced_at,
-      practice_count,
-      correct_count
-    ) values (
-      ${userId},
-      ${skill}::swe_skill,
-      ${next.p_mastery},
-      to_timestamp(${next.last_practiced_at} / 1000.0),
-      ${next.practice_count},
-      ${next.correct_count}
-    )
-    on conflict (user_id, skill) do update set
-      p_mastery = excluded.p_mastery,
-      last_practiced_at = excluded.last_practiced_at,
-      practice_count = excluded.practice_count,
-      correct_count = excluded.correct_count
-  `;
-
-  return change;
-}
-
-export async function saveRunQuestions(
-  tx: TransactionSql,
-  run: RunRecord,
-): Promise<void> {
-  await tx`
-    update node_runs
-    set questions = ${tx.json(run.questions as unknown as postgres.JSONValue)}
-    where id = ${run.id}
-  `;
-}
-
-export async function loadNodeStateTx(
-  tx: TransactionSql,
+async function recordGradeUsage(
   sessionId: string,
-  nodeId: string,
-): Promise<NodeStateView> {
-  const sessions = await tx<
-    { graph_skeleton: GraphSkeletonNode[] | string }[]
-  >`
-    select graph_skeleton from learning_sessions where id = ${sessionId}
-  `;
-  if (sessions.length === 0) {
-    throw new ApiHttpError("ERR_SESSION_NOT_FOUND");
+  usage: GradeUsage,
+): Promise<void> {
+  try {
+    await sql`
+      insert into ai_usage (session_id, call_kind, tokens_in, tokens_out, cost_usd)
+      values (
+        ${sessionId},
+        'GRADE',
+        ${usage.tokens_in},
+        ${usage.tokens_out},
+        ${aiCostUsd(usage.tokens_in, usage.tokens_out)}
+      )
+    `;
+  } catch {
+    logger.warn({ event: "ai_usage_write_failed", call_kind: "GRADE" });
   }
-
-  let skeleton = sessions[0].graph_skeleton;
-  if (typeof skeleton === "string") {
-    skeleton = JSON.parse(skeleton) as GraphSkeletonNode[];
-  }
-
-  const progressRows = await tx<NodeProgressRow[]>`
-    select node_id, status, analysis_failed
-    from node_progress
-    where session_id = ${sessionId}
-  `;
-
-  const derived = deriveNodeStates(skeleton, progressRows);
-  const st = derived[nodeId];
-  if (!st) {
-    throw new ApiHttpError("ERR_NODE_NOT_AVAILABLE");
-  }
-  return {
-    ...st,
-    last_run: null,
-  };
-}
-
-export async function finalizeRunIfDone(
-  tx: TransactionSql,
-  run: RunRecord,
-  now: number,
-): Promise<string[]> {
-  if (!run.questions.every((q) => q.finished)) {
-    return [];
-  }
-
-  const activeQuestions = run.questions.filter(
-    (q) => q.ended_by !== "DROPPED" && !q.disputed,
-  );
-  const nodeStatus: "COMPLETED" | "FAILED" = activeQuestions.some(
-    (q) => q.outcome === "FAILED",
-  )
-    ? "FAILED"
-    : "COMPLETED";
-
-  const sessions = await tx<
-    { graph_skeleton: GraphSkeletonNode[] | string }[]
-  >`
-    select graph_skeleton from learning_sessions where id = ${run.session_id}
-  `;
-  if (sessions.length === 0) {
-    throw new ApiHttpError("ERR_SESSION_NOT_FOUND");
-  }
-
-  let skeleton = sessions[0].graph_skeleton;
-  if (typeof skeleton === "string") {
-    skeleton = JSON.parse(skeleton) as GraphSkeletonNode[];
-  }
-
-  const beforeProgress = await tx<NodeProgressRow[]>`
-    select node_id, status, analysis_failed
-    from node_progress
-    where session_id = ${run.session_id}
-  `;
-  const beforeStates = deriveNodeStates(skeleton, beforeProgress);
-
-  await tx`
-    update node_runs
-    set finished_at = to_timestamp(${now} / 1000.0)
-    where id = ${run.id}
-  `;
-
-  await tx`
-    insert into node_progress (session_id, node_id, status)
-    values (${run.session_id}, ${run.node_id}, ${nodeStatus})
-    on conflict (session_id, node_id) do update set
-      status = excluded.status,
-      updated_at = now()
-  `;
-
-  const afterProgress = await tx<NodeProgressRow[]>`
-    select node_id, status, analysis_failed
-    from node_progress
-    where session_id = ${run.session_id}
-  `;
-  const afterStates = deriveNodeStates(skeleton, afterProgress);
-
-  const unlocked: string[] = [];
-  for (const [nodeId, afterState] of Object.entries(afterStates)) {
-    const beforeStatus = beforeStates[nodeId]?.status ?? "LOCKED";
-    if (beforeStatus === "LOCKED" && afterState.status === "AVAILABLE") {
-      unlocked.push(nodeId);
-    }
-  }
-
-  return unlocked;
 }
 
 // ============================================================================
@@ -472,20 +228,7 @@ export async function evaluateFeynman(
 
     const totalTokens = (usage.tokens_in ?? 0) + (usage.tokens_out ?? 0);
     if (totalTokens > 0) {
-      try {
-        await sql`
-          insert into ai_usage (session_id, call_kind, tokens_in, tokens_out, cost_usd)
-          values (
-            ${session.id},
-            'GRADE',
-            ${usage.tokens_in},
-            ${usage.tokens_out},
-            ${aiCostUsd(usage.tokens_in, usage.tokens_out)}
-          )
-        `;
-      } catch {
-        logger.warn({ event: "ai_usage_write_failed", call_kind: "GRADE" });
-      }
+      void recordGradeUsage(session.id, usage);
     }
   }
 
@@ -495,6 +238,7 @@ export async function evaluateFeynman(
   const { q2, skillChange, unlocked, nodeState } = await withDbRetry(() =>
     db.tx(async (tx) => {
       const run2 = await lockRun(tx, run.id);
+      const skeleton = await readSkeleton(tx, run2.session_id);
       const q2 = findQuestion(run2, req.question_index);
       if (q2.finished || q2.attempts_used !== req.attempt_number - 1) {
         throw new ApiHttpError("ERR_ATTEMPT_OUT_OF_SYNC");
@@ -526,12 +270,8 @@ export async function evaluateFeynman(
       }
 
       await saveRunQuestions(tx, run2);
-      const unlocked = await finalizeRunIfDone(tx, run2, now);
-      const nodeState = await loadNodeStateTx(
-        tx,
-        run2.session_id,
-        run2.node_id,
-      );
+      const unlocked = await finalizeRunIfDone(tx, run2, now, skeleton);
+      const nodeState = await loadNodeState(tx, run2, skeleton);
 
       return { q2, skillChange, unlocked, nodeState };
     }),

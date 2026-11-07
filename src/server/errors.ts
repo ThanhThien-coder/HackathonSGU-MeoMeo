@@ -59,6 +59,7 @@ const RETRYABLE_CODES = new Set<ErrorCode>([
   "ERR_GITHUB_RATE_LIMIT_CDN",
   "ERR_SERVER_BUSY",
   "ERR_AI_UNAVAILABLE",
+  "ERR_AI_REJECTED", // spec/03 Mục 6.1 và spec/30: UI hiện "Thử lại" enrich-node
   "ERR_PERSISTENCE_UNAVAILABLE",
   "ERR_ATTEMPT_OUT_OF_SYNC",
 ]);
