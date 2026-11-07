@@ -1,6 +1,5 @@
 "use client";
 
-import clsx from "clsx";
 import {
   useEffect,
   useId,
@@ -9,11 +8,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
 } from "react";
-import { twMerge } from "tailwind-merge";
-
-function cn(...parts: Parameters<typeof clsx>): string {
-  return twMerge(clsx(...parts));
-}
+import { cn } from "@/lib/utils";
 
 /* ───────────── Button ───────────── */
 
@@ -24,15 +19,15 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 const BUTTON_BASE =
-  "inline-flex items-center justify-center gap-1.5 rounded-lg border font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed";
+  "btn relative inline-flex items-center justify-center gap-1.5 rounded-xl font-semibold transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed";
 
 const BUTTON_VARIANT: Record<ButtonVariant, string> = {
   primary:
-    "border-accent bg-accent text-on-accent px-4 py-2 hover:brightness-110",
+    "bg-text text-bg px-4 py-2 shadow-[0_4px_20px_-2px_rgba(255,255,255,0.18),inset_0_1px_0_rgba(255,255,255,0.5)] hover:opacity-92",
   ghost:
-    "border-line-strong bg-transparent text-text px-3 py-1.5 hover:bg-btn-hover",
+    "bg-panel-2/80 text-text px-3.5 py-1.5 ring-1 ring-inset ring-border shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] hover:bg-btn-hover",
   small:
-    "border-line-strong bg-btn text-text px-2.5 py-1 text-xs hover:bg-btn-hover",
+    "bg-btn text-text px-3 py-1 text-xs ring-1 ring-inset ring-border shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] hover:bg-btn-hover",
 };
 
 export function Button({
@@ -62,13 +57,13 @@ export type ChipTone =
   | "violet";
 
 const CHIP_TONE: Record<ChipTone, string> = {
-  neutral: "border-line-strong bg-panel-2 text-muted",
-  accent: "border-accent bg-hl-step text-accent",
-  done: "border-st-done-border bg-st-done-bg text-st-done-fg",
-  ready: "border-st-ready-border bg-st-ready-bg text-st-ready-fg",
-  fail: "border-st-fail-border bg-st-fail-bg text-st-fail-fg",
-  lock: "border-st-lock-border bg-st-lock-bg text-st-lock-fg",
-  violet: "border-violet bg-panel-2 text-violet",
+  neutral: "bg-panel-2 text-muted ring-1 ring-inset ring-border",
+  accent: "bg-hl-step text-accent ring-1 ring-inset ring-accent/30",
+  done: "bg-st-done-bg text-st-done-fg ring-1 ring-inset ring-done/30",
+  ready: "bg-st-ready-bg text-st-ready-fg ring-1 ring-inset ring-ready/30",
+  fail: "bg-st-fail-bg text-st-fail-fg ring-1 ring-inset ring-fail/30",
+  lock: "bg-st-lock-bg text-st-lock-fg ring-1 ring-inset ring-locked/25",
+  violet: "bg-panel-2 text-violet ring-1 ring-inset ring-violet/30",
 };
 
 export interface ChipProps {
@@ -88,7 +83,7 @@ export function Chip({
     <span
       title={title}
       className={cn(
-        "inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-medium",
+        "inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors",
         CHIP_TONE[tone],
         className,
       )}
@@ -179,7 +174,7 @@ export function Modal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-overlay p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-overlay p-4 backdrop-blur-md"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
@@ -192,19 +187,19 @@ export function Modal({
         tabIndex={-1}
         onKeyDown={trapTab}
         className={cn(
-          "glass sf-fade-in flex max-h-[calc(100dvh-2rem)] w-full max-w-lg flex-col rounded-2xl text-text outline-none",
+          "glass sf-fade-in relative flex max-h-[calc(100dvh-2rem)] w-full max-w-lg flex-col overflow-hidden rounded-2xl text-text ring-1 ring-border outline-none",
           className,
         )}
       >
-        <div className="flex flex-none items-center justify-between gap-3 border-b border-line px-5 py-3">
-          <h2 id={titleId} className="text-base font-bold">
+        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border px-5 py-3.5">
+          <h2 id={titleId} className="text-base font-bold tracking-tight">
             {title}
           </h2>
           <button
             type="button"
             aria-label="Đóng"
             onClick={onClose}
-            className="rounded-md px-2 py-1 text-muted transition-colors hover:bg-btn-hover hover:text-text"
+            className="rounded-lg px-2.5 py-1 text-muted transition-colors hover:bg-btn-hover hover:text-text"
           >
             ✕
           </button>
@@ -213,7 +208,7 @@ export function Modal({
           {children}
         </div>
         {footer ? (
-          <div className="flex flex-none flex-wrap justify-end gap-2 border-t border-line px-5 py-3">
+          <div className="flex shrink-0 flex-wrap justify-end gap-2 border-t border-border bg-panel-2/40 px-5 py-3">
             {footer}
           </div>
         ) : null}

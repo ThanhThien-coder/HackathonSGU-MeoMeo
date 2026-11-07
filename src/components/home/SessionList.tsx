@@ -3,7 +3,9 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import type { LearningSessionSummary } from "@/contracts";
+import { BlurFade } from "@/components/ui/blur-fade";
 import { Button } from "@/components/ui/common";
+import { MagicCard } from "@/components/ui/magic-card";
 import { useWorkbenchStore } from "@/store/workbench";
 
 const relativeTime = new Intl.RelativeTimeFormat("vi", { numeric: "always" });
@@ -145,40 +147,58 @@ export function SessionList() {
 
   const now = Date.now();
   return (
-    <section aria-labelledby="session-list-title" className="mx-auto flex w-full max-w-xl flex-col gap-3">
-      <h2 id="session-list-title" className="text-lg font-bold text-text">
-        Tiếp tục học
-      </h2>
-      <ul className="flex flex-col gap-2">
-        {sessions.map((s) => {
+    <section aria-labelledby="session-list-title" className="mx-auto flex w-full max-w-xl flex-col gap-3.5">
+      <div className="flex items-center justify-between">
+        <h2 id="session-list-title" className="text-lg font-bold tracking-tight text-text">
+          Tiếp tục học
+        </h2>
+        <span className="rounded-full bg-panel-2 px-2.5 py-0.5 text-xs font-medium text-muted ring-1 ring-border">
+          {sessions.length} phiên
+        </span>
+      </div>
+      <ul className="flex flex-col gap-2.5">
+        {sessions.map((s, idx) => {
           const busyHere = opening === s.session_id;
           const err = resumeError?.session_id === s.session_id ? resumeError : null;
+          const pct = s.total_nodes > 0 ? Math.min(100, Math.round((s.completed_count / s.total_nodes) * 100)) : 0;
           return (
-            <li key={s.session_id} className="rounded-xl border border-line bg-panel px-4 py-3">
-              <div className="flex items-center gap-3">
-                <div className="min-w-0 flex-1">
-                  <p className="truncate font-semibold text-text">{titleLine(s)}</p>
-                  <p className="truncate text-sm text-muted">{progressLine(s, now)}</p>
-                </div>
-                <Button
-                  variant="primary"
-                  disabled={!s.can_resume || ingesting || opening !== null}
-                  onClick={() => void resume(s)}
-                >
-                  {busyHere ? "Đang mở…" : "Học tiếp"}
-                </Button>
-              </div>
-              {err ? (
-                <div role="alert" className="mt-2 flex flex-wrap items-center gap-3 text-sm text-red">
-                  <p className="min-w-0 flex-1">{err.message}</p>
-                  {err.retryable ? (
-                    <Button variant="small" disabled={ingesting || opening !== null} onClick={() => void resume(s)}>
-                      Thử lại
-                    </Button>
-                  ) : null}
-                </div>
-              ) : null}
-            </li>
+            <BlurFade key={s.session_id} delay={idx * 0.04} duration={0.3}>
+              <li>
+                <MagicCard className="rounded-2xl shadow-surface" gradientSize={200}>
+                  <div className="px-4 py-3.5 sm:px-5">
+                    <div className="flex items-center gap-3">
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate font-mono text-sm font-bold text-text">{titleLine(s)}</p>
+                        <p className="mt-0.5 truncate text-xs text-muted sm:text-sm">{progressLine(s, now)}</p>
+                        <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-panel3" aria-hidden="true">
+                          <div
+                            className="h-full rounded-full bg-linear-to-r from-accent to-done transition-all duration-500"
+                            style={{ width: `${pct}%` }}
+                          />
+                        </div>
+                      </div>
+                      <Button
+                        variant="primary"
+                        disabled={!s.can_resume || ingesting || opening !== null}
+                        onClick={() => void resume(s)}
+                      >
+                        {busyHere ? "Đang mở…" : "Học tiếp"}
+                      </Button>
+                    </div>
+                    {err ? (
+                      <div role="alert" className="mt-2.5 flex flex-wrap items-center gap-3 rounded-xl bg-fail-bg px-3 py-2 text-sm text-red">
+                        <p className="min-w-0 flex-1">{err.message}</p>
+                        {err.retryable ? (
+                          <Button variant="small" disabled={ingesting || opening !== null} onClick={() => void resume(s)}>
+                            Thử lại
+                          </Button>
+                        ) : null}
+                      </div>
+                    ) : null}
+                  </div>
+                </MagicCard>
+              </li>
+            </BlurFade>
           );
         })}
       </ul>

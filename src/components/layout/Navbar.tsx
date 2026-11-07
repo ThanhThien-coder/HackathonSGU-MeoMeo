@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { useSyncExternalStore } from "react";
+import { AnimatedGradientText } from "@/components/ui/animated-gradient-text";
+import { BrandLogo } from "@/components/ui/brand-logo";
 import { NAV_EXTRA_LINKS } from "@/lib/nav";
 import { useWorkbenchStore } from "@/store/workbench";
 
@@ -38,15 +40,18 @@ export function ThemeToggle() {
       type="button"
       onClick={toggle}
       aria-label="Đổi chủ đề sáng hoặc tối"
-      className="inline-flex items-center gap-1.5 rounded-lg border border-line-strong px-2.5 py-1 text-sm text-text transition-colors hover:bg-panel-2"
+      className="tbtn inline-flex items-center gap-1.5 rounded-xl bg-panel-2 px-3 py-1.5 text-xs font-semibold text-text ring-1 ring-inset ring-border transition-all hover:bg-panel3"
     >
-      {theme === "dark" ? "Chế độ sáng" : "Chế độ tối"}
+      <span aria-hidden="true" className="text-accent">
+        {theme === "dark" ? "☀" : "☾"}
+      </span>
+      <span>{theme === "dark" ? "Chế độ sáng" : "Chế độ tối"}</span>
     </button>
   );
 }
 
 const LINK_CLASS =
-  "rounded-md px-2.5 py-1 text-sm text-muted transition-colors hover:bg-panel-2 hover:text-text";
+  "rounded-xl px-3 py-1.5 text-sm font-medium text-muted transition-all hover:bg-panel-2 hover:text-text";
 
 /**
  * Thanh menu cho các trang khác `/learn` (trang học có `CockpitHeader`).
@@ -62,13 +67,19 @@ export function Navbar() {
   const account = offline ? "Offline" : user ? [user.display_name, tier].filter(Boolean).join(" · ") : null;
 
   return (
-    <header className="border-b border-line bg-panel">
+    <header className="sticky top-0 z-30 border-b border-border bg-panel/85 backdrop-blur-xl">
       <nav
         aria-label="Menu chính"
-        className="mx-auto flex max-w-6xl flex-wrap items-center gap-1 px-3 py-2 sm:px-4"
+        className="mx-auto flex max-w-6xl flex-wrap items-center gap-1.5 px-4 py-2.5 sm:px-6"
       >
-        <Link href="/" className="mr-2 font-bold text-text">
-          SimpliFey
+        <Link
+          href="/"
+          className="mr-3 inline-flex items-center gap-2 font-extrabold tracking-tight text-text transition-opacity hover:opacity-90"
+        >
+          <BrandLogo size={22} />
+          <AnimatedGradientText className="text-[15px] font-extrabold tracking-tight">
+            SimpliFey
+          </AnimatedGradientText>
         </Link>
         <Link href="/" className={LINK_CLASS}>
           Trang chủ
@@ -89,11 +100,15 @@ export function Navbar() {
         ))}
         <span className="flex-1" />
         {offline ? (
-          <span className="rounded-full border border-st-ready-border bg-st-ready-bg px-2.5 py-0.5 text-xs font-semibold text-st-ready-fg">
+          <span className="rounded-full bg-st-ready-bg px-3 py-1 text-xs font-semibold text-st-ready-fg ring-1 ring-inset ring-ready/30">
             Chế độ Offline — dữ liệu ghi lại, không lưu tiến độ
           </span>
         ) : null}
-        {account ? <span className="px-2 text-sm text-muted">{account}</span> : null}
+        {account ? (
+          <span className="rounded-lg bg-panel-2/70 px-2.5 py-1 text-xs font-medium text-muted ring-1 ring-inset ring-border">
+            {account}
+          </span>
+        ) : null}
         <ThemeToggle />
       </nav>
     </header>

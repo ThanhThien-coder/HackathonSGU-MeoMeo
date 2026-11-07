@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { BorderBeam } from "@/components/ui/border-beam";
+import { Ripple } from "@/components/ui/ripple";
 
 const TICK_MS = 250;
 
@@ -17,16 +19,18 @@ function ScanOverlay() {
   const seconds = (elapsedMs / 1000).toFixed(1).replace(".", ",");
 
   return (
-    <div className="sf-fade-in absolute inset-0 z-10 flex items-center justify-center rounded-2xl bg-overlay p-4 backdrop-blur-sm">
-      <div className="glass flex flex-col items-center gap-2 rounded-xl px-6 py-5 text-text">
+    <div className="sf-fade-in absolute inset-0 z-50 flex items-center justify-center overflow-hidden rounded-3xl bg-overlay p-4 backdrop-blur-md">
+      <Ripple mainCircleSize={95} numCircles={5} />
+      <div className="glass relative z-10 flex flex-col items-center gap-2.5 overflow-hidden rounded-2xl px-7 py-6 text-text ring-1 ring-border">
+        <BorderBeam size={90} duration={5} />
         <span
           aria-hidden="true"
-          className="h-8 w-8 animate-spin rounded-full border-2 border-line-strong border-t-accent motion-reduce:animate-none"
+          className="size-9 animate-spin rounded-full border-2 border-panel3 border-t-accent shadow-[0_0_16px_var(--accent-glow)] motion-reduce:animate-none"
         />
-        <p role="status" className="font-semibold">
+        <p role="status" className="font-bold tracking-tight">
           Đang quét repo…
         </p>
-        <p aria-live="off" className="text-sm tabular-nums text-muted">
+        <p aria-live="off" className="rounded-full bg-panel-2 px-3 py-0.5 font-mono text-xs tabular-nums text-accent ring-1 ring-border">
           Đã chạy {seconds} s
         </p>
       </div>
