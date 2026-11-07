@@ -16,6 +16,10 @@ import type {
 } from "./types";
 
 export function isDataSinkCall(call: ExternalCall, techStack: string[]): boolean {
+  // ENT-41: Java đã xác định theo kiểu receiver.
+  if (call.is_data_sink) {
+    return true;
+  }
   const method = call.method;
   const isSinkMethod =
     method === "save" ||

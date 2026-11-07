@@ -7,6 +7,7 @@ import type {
 } from "@/contracts";
 import { ApiHttpError } from "@/server/errors";
 import { buildCallGraph, fileGraph, findEntries } from "./callgraph";
+import type { CallGraphResult } from "./callgraph";
 import { fillComplexity } from "./complexity";
 import { buildDataEdges, buildGroups, readLessonData, toNodeEntities } from "./data-deps";
 import type { LessonData } from "./data-deps";
@@ -20,11 +21,13 @@ import {
   transitiveReduction,
 } from "./nodes";
 import { rankFiles } from "./pagerank";
-import { parseAll } from "./parser";
+import { initParsers, parseAll } from "./parser";
+import { buildJavaPackageMap, collectJavaImports, collectJavaSymbols } from "./resolvers/java";
 import { buildSlice, findSharedHelpers } from "./slicing";
+import { buildJavaCallGraph } from "./spring";
 import { collectSymbols, resolveImports } from "./symbols";
 import { tarjanScc } from "./tarjan";
-import type { Candidate, EngineContext } from "./types";
+import type { Candidate, EngineContext, ParsedFile, SymbolIndex } from "./types";
 import { buildSymbolWhitelist } from "./whitelist";
 
 export { tarjanScc } from "./tarjan";
@@ -33,6 +36,37 @@ export { buildDataEdges, buildGroups, readLessonData, toNodeEntities } from "./d
 export type { DataEdge, LessonData } from "./data-deps";
 export { layoutGraph } from "./layout";
 export { toClientResult } from "./to-client";
+
+// File Java đi qua `buildJavaCallGraph`, các file còn lại qua `buildCallGraph`, rồi gộp kết quả.
+function buildMixedCallGraph(files: ParsedFile[], idx: SymbolIndex): CallGraphResult {
+  const javaFiles = files.filter((f) => f.language === "JAVA");
+  const scriptGraph = buildCallGraph(
+    files.filter((f) => f.language !== "JAVA"),
+    idx
+  );
+  if (javaFiles.length === 0) {
+    return scriptGraph;
+  }
+
+  const packages = buildJavaPackageMap(javaFiles);
+  for (const file of javaFiles) {
+    try {
+      collectJavaSymbols(file, { idx });
+      collectJavaImports(file, javaFiles, idx, packages);
+    } catch {
+      continue;
+    }
+  }
+
+  const javaGraph = buildJavaCallGraph(javaFiles, idx);
+  return {
+    edges: [...scriptGraph.edges, ...javaGraph.edges],
+    functions: idx.functions,
+    external_calls: new Map([...scriptGraph.external_calls, ...javaGraph.external_calls]),
+    bindings: [...scriptGraph.bindings, ...javaGraph.bindings],
+    call_sites: new Map([...scriptGraph.call_sites, ...javaGraph.call_sites]),
+  };
+}
 
 /**
  * buildGraph: Điểm nhập Tầng 1–2 của SimpliFey.
@@ -48,6 +82,8 @@ export { toClientResult } from "./to-client";
  * 9. symbol_whitelist, file_index, ingestion_report, engine_ms
  */
 export async function buildGraph(input: IngestOutput): Promise<StaticEngineResult> {
+  // ENG-11: nạp grammar lần đầu không tính vào engine_ms.
+  await initParsers();
   const t0 = performance.now();
 
   const report: IngestionReport = {
@@ -71,7 +107,7 @@ export async function buildGraph(input: IngestOutput): Promise<StaticEngineResul
   );
 
   // 3. Đồ thị gọi hàm, điểm entry, xếp hạng file và độ phức tạp
-  const graph = buildCallGraph(files, idx);
+  const graph = buildMixedCallGraph(files, idx);
   const entries = findEntries(
     files,
     idx,
