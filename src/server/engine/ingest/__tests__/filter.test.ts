@@ -238,6 +238,24 @@ describe("redactSecrets", () => {
     expect(out.code).not.toContain("sk-a");
   });
 
+  it("T-ING-26 khối private key 5 dòng che từng dòng, tính 1 lần", () => {
+    const block = [
+      "-----BEGIN RSA PRIVATE KEY-----",
+      "  AAAA",
+      "  BBBB",
+      "  CCCC",
+      "-----END RSA PRIVATE KEY-----",
+    ].join("\n");
+    const out = redactSecrets(block);
+    expect(out.count).toBe(1);
+    expect(out.code.split("\n")).toEqual([MASK, `  ${MASK}`, `  ${MASK}`, `  ${MASK}`, MASK]);
+  });
+
+  it("khối key trong một dòng thay cả đoạn", () => {
+    const line = 'k = "-----BEGIN PRIVATE KEY-----\\nAAA\\n-----END PRIVATE KEY-----";';
+    expect(redactSecrets(line).code).toBe(`k = "${MASK}";`);
+  });
+
   it("T-ING-27 đủ các ca của spec", () => {
     expect(redactSecrets('const JWT_SECRET = "abc123xyz";').code).toBe(
       `const JWT_SECRET = "${MASK}";`,
