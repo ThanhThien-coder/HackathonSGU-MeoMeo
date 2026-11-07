@@ -17,6 +17,7 @@ import { Reveal } from "@/components/learn/Reveal";
 import { RunReadOnly } from "@/components/learn/RunReadOnly";
 import { RunSummary } from "@/components/learn/RunSummary";
 import { SkipConfirmDialog } from "@/components/learn/SkipConfirmDialog";
+import { PREPARE_QUESTIONS_HINT } from "@/components/learn/waiting-label";
 import { Button, PlainText } from "@/components/ui/common";
 import { useWorkbenchStore } from "@/store/workbench";
 
@@ -52,6 +53,7 @@ export function FeynmanQuestionSection() {
       return (
         <p role="status" className="m-0 p-4 text-sm text-muted">
           Đang chuẩn bị câu hỏi…
+          <span className="mt-1 block text-xs text-subtle">{PREPARE_QUESTIONS_HINT}</span>
         </p>
       );
     }

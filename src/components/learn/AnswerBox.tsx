@@ -6,6 +6,7 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import type { QuestionState } from "@/contracts";
 import { CONFIG } from "@/contracts/config";
+import { waitingLabel } from "@/components/learn/waiting-label";
 import { Button } from "@/components/ui/common";
 import { similarity, validateAnswerLength } from "@/lib/similarity";
 import { ERROR_MESSAGES, formatErrorMessage } from "@/lib/messages";
@@ -47,6 +48,16 @@ export function AnswerBox({ nodeId, runId, question }: AnswerBoxProps) {
     },
     [],
   );
+
+  // Đang chấm ⇒ đếm thời gian đã chờ để đổi chữ nút (PH-17). Hết `pending` hoặc gỡ component ⇒ dọn bộ hẹn giờ.
+  const [waitedMs, setWaitedMs] = useState(0);
+  useEffect(() => {
+    if (!pending) return;
+    const startedAt = Date.now();
+    setWaitedMs(0);
+    const tick = setInterval(() => setWaitedMs(Date.now() - startedAt), 500);
+    return () => clearInterval(tick);
+  }, [pending]);
 
   const duplicate =
     lastFailed !== undefined &&
@@ -139,7 +150,7 @@ export function AnswerBox({ nodeId, runId, question }: AnswerBoxProps) {
       </div>
       <div className="mt-2 flex flex-wrap items-center gap-2.5">
         <Button variant="primary" onClick={() => void submit()} disabled={locked}>
-          {pending ? "Đang chấm…" : "Nộp câu trả lời"}
+          {pending ? <span role="status">{waitingLabel(waitedMs)}</span> : "Nộp câu trả lời"}
         </Button>
         <span className="text-sm text-muted">
           Lượt {question.attempts_used + 1}/{CONFIG.MAX_ATTEMPTS_PER_QUESTION}

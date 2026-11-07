@@ -155,9 +155,22 @@ export function XRayPanel() {
           Tóm tắt bài
         </h2>
         {waiting ? (
-          <div role="status" className="grid gap-1.5">
-            <span className="h-3 w-full animate-pulse rounded bg-line" />
-            <span className="h-3 w-4/5 animate-pulse rounded bg-line" />
+          // Phần engine (bước, file, code) đã hiện ở tour; chỉ điểm hay / điểm dở của AI mới phải chờ.
+          <div role="status" className="grid gap-3">
+            <div>
+              <div className="mb-1.5 text-xs font-bold uppercase tracking-wide text-st-done-fg">Điểm hay</div>
+              <div className="grid gap-1.5">
+                <span className="h-3 w-full animate-pulse rounded bg-line" />
+                <span className="h-3 w-4/5 animate-pulse rounded bg-line" />
+              </div>
+            </div>
+            <div>
+              <div className="mb-1.5 text-xs font-bold uppercase tracking-wide text-st-fail-fg">Điểm dở</div>
+              <div className="grid gap-1.5">
+                <span className="h-3 w-full animate-pulse rounded bg-line" />
+                <span className="h-3 w-3/5 animate-pulse rounded bg-line" />
+              </div>
+            </div>
             <span className="text-xs text-muted">đang phân tích…</span>
           </div>
         ) : (
