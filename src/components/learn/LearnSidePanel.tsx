@@ -4,6 +4,7 @@
 // Nội dung tab Feynman do PH-08 nối; ở đây chỉ giữ chỗ và cổng bật/tắt.
 import type { KeyboardEvent } from "react";
 import { FeynmanQuestionSection } from "@/components/learn/FeynmanQuestionSection";
+import { PREPARE_QUESTIONS_HINT } from "@/components/learn/waiting-label";
 import { XRayPanel } from "@/components/learn/XRayPanel";
 import { displayTitle } from "@/lib/derive";
 import { mainPathOf } from "@/lib/lesson-map";
@@ -88,7 +89,12 @@ export function LearnSidePanel() {
           Feynman
           {left !== undefined ? ` (${left})` : ""}
           {preparing ? (
-            <span role="status" aria-label="Đang chuẩn bị câu hỏi" className="ml-1.5 inline-block animate-spin">
+            <span
+              role="status"
+              aria-label={run ? "Đang chuẩn bị câu hỏi" : `Đang chuẩn bị câu hỏi. ${PREPARE_QUESTIONS_HINT}`}
+              title={run ? undefined : PREPARE_QUESTIONS_HINT}
+              className="ml-1.5 inline-block animate-spin"
+            >
               ⟳
             </span>
           ) : null}
