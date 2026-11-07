@@ -1,9 +1,9 @@
 "use client";
 
 // Khung code cột giữa: hàng tab file (.ftab), dòng đường dẫn (.fpath), Monaco của bước đang xem.
-// docs/spec/30_UI.md Mục 5, docs/prototype.html `.ftabs` / `.fpath`. Không có hàng chip bước, không nút "Xem cả file".
+// docs/spec/30_UI.md Mục 5, docs/prototype.html `.ftabs` / `.fpath`.
 import dynamic from "next/dynamic";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { CONFIG } from "@/contracts/config";
 import { SelectionPopover } from "@/components/code/SelectionPopover";
 import { buildFileTabs, findStep, type CodeSelection } from "@/components/code/slice-model";
@@ -14,16 +14,11 @@ import { useWorkbenchStore } from "@/store/workbench";
 // Monaco chỉ tải khi vào /learn và mở một bài (chunk riêng, không SSR).
 const MonacoPane = dynamic(() => import("@/components/code/MonacoPane"), {
   ssr: false,
-  loading: () => <p className="p-4 text-sm text-muted">Đang tải khung code…</p>,
+  loading: () => <p className="p-4 text-sm text-[var(--muted)]">Đang tải khung code…</p>,
 });
 
 const BASE_FONT_SIZE = 13;
 const PRESENTATION_FONT_SIZE = Math.round(BASE_FONT_SIZE * CONFIG.UI_PRESENTATION_FONT_SCALE);
-
-const FRAME_CSS = `
-.sf-code{--code-bg:#0b1016;--code-text:#d6deea;--gutter:#5f6c80}
-html[data-theme="light"] .sf-code{--code-bg:#f8f9fb;--code-text:#1f2733;--gutter:#8a95a6}
-`;
 
 const MONO = "font-mono";
 
@@ -39,9 +34,7 @@ export function CodeSnippetViewer() {
   const setXrayStage = useWorkbenchStore((s) => s.setXrayStage);
 
   const [zoomed, setZoomed] = useState(false);
-  // Tab "Kiểu dữ liệu" mở cho đúng (bài, bước) này; đổi bước hay bài ⇒ tự về tab file của bước.
   const [dtoKey, setDtoKey] = useState<string | null>(null);
-  // Vùng chọn mới nhất do MonacoPane phát (kể cả vùng không hợp lệ: nút Giải thích hiện nhưng tắt, ghi chú 4).
   const [selection, setSelection] = useState<CodeSelection | null>(null);
   const closeSelection = useCallback(() => setSelection(null), []);
 
@@ -49,11 +42,39 @@ export function CodeSnippetViewer() {
   const analysis = activeNodeId ? analyses[activeNodeId] : undefined;
   const tabs = useMemo(() => (node ? buildFileTabs(node, analysis) : []), [node, analysis]);
 
+  // Lắng nghe sự kiện thử mẫu từ Duolingo Tour bước 3
+  useEffect(() => {
+    const handleTourSample = (e: Event) => {
+      const ce = e as CustomEvent<{ sample: string }>;
+      const sample = ce.detail?.sample || "productService.listProducts";
+      const codeContainer = document.getElementById("colMid");
+      const rect = codeContainer?.getBoundingClientRect() ?? new DOMRect(200, 200, 100, 20);
+      setSelection({
+        range: { line_start: 1, col_start: 1, line_end: 1, col_end: sample.length + 1 },
+        selected_text: sample,
+        step_number: storeStep ?? 1,
+        rect: new DOMRect(rect.left + 80, rect.top + 120, 180, 22),
+        invalid_reason: null,
+      });
+    };
+    window.addEventListener("sf:tour-sample-select", handleTourSample);
+    return () => window.removeEventListener("sf:tour-sample-select", handleTourSample);
+  }, [storeStep]);
+
+  // Lắng nghe sự kiện mở bước gợi ý: chuyển ngay về file code của bước đó (thoát tab DTO)
+  useEffect(() => {
+    const handleOpenHint = () => {
+      setDtoKey(null);
+    };
+    window.addEventListener("sf:open-hint-step", handleOpenHint);
+    return () => window.removeEventListener("sf:open-hint-step", handleOpenHint);
+  }, []);
+
   if (!node) {
     return <RepoOverview />;
   }
   if (node.trace_steps.length === 0) {
-    return <p className="p-4 text-sm text-muted">Bài này chưa có code để hiển thị.</p>;
+    return <p className="p-4 text-sm text-[var(--muted)]">Bài này chưa có code để hiển thị.</p>;
   }
 
   const step = findStep(node, storeStep) ?? node.trace_steps[0];
@@ -67,7 +88,7 @@ export function CodeSnippetViewer() {
     const tab = tabs.find((t) => t.key === key);
     if (!tab) return;
     if (tab.kind === "DTO") {
-      setDtoKey(stateKey); // Không đổi active_step.
+      setDtoKey(stateKey);
       return;
     }
     if (tab.first_step === null) return;
@@ -79,12 +100,10 @@ export function CodeSnippetViewer() {
   const beforeLines = showDto ? 0 : step.line_start - 1;
   const fontSize = zoomed ? PRESENTATION_FONT_SIZE : BASE_FONT_SIZE;
 
-
   return (
-    <div className="sf-code flex h-full min-h-0 flex-col bg-[var(--code-bg)] text-[var(--code-text)]">
-      <style>{FRAME_CSS}</style>
-
-      <div className="flex flex-none items-stretch border-b border-line bg-panel-2">
+    <div className="mid-frame sf-code flex h-full min-h-0 flex-col bg-[var(--code-bg)] text-[var(--code-text)]">
+      {/* Thanh File Tabs (.ftabs) */}
+      <div className="ftabs flex flex-none items-stretch bg-[var(--panel2)] overflow-x-auto">
         <div role="tablist" aria-label="Các file trong bài" className="flex min-w-0 flex-1 overflow-x-auto">
           {tabs.map((t) => {
             const selected = t.key === activeTabKey;
@@ -98,19 +117,19 @@ export function CodeSnippetViewer() {
                 aria-disabled={disabled || undefined}
                 title={t.kind === "FILE" ? t.path : t.name}
                 onClick={() => openTab(t.key)}
-                className={`${MONO} inline-flex flex-none items-center gap-[7px] whitespace-nowrap border-0 border-r border-b-2 border-r-line px-3.5 py-[9px] text-[12.5px] transition-colors hover:text-text ${
+                className={`ftab ${MONO} inline-flex flex-none items-center gap-2 whitespace-nowrap px-4 py-2.5 text-[12.5px] transition-all ${
                   selected
-                    ? "border-b-accent bg-[var(--code-bg)] text-text"
-                    : "border-b-transparent bg-transparent text-muted"
-                } ${disabled ? "cursor-not-allowed opacity-60" : ""}`}
+                    ? "bg-[var(--code-bg)] text-[var(--accent)] font-semibold shadow-sm"
+                    : "bg-transparent text-[var(--muted)] hover:text-[var(--text)] hover:bg-[var(--panel3)]"
+                } ${disabled ? "cursor-not-allowed opacity-50" : ""}`}
               >
-                {t.name}
+                <span>{t.name}</span>
                 {t.has_weak ? (
                   <span
                     role="img"
                     aria-label="Có điểm dở do AI nhận định"
                     title="Có điểm dở do AI nhận định"
-                    className="size-[7px] rounded-full bg-st-fail-fg"
+                    className="weak-dot h-[7px] w-[7px] rounded-full bg-[var(--fail)] shadow-[0_0_6px_var(--fail)]"
                   />
                 ) : null}
               </button>
@@ -121,17 +140,19 @@ export function CodeSnippetViewer() {
           type="button"
           aria-pressed={zoomed}
           onClick={() => setZoomed((z) => !z)}
-          className="flex-none border-l border-line px-3 text-xs font-semibold text-muted transition-colors hover:text-text"
+          className="flex-none px-3.5 text-xs font-semibold text-[var(--muted)] hover:text-[var(--text)] hover:bg-[var(--panel3)] transition-colors"
         >
           {zoomed ? "Thu nhỏ" : "Trình chiếu"}
         </button>
       </div>
 
+      {/* Dòng File Path (.fpath) */}
       <div
-        className={`${MONO} flex-none border-b border-line bg-[var(--code-bg)] px-3.5 py-[5px] text-[11.5px] text-muted`}
+        className={`fpath ${MONO} flex flex-none items-center gap-2 bg-[var(--code-bg)] px-4 py-1.5 text-[11.5px] text-[var(--muted)]`}
       >
-        {showDto ? "Kiểu dữ liệu mà các bước dùng" : step.file_path}
-        {!showDto && step.origin_note ? <span className="ml-2 text-subtle">· {step.origin_note}</span> : null}
+        <span className="text-[10px] font-bold text-[var(--faint)] tracking-wider uppercase">FILE:</span>
+        <span className="text-[var(--text)]">{showDto ? "Kiểu dữ liệu mà các bước dùng" : step.file_path}</span>
+        {!showDto && step.origin_note ? <span className="text-[var(--faint)]">· {step.origin_note}</span> : null}
       </div>
 
       {beforeLines > 0 ? (
@@ -140,7 +161,12 @@ export function CodeSnippetViewer() {
         </p>
       ) : null}
 
-      <div className="min-h-0 flex-1" role="region" aria-label={`Code của ${step.file_path.split("/").pop()}`}>
+      <div
+        id="codeScroll"
+        className="code-scroll min-h-0 flex-1 relative overflow-auto bg-[var(--code-bg)]"
+        role="region"
+        aria-label={`Code của ${step.file_path.split("/").pop()}`}
+      >
         <MonacoPane
           node={node}
           analysis={analysis}
@@ -159,7 +185,7 @@ export function CodeSnippetViewer() {
         </p>
       ) : null}
 
-      {/* Portal vào document.body: không nằm trong khung có transform/filter nên `position: fixed` không lệch. */}
+      {/* Portal vào document.body: không nằm trong khung có transform/filter */}
       {selection && selection.step_number === step.step_number ? (
         <SelectionPopover
           key={`${node.id}:${explanationKey(node.id, selection.step_number, selection.range)}`}

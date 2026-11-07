@@ -1,8 +1,7 @@
 "use client";
 
 // Ô trả lời Feynman. docs/spec/30_UI.md Mục 6.2 (UI-52), ghi chú 6 (K1, K2, K8).
-// Không khóa cứng: Nộp KHÔNG tắt vì câu ngắn (chỉ nhắc nhẹ, 0 request, không tính lượt); câu giống lần trước chỉ
-// cảnh báo vàng (server mới chặn); chỉ tắt khi đang chờ kết quả, chưa hết `SUBMIT_DEBOUNCE_MS`, hoặc hết hạn mức AI.
+// Bổ sung phản hồi xúc giác và TasteSkill 2.5 theo prototype.html.
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import type { QuestionState } from "@/contracts";
 import { CONFIG } from "@/contracts/config";
@@ -21,7 +20,6 @@ interface Notice {
   retry: boolean;
 }
 
-/** Cha đặt `key={run_id:question_index}` để mỗi câu có trạng thái nhắc/chờ riêng; nháp theo câu nằm ở `ui.drafts`. */
 export interface AnswerBoxProps {
   nodeId: string;
   runId: string;
@@ -49,7 +47,6 @@ export function AnswerBox({ nodeId, runId, question }: AnswerBoxProps) {
     [],
   );
 
-  // Đang chấm ⇒ đếm thời gian đã chờ để đổi chữ nút (PH-17). Hết `pending` hoặc gỡ component ⇒ dọn bộ hẹn giờ.
   const [waitedMs, setWaitedMs] = useState(0);
   useEffect(() => {
     if (!pending) return;
@@ -73,7 +70,6 @@ export function AnswerBox({ nodeId, runId, question }: AnswerBoxProps) {
     }
     const invalid = validateAnswerLength(draft);
     if (invalid) {
-      // K1: nhắc nhẹ dưới ô, 0 request, không tính lượt, nút vẫn bấm được.
       setNotice({ text: ERROR_MESSAGES[invalid], retry: false });
       area.current?.focus();
       return;
@@ -104,8 +100,8 @@ export function AnswerBox({ nodeId, runId, question }: AnswerBoxProps) {
 
   return (
     <div>
-      <label htmlFor={`ans-${key}`} className="mb-1 block text-xs text-muted">
-        Câu trả lời của bạn
+      <label htmlFor={`ans-${key}`} className="mb-1.5 block text-xs font-semibold text-[var(--muted)]">
+        Câu trả lời của bạn:
       </label>
       <textarea
         id={`ans-${key}`}
@@ -114,26 +110,26 @@ export function AnswerBox({ nodeId, runId, question }: AnswerBoxProps) {
         value={draft}
         maxLength={CONFIG.ANSWER_MAX_CHARS}
         disabled={quotaOut}
-        placeholder="Viết bằng lời của bạn…"
+        placeholder="Viết giải thích bằng lời của bạn (nhấn Ctrl+Enter để nộp)…"
         aria-describedby={`ans-note-${key}`}
         onChange={(e) => {
           setDraft(key, e.target.value);
           if (notice) setNotice(null);
         }}
         onKeyDown={onKeyDown}
-        className="min-h-[110px] w-full resize-y rounded-lg border border-line bg-bg px-[11px] py-[9px] leading-[1.55] text-text focus:border-accent focus:outline-2 focus:outline-accent disabled:opacity-60"
+        className="min-h-[110px] w-full resize-y rounded-lg border-none bg-[var(--code-bg)] px-3 py-2.5 leading-[1.6] text-[var(--text)] transition-colors focus:bg-[var(--panel2)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)] disabled:opacity-60"
       />
-      <div id={`ans-note-${key}`} className="mt-1 grid gap-1 text-[12.5px]">
-        <span className="text-right text-muted">
+      <div id={`ans-note-${key}`} className="mt-1.5 grid gap-1 text-[12.5px]">
+        <span className="text-right text-[var(--faint)] text-xs">
           {count}/{CONFIG.ANSWER_MAX_CHARS}
         </span>
         {quotaOut ? (
-          <p role="alert" className="m-0 text-st-fail-fg">
+          <p role="alert" className="m-0 text-[var(--fail)]">
             {QUOTA_MESSAGE}
           </p>
         ) : null}
         {notice ? (
-          <p role="alert" className="m-0 flex flex-wrap items-center gap-2 text-st-fail-fg">
+          <p role="alert" className="m-0 flex flex-wrap items-center gap-2 text-[var(--fail)]">
             <span>{notice.text}</span>
             {notice.retry ? (
               <Button variant="small" onClick={() => void submit()} disabled={locked}>
@@ -143,19 +139,24 @@ export function AnswerBox({ nodeId, runId, question }: AnswerBoxProps) {
           </p>
         ) : null}
         {duplicate && !notice ? (
-          <p role="status" className="m-0 rounded-md bg-hl-focus px-2 py-1 text-text">
+          <p role="status" className="m-0 rounded-md bg-[var(--hl-focus)] px-2.5 py-1.5 text-[var(--text)]">
             Câu này giống lần trước — hãy diễn giải khác hoặc chi tiết hơn. Bạn vẫn có thể nộp.
           </p>
         ) : null}
       </div>
-      <div className="mt-2 flex flex-wrap items-center gap-2.5">
-        <Button variant="primary" onClick={() => void submit()} disabled={locked}>
+      <div className="subrow mt-2.5 flex flex-wrap items-center gap-3">
+        <button
+          type="button"
+          onClick={() => void submit()}
+          disabled={locked}
+          className="duo-btn-primary"
+        >
           {pending ? <span role="status">{waitingLabel(waitedMs)}</span> : "Nộp câu trả lời"}
-        </Button>
-        <span className="text-sm text-muted">
+        </button>
+        <span className="text-xs text-[var(--muted)] font-medium">
           Lượt {question.attempts_used + 1}/{CONFIG.MAX_ATTEMPTS_PER_QUESTION}
         </span>
-        <span className="text-xs text-subtle">Ctrl+Enter để nộp</span>
+        <span className="text-xs text-[var(--faint)]">Ctrl+Enter để nộp nhanh</span>
       </div>
     </div>
   );

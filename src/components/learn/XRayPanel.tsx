@@ -2,6 +2,7 @@
 
 // Tab X-Ray (D-81): `ui.xray_stage` = ROLE ⇒ TOUR ⇒ SUMMARY. docs/spec/30_UI.md Mục 6.1.
 // Không khóa người dùng: chưa có phân tích thì tour vẫn đi từ `trace_steps` (kèm shimmer), lỗi có "Thử lại phân tích".
+// Đảm bảo min-w-0 và break-words để không bao giờ tràn khung.
 import { useEffect, type ReactNode } from "react";
 import { Button } from "@/components/ui/common";
 import { RoleCard } from "@/components/learn/RoleCard";
@@ -12,10 +13,8 @@ import { analysisOf, buildRoleCard, buildTourSteps, skillsAtStep } from "@/lib/r
 import { useWorkbenchStore } from "@/store/workbench";
 
 const TYPING_TARGET = "input, textarea, select, [contenteditable='true'], [contenteditable='']";
-/** Phím ← → đã có nghĩa riêng ở đây (đổi tab, đổi lựa chọn), không dùng để chuyển bước. */
 const ARROW_OWNER = "[role='tab'], [role='radio'], [role='tablist'], [role='radiogroup'], [role='menu'], [role='listbox']";
 
-/** Chuyển bước bằng nút hay phím đều đi qua đây: đổi bước ⇒ `ui.hl = []` (Mục 5), rồi đưa focus về tiêu đề. */
 function stepTour(direction: 1 | -1) {
   const s = useWorkbenchStore.getState();
   if (s.ui.hl.length > 0) s.setHl([]);
@@ -24,7 +23,6 @@ function stepTour(direction: 1 | -1) {
   requestAnimationFrame(() => document.getElementById("rp-title")?.focus({ preventScroll: true }));
 }
 
-/** ← → chuyển bước, trừ khi đang gõ, đang ở tab/radio, hoặc đang mở cửa sổ. */
 function onArrowKey(e: KeyboardEvent) {
   if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
   if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;
@@ -58,12 +56,10 @@ export function XRayPanel() {
   const analysis = analysisOf(slot);
   const step = activeStep ?? 1;
 
-  // Bài đang mở ⇒ đưa vào hàng phân tích cùng 1–2 bài kế tiếp (D-46); gọi lại vô hại, hàng tự khử trùng.
   useEffect(() => {
     if (activeNodeId) void requestAnalysis(activeNodeId);
   }, [activeNodeId, requestAnalysis]);
 
-  // Vùng tô thuộc bước khác bước đang xem ⇒ xóa. Bấm điểm hay/dở đổi bước rồi tô cùng lúc nên được giữ.
   useEffect(() => {
     if (hl.some((h) => h.step !== step)) setHl([]);
   }, [hl, step, setHl]);
@@ -81,29 +77,37 @@ export function XRayPanel() {
   const steps = buildTourSteps(node, slot);
   const current = steps.find((s) => s.step === step) ?? steps[0];
 
+  const jumpToStep = (targetStep: number) => {
+    const s = useWorkbenchStore.getState();
+    if (s.ui.hl.length > 0) s.setHl([]);
+    s.setActiveStep(targetStep);
+    s.setXrayStage("TOUR");
+    requestAnimationFrame(() => document.getElementById("rp-title")?.focus({ preventScroll: true }));
+  };
+
   const notice = failed ? (
     <div
       role="alert"
-      className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-st-fail-border bg-st-fail-bg px-3 py-2 text-sm"
+      className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-[var(--fail-bg)] text-[var(--fail)] px-3 py-2 text-sm min-w-0 break-words"
     >
-      <span>Chưa phân tích được</span>
+      <span className="min-w-0 break-words">Chưa phân tích được</span>
       <Button variant="small" onClick={retry}>
         Thử lại phân tích
       </Button>
     </div>
   ) : analysis?.skeleton_only ? (
-    <p role="status" className="m-0 rounded-lg border border-line bg-panel-2 px-3 py-2 text-sm text-muted">
+    <p role="status" className="m-0 rounded-lg bg-[var(--panel2)] px-3 py-2 text-sm text-[var(--muted)] min-w-0 break-words">
       AI chưa giải thích được bài này — chỉ hiện khung do code dựng
     </p>
   ) : fixture && !analysis ? (
-    <p role="status" className="m-0 text-xs text-muted">
+    <p role="status" className="m-0 text-xs text-[var(--muted)] min-w-0 break-words">
       Chưa có bản phân tích (chế độ fixture): tour dựng từ các bước của engine.
     </p>
   ) : null;
 
   const banner = returnQuestion ? (
-    <div className="flex flex-wrap items-center justify-between gap-2.5 rounded-[10px] border border-st-ready-border bg-hl-focus px-3 py-2 text-[13px]">
-      <span>Bạn đang xem lại theo gợi ý.</span>
+    <div className="flex flex-wrap items-center justify-between gap-2.5 rounded-[10px] bg-[var(--ready-bg)] text-[var(--ready)] px-3 py-2 text-[13px] min-w-0 break-words">
+      <span className="min-w-0 break-words">Bạn đang xem lại theo gợi ý.</span>
       <Button
         variant="small"
         onClick={() =>
@@ -136,13 +140,14 @@ export function XRayPanel() {
         pending={waiting}
         onPrev={() => stepTour(-1)}
         onNext={() => stepTour(1)}
+        onJumpStep={jumpToStep}
         chips={
           <SkillChips skills={skillsAtStep(slot, current.step)} profile={profile} serverClockOffsetMs={clockOffset} />
         }
       />
     ) : (
-      <div className="grid gap-3">
-        <p className="m-0 text-sm text-muted">Bài này chưa có bước nào để dẫn tour.</p>
+      <div className="grid gap-3 min-w-0">
+        <p className="m-0 text-sm text-[var(--muted)] break-words">Bài này chưa có bước nào để dẫn tour.</p>
         <Button onClick={() => stepTour(-1)}>← Thẻ vai trò</Button>
       </div>
     );
@@ -150,31 +155,30 @@ export function XRayPanel() {
     body = <LessonSummary node={node} analysis={slot} onBack={() => stepTour(-1)} />;
   } else {
     body = (
-      <div className="grid gap-3">
-        <h2 id="rp-title" tabIndex={-1} className="m-0 text-base font-bold outline-none">
+      <div className="grid gap-3 min-w-0">
+        <h2 id="rp-title" tabIndex={-1} className="m-0 text-base font-bold outline-none text-[var(--text)] break-words">
           Tóm tắt bài
         </h2>
         {waiting ? (
-          // Phần engine (bước, file, code) đã hiện ở tour; chỉ điểm hay / điểm dở của AI mới phải chờ.
-          <div role="status" className="grid gap-3">
+          <div role="status" className="grid gap-3 min-w-0">
             <div>
-              <div className="mb-1.5 text-xs font-bold uppercase tracking-wide text-st-done-fg">Điểm hay</div>
+              <div className="mb-1.5 text-xs font-bold uppercase tracking-wide text-[var(--done)]">Điểm hay</div>
               <div className="grid gap-1.5">
-                <span className="h-3 w-full animate-pulse rounded bg-line" />
-                <span className="h-3 w-4/5 animate-pulse rounded bg-line" />
+                <span className="h-3 w-full animate-pulse rounded bg-[var(--panel2)]" />
+                <span className="h-3 w-4/5 animate-pulse rounded bg-[var(--panel2)]" />
               </div>
             </div>
             <div>
-              <div className="mb-1.5 text-xs font-bold uppercase tracking-wide text-st-fail-fg">Điểm dở</div>
+              <div className="mb-1.5 text-xs font-bold uppercase tracking-wide text-[var(--fail)]">Điểm dở</div>
               <div className="grid gap-1.5">
-                <span className="h-3 w-full animate-pulse rounded bg-line" />
-                <span className="h-3 w-3/5 animate-pulse rounded bg-line" />
+                <span className="h-3 w-full animate-pulse rounded bg-[var(--panel2)]" />
+                <span className="h-3 w-3/5 animate-pulse rounded bg-[var(--panel2)]" />
               </div>
             </div>
-            <span className="text-xs text-muted">đang phân tích…</span>
+            <span className="text-xs text-[var(--muted)]">đang phân tích…</span>
           </div>
         ) : (
-          <p className="m-0 text-sm text-muted">Cần bản phân tích để có tóm tắt.</p>
+          <p className="m-0 text-sm text-[var(--muted)] break-words">Cần bản phân tích để có tóm tắt.</p>
         )}
         <div className="flex justify-between">
           <Button onClick={() => stepTour(-1)}>← Về Bước {steps.length}</Button>
@@ -184,7 +188,7 @@ export function XRayPanel() {
   }
 
   return (
-    <div className="grid gap-3 p-3.5">
+    <div className="grid gap-3 p-3.5 min-w-0 break-words overflow-hidden">
       {banner}
       {notice}
       {body}

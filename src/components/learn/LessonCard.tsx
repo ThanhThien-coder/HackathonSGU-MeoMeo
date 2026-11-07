@@ -1,20 +1,14 @@
 "use client";
 
-import clsx from "clsx";
+// Thẻ lát cắt bài học (.slice) theo prototype.html & TasteSkill 2.5
 import type { HybridArchitecturalNode, NodeStatus } from "@/contracts";
-import { StatusPill } from "@/components/ui/Page";
-import { Chip } from "@/components/ui/common";
 import { cardAction } from "@/lib/lesson-map";
 
-/**
- * Vạch màu bên trái + viền theo trạng thái (INV-11); chữ trạng thái luôn kèm theo trong `StatusPill`.
- * Đổi trạng thái (xong bài, mở khóa, chưa đạt) chỉ đổi màu có `transition`, không hiệu ứng phóng node (B20).
- */
-const STATUS_CARD: Record<NodeStatus, string> = {
-  LOCKED: "border-st-lock-border border-dashed border-l-st-lock-fg opacity-80",
-  AVAILABLE: "border-st-ready-border border-l-st-ready-fg",
-  COMPLETED: "border-st-done-border border-l-st-done-fg",
-  FAILED: "border-st-fail-border border-l-st-fail-fg",
+const STATUS_CLASS: Record<NodeStatus, string> = {
+  LOCKED: "st-locked text-[var(--locked)]",
+  AVAILABLE: "st-ready text-[var(--ready)]",
+  COMPLETED: "st-done text-[var(--done)]",
+  FAILED: "st-fail text-[var(--fail)]",
 };
 
 const STATUS_LABEL: Record<NodeStatus, string> = {
@@ -31,19 +25,15 @@ export interface LessonCardProps {
     HybridArchitecturalNode,
     "id" | "title_evidence" | "title_source" | "node_type" | "is_capstone"
   >;
-  /** Tên hiển thị đã qua `displayTitle` (có "~", đã cắt). */
   title: string;
   status: NodeStatus;
   hasWarning: boolean;
-  /** Tên các node cha FAILED / phân tích lỗi (tooltip ⚠). */
   weakNames: string[];
-  /** Tên các node cha chưa thông (dòng "Cần xong: …" của bài khóa). */
   blockedNames: string[];
   isStart: boolean;
   active: boolean;
   analysis: CardAnalysis;
   onOpen: (nodeId: string) => void;
-  /** Bấm bài `LOCKED`: chỉ báo, 0 request. */
   onBlocked: (nodeId: string) => void;
   onRetryAnalysis: (nodeId: string) => void;
 }
@@ -86,7 +76,7 @@ export function LessonCard({
     .join(", ");
 
   return (
-    <div className="group">
+    <div className="group relative">
       <button
         type="button"
         title={tooltip}
@@ -94,49 +84,72 @@ export function LessonCard({
         aria-disabled={action.ariaDisabled || undefined}
         aria-current={active ? "true" : undefined}
         onClick={() => (action.kind === "OPEN" ? onOpen(node.id) : onBlocked(node.id))}
-        className={clsx(
-          "block w-full rounded-[10px] border border-l-4 bg-panel px-3 py-2 text-left transition-[color,background-color,border-color,opacity] duration-300 ease-out motion-reduce:transition-none hover:border-muted",
-          STATUS_CARD[status],
-          active && "outline-2 outline-offset-0 outline-ink",
-        )}
+        className={`slice block w-full text-left rounded-[10px] p-3 relative transition-all cursor-pointer ${
+          active
+            ? "sel bg-[var(--panel2)] shadow-sm before:content-[''] before:absolute before:left-0 before:top-2.5 before:bottom-2.5 before:w-[3px] before:rounded-r-[3px] before:bg-[var(--accent)]"
+            : "bg-[var(--panel)] hover:bg-[var(--panel2)] hover:-translate-y-0.5"
+        } ${status === "LOCKED" ? "opacity-60" : ""}`}
       >
-        <span className="flex flex-wrap items-baseline gap-2">
+        <div className="s-top flex items-baseline gap-2 flex-wrap">
           {hasWarning ? (
             <span
               role="img"
               aria-label={`Node trước chưa vững: ${weakNames.join(", ")}`}
               title={`Node trước chưa vững: ${weakNames.join(", ")}`}
-              className="text-amber"
+              className="text-[var(--ready)]"
             >
               ⚠
             </span>
           ) : null}
-          <span className="text-[15px] font-semibold text-text">{title}</span>
+          <span className="s-name text-[14px] font-semibold text-[var(--text)]">{title}</span>
           {node.is_capstone ? (
-            <span role="img" aria-label="bài quan trọng" className="text-amber">
-              ★
+            <span role="img" aria-label="bài quan trọng" className="star text-[var(--ready)] font-bold text-xs">
+              ★ (Trọng tâm)
             </span>
           ) : null}
-          {node.node_type === "ALGORITHMIC_CORE" ? <Chip tone="violet">Thuật toán</Chip> : null}
+          {inferred ? (
+            <span className="ai-tag text-[10px] font-medium text-[var(--muted)] rounded-full px-2 py-0.5 bg-[var(--panel3)]">
+              AI đặt tên
+            </span>
+          ) : null}
+        </div>
+
+        <span className="s-code block font-mono text-[11.5px] text-[var(--muted)] mt-1 word-break-all">
+          {node.title_evidence}
         </span>
-        <span className="mt-0.5 block font-mono text-[11.5px] text-muted">{node.title_evidence}</span>
-        <span className="mt-1.5 flex flex-wrap items-center gap-2">
-          <StatusPill status={status} />
-          {isStart ? <Chip tone="accent">Bắt đầu</Chip> : null}
-          {analysis === "PENDING" ? <span className="text-xs text-muted">đang phân tích…</span> : null}
-          {analysis === "FAILED" ? <span className="text-xs text-st-fail-fg">Chưa phân tích được</span> : null}
-        </span>
+
+        <div className={`s-st flex items-center gap-2 mt-2 text-xs font-semibold ${STATUS_CLASS[status]}`}>
+          <span
+            className={`dot h-2 w-2 rounded-full ${
+              status === "AVAILABLE" ? "bg-[var(--ready)] shadow-[0_0_6px_var(--ready)]" : "bg-currentColor"
+            }`}
+          />
+          <span>{STATUS_LABEL[status]}</span>
+          {isStart ? (
+            <span className="text-[10.5px] rounded-full bg-[var(--hl-step)] text-[var(--accent)] px-2 py-0.5 font-bold">
+              Bắt đầu
+            </span>
+          ) : null}
+          {analysis === "PENDING" ? (
+            <span className="text-[11px] font-normal text-[var(--muted)]">đang phân tích…</span>
+          ) : null}
+          {analysis === "FAILED" ? (
+            <span className="text-[11px] font-normal text-[var(--fail)]">Chưa phân tích được</span>
+          ) : null}
+        </div>
+
         {action.hint ? (
-          <span className="mt-1.5 hidden border-t border-dashed border-line pt-1 text-xs text-muted group-focus-within:block group-hover:block">
+          <div className="need mt-2 text-xs text-[var(--muted)] border-t border-[var(--panel3)] pt-1.5">
             {action.hint}
-          </span>
+          </div>
         ) : null}
       </button>
+
       {analysis === "FAILED" ? (
         <button
           type="button"
           onClick={() => onRetryAnalysis(node.id)}
-          className="mt-1 rounded-md border border-line-strong bg-btn px-2.5 py-1 text-xs font-semibold text-text transition-colors hover:bg-btn-hover"
+          className="tbtn mt-1 text-xs py-1 px-2 text-[var(--text)]"
         >
           Thử lại phân tích
         </button>

@@ -1,7 +1,6 @@
 "use client";
 
-// Chip kỹ năng của bước đang xem + thanh mài mòn kiểu Duolingo (D-35, BKT-24). Chỉ hiển thị: không nút ôn,
-// không đổi màu node. Bấm chip chỉ hiện `skills[].reason` (không popover thẻ khái niệm, B11).
+// Chip khái niệm của bước đang xem theo prototype.html & TasteSkill 2.5
 import { useMemo, useState } from "react";
 import type { AnalysisSkill, LearnerCognitiveProfile } from "@/contracts";
 import { CONCEPT_CARDS } from "@/components/how-it-works/concept-cards";
@@ -10,26 +9,22 @@ import { getDecayedMastery, isDecaying, tierOf } from "@/lib/bkt-engine";
 export interface SkillChipsProps {
   skills: AnalysisSkill[];
   profile: LearnerCognitiveProfile | null;
-  /** `server_clock_offset_ms`: `now = Date.now() + offset`. */
   serverClockOffsetMs: number;
 }
 
 const TIER_LABELS = { NOVICE: "Mới học", PRACTITIONER: "Đang vững", ARCHITECT: "Thành thạo" } as const;
-/** Chân độ đậm: kỹ năng rất cũ vẫn thấy được thanh. */
 const MIN_OPACITY = 0.3;
 
 interface ChipView {
   key: string;
   skill: AnalysisSkill;
   label: string;
-  /** null khi chưa có hồ sơ ⇒ không vẽ thanh. */
   bar: { decayed: number; base: number; opacity: number; decaying: boolean; tier: keyof typeof TIER_LABELS } | null;
 }
 
 export function SkillChips({ skills, profile, serverClockOffsetMs }: SkillChipsProps) {
-  const [openKey, setOpenKey] = useState<string | null>(null);
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
 
-  // Tính lại khi `profile` đổi, không tính lại mỗi lần vẽ (đồng hồ chỉ cần chính xác tới mức ngày).
   const views = useMemo<ChipView[]>(() => {
     const now = Date.now() + serverClockOffsetMs;
     return skills.map((skill, i) => {
@@ -51,12 +46,15 @@ export function SkillChips({ skills, profile, serverClockOffsetMs }: SkillChipsP
   }, [skills, profile, serverClockOffsetMs]);
 
   if (views.length === 0) return null;
-  const open = views.find((v) => v.key === openKey) ?? null;
+  const activeView = views.find((v) => v.key === selectedKey) ?? null;
+  const concept = activeView ? CONCEPT_CARDS[activeView.skill.skill] : null;
 
   return (
-    <div>
-      <span className="mb-1.5 block text-xs text-muted">Kỹ năng ở bước này (bấm để xem thẻ khái niệm):</span>
-      <ul className="m-0 flex list-none flex-wrap items-start gap-2 p-0">
+    <div className="relative">
+      <span className="mb-2 block text-xs font-semibold text-[var(--muted)]">
+        Kỹ năng & Khái niệm kiến trúc (bấm để xem thẻ):
+      </span>
+      <div className="chips flex flex-wrap gap-2">
         {views.map((v) => {
           const faded = v.bar !== null && v.bar.decayed < v.bar.base - 0.00005;
           const tooltip = v.bar
@@ -64,40 +62,84 @@ export function SkillChips({ skills, profile, serverClockOffsetMs }: SkillChipsP
               ? `Điểm gốc ${v.bar.base.toFixed(4)} — đã giảm còn ${v.bar.decayed.toFixed(4)} vì lâu chưa luyện`
               : `Điểm ${v.bar.decayed.toFixed(4)} · ${TIER_LABELS[v.bar.tier]}`
             : v.skill.reason;
+
+          const isSelected = selectedKey === v.key;
+
           return (
-            <li key={v.key} className="flex flex-col gap-1">
+            <div key={v.key} className="flex flex-col gap-1">
               <button
                 type="button"
                 title={`${v.skill.reason}\n${v.bar ? tooltip : ""}`.trim()}
-                aria-expanded={openKey === v.key}
-                onClick={() => setOpenKey((k) => (k === v.key ? null : v.key))}
-                className="rounded-full border border-accent bg-hl-step px-3 py-[3px] text-[13px] text-text transition-colors hover:brightness-110"
+                aria-expanded={isSelected}
+                onClick={() => setSelectedKey((k) => (k === v.key ? null : v.key))}
+                className={`chip rounded-full px-3.5 py-1 text-[12.5px] font-semibold transition-all cursor-pointer ${
+                  isSelected
+                    ? "bg-[var(--accent)] text-[var(--on-accent)] font-bold shadow-sm"
+                    : "bg-[var(--panel2)] text-[var(--text)] hover:bg-[var(--panel3)] hover:-translate-y-0.5"
+                }`}
               >
                 {v.label}
                 {v.bar?.decaying ? (
-                  <span className="ml-1.5 text-[11px] font-semibold text-st-ready-fg">đang mài mòn</span>
+                  <span className="ml-1.5 text-[10.5px] font-bold text-[var(--ready)]">đang mài mòn</span>
                 ) : null}
               </button>
               {v.bar ? (
                 <span
                   role="img"
                   aria-label={`${v.label}: ${(v.bar.decayed * 100).toFixed(0)} phần trăm, ${TIER_LABELS[v.bar.tier]}`}
-                  className="block h-1 overflow-hidden rounded-full bg-line"
+                  className="block h-1 overflow-hidden rounded-full bg-[var(--panel3)]"
                 >
                   <i
-                    className="block h-full rounded-full bg-accent transition-[width,opacity] duration-500 ease-out motion-reduce:transition-none"
+                    className="block h-full rounded-full bg-[var(--accent)] transition-all duration-500 ease-out"
                     style={{ width: `${Math.min(100, v.bar.decayed * 100)}%`, opacity: v.bar.opacity }}
                   />
                 </span>
               ) : null}
-            </li>
+            </div>
           );
         })}
-      </ul>
-      {open ? (
-        <p className="m-0 mt-2 rounded-lg border border-line bg-panel-2 px-3 py-2 text-[13px] leading-relaxed" role="note">
-          <b>{open.label}:</b> {open.skill.reason}
-        </p>
+      </div>
+
+      {/* Popover thẻ khái niệm (.pop) nổi theo prototype.html */}
+      {activeView && concept ? (
+        <div
+          role="dialog"
+          aria-label={`Thẻ khái niệm: ${concept.name_vi}`}
+          className="pop card mt-3 rounded-xl bg-[var(--panel2)] p-4 shadow-lg text-[13px] leading-relaxed border-none animate-[fadeUp_0.18s_var(--ease-spring)]"
+        >
+          <div className="flex items-start justify-between gap-2 border-b border-transparent pb-2 mb-2">
+            <h3 className="text-[15px] font-bold text-[var(--text)] m-0">
+              {concept.name_vi} <code className="text-[11px] font-mono ml-1">{concept.skill}</code>
+            </h3>
+            <button
+              type="button"
+              aria-label="Đóng"
+              onClick={() => setSelectedKey(null)}
+              className="text-xs text-[var(--muted)] hover:text-[var(--text)] px-1.5 py-0.5 rounded bg-[var(--panel3)]"
+            >
+              ✕
+            </button>
+          </div>
+
+          <dl className="m-0 space-y-2">
+            <div>
+              <dt className="text-[11px] font-bold text-[var(--muted)] uppercase tracking-wide">Là gì</dt>
+              <dd className="m-0 text-[var(--text)] mt-0.5">{concept.what}</dd>
+            </div>
+            <div>
+              <dt className="text-[11px] font-bold text-[var(--muted)] uppercase tracking-wide">Ví dụ đời thường</dt>
+              <dd className="m-0 text-[var(--muted)] mt-0.5">{concept.analogy}</dd>
+            </div>
+            <div>
+              <dt className="text-[11px] font-bold text-[var(--muted)] uppercase tracking-wide">Vì sao quan trọng</dt>
+              <dd className="m-0 text-[var(--muted)] mt-0.5">{concept.why}</dd>
+            </div>
+            <div className="pt-1 border-t border-[var(--panel3)]">
+              <dt className="text-[11px] font-bold text-[var(--accent)] uppercase tracking-wide">Trong bài này (AI)</dt>
+              <dd className="m-0 text-[var(--text)] mt-0.5">{activeView.skill.reason}</dd>
+            </div>
+          </dl>
+        </div>
       ) : null}
     </div>
   );

@@ -1,9 +1,9 @@
 "use client";
 
-// Nội dung tab Feynman. docs/spec/30_UI.md Mục 6.2, 7.4 (bước 2–3), 7.5.
-// Mở tab ⇒ `loadRun` (store gọi `enrichNodeSafe`); chờ ⇒ "Đang chuẩn bị câu hỏi…"; lỗi ⇒ "Thử lại".
-// Không có hộp thoại kết quả: mọi thứ hiện trong cột (ghi chú 5).
+// Nội dung tab Feynman Arena. docs/spec/30_UI.md Mục 6.2, 7.4, 7.5.
+// Bổ sung Bộ nấc bậc người học (.seg) và TasteSkill 2.5 theo prototype.html.
 import { useEffect, useState } from "react";
+import type { PersonaMode } from "@/contracts";
 import { AnswerBox } from "@/components/learn/AnswerBox";
 import { Eval, type AttemptEntry } from "@/components/learn/Eval";
 import {
@@ -23,6 +23,12 @@ import { useWorkbenchStore } from "@/store/workbench";
 
 const NO_ENTRIES: AttemptEntry[] = [];
 
+const PERSONA_LEVELS: Array<{ mode: PersonaMode; label: string }> = [
+  { mode: "NEWBIE", label: "Mới học" },
+  { mode: "MID_LEVEL", label: "Đã làm" },
+  { mode: "SENIOR_RUSTY", label: "Kiến trúc sư" },
+];
+
 export function FeynmanQuestionSection() {
   const nodeId = useWorkbenchStore((s) => s.active_node_id);
   const run = useWorkbenchStore((s) => (s.active_node_id ? s.runs[s.active_node_id] : undefined));
@@ -35,13 +41,36 @@ export function FeynmanQuestionSection() {
   const changes = useWorkbenchStore((s) => s.ui.last_changes);
   const loadRun = useWorkbenchStore((s) => s.loadRun);
   const skipQuestion = useWorkbenchStore((s) => s.skipQuestion);
+
+  const offline = useWorkbenchStore((s) => s.is_offline_mode);
+  const offlinePersona = useWorkbenchStore((s) => s.ui.offline_persona);
+  const setOfflinePersona = useWorkbenchStore((s) => s.setOfflinePersona);
+  const switchPersona = useWorkbenchStore((s) => s.switchPersona);
+
   const [skipping, setSkipping] = useState(false);
+  const [selectedPersona, setSelectedPersona] = useState<PersonaMode>(
+    offline ? offlinePersona : "NEWBIE"
+  );
 
   const hasRun = run !== undefined;
   const status = nodeState?.status;
   const lastRunOpen = nodeState?.last_run?.finished_at === null;
 
-  // Mở tab ⇒ tải câu hỏi nếu chưa có run (store tự kiểm điều kiện, gọi lại vô hại).
+  useEffect(() => {
+    if (offline) {
+      setSelectedPersona(offlinePersona);
+    }
+  }, [offline, offlinePersona]);
+
+  const handlePersonaChange = async (mode: PersonaMode) => {
+    setSelectedPersona(mode);
+    if (offline) {
+      setOfflinePersona(mode);
+    } else {
+      await switchPersona(mode);
+    }
+  };
+
   useEffect(() => {
     if (nodeId && !hasRun && (status === "AVAILABLE" || lastRunOpen)) void loadRun(nodeId);
   }, [nodeId, hasRun, status, lastRunOpen, loadRun]);
@@ -51,16 +80,16 @@ export function FeynmanQuestionSection() {
   if (!run) {
     if (preparing) {
       return (
-        <p role="status" className="m-0 p-4 text-sm text-muted">
+        <p role="status" className="m-0 p-4 text-sm text-[var(--muted)]">
           Đang chuẩn bị câu hỏi…
-          <span className="mt-1 block text-xs text-subtle">{PREPARE_QUESTIONS_HINT}</span>
+          <span className="mt-1 block text-xs text-[var(--faint)]">{PREPARE_QUESTIONS_HINT}</span>
         </p>
       );
     }
     if ((status === "COMPLETED" || status === "FAILED") && nodeState?.last_run) return <RunReadOnly nodeId={nodeId} />;
     if (loadError) {
       return (
-        <div role="alert" className="grid gap-2 p-4 text-sm">
+        <div role="alert" className="grid gap-2 p-4 text-sm text-[var(--fail)]">
           <p className="m-0">{loadError.message}</p>
           <div>
             <Button variant="small" onClick={() => void loadRun(nodeId)}>
@@ -71,8 +100,12 @@ export function FeynmanQuestionSection() {
       );
     }
     return (
-      <div className="grid gap-2 p-4 text-sm text-muted">
-        <p className="m-0">{analysis && analysis !== "PENDING" ? "Chưa có câu hỏi cho bài này." : "Cần bản phân tích trước khi đặt câu hỏi."}</p>
+      <div className="grid gap-2 p-4 text-sm text-[var(--muted)]">
+        <p className="m-0">
+          {analysis && analysis !== "PENDING"
+            ? "Chưa có câu hỏi cho bài này."
+            : "Cần bản phân tích trước khi đặt câu hỏi."}
+        </p>
         {analysis && analysis !== "PENDING" && analysis !== "FAILED" ? (
           <div>
             <Button variant="small" onClick={() => void loadRun(nodeId)}>
@@ -86,7 +119,7 @@ export function FeynmanQuestionSection() {
 
   const questions = visibleQuestions(run.questions.map((q) => q.state));
   const metaOf = new Map(run.questions.map((q) => [q.question_index, q]));
-  if (questions.length === 0) return <p className="m-0 p-4 text-sm text-muted">Bài này chưa có câu hỏi hiển thị.</p>;
+  if (questions.length === 0) return <p className="m-0 p-4 text-sm text-[var(--muted)]">Bài này chưa có câu hỏi hiển thị.</p>;
 
   const firstOpen = questions.find((q) => !q.finished);
   const current =
@@ -101,15 +134,41 @@ export function FeynmanQuestionSection() {
   return (
     <div className="grid gap-3 p-3.5">
       <h2 id="rp-title" tabIndex={-1} className="sr-only outline-none">
-        Trả lời bằng lời của bạn
+        Vũ đài phản biện Feynman
       </h2>
+
+      {/* Bộ chuyển bậc người học (.seg) theo prototype.html */}
+      <div>
+        <span className="lbl text-xs font-semibold text-[var(--muted)] mb-1.5 block">
+          Bậc người học (Persona):
+        </span>
+        <div className="seg" role="radiogroup" aria-label="Bậc người học">
+          {PERSONA_LEVELS.map((lvl) => {
+            const isChecked = selectedPersona === lvl.mode;
+            return (
+              <button
+                key={lvl.mode}
+                type="button"
+                role="radio"
+                aria-checked={isChecked}
+                className={isChecked ? "active" : ""}
+                onClick={() => void handlePersonaChange(lvl.mode)}
+              >
+                {lvl.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
       <QuestionChips questions={questions} activeIndex={current.question_index} onSelect={pick} />
 
-      <div className="rounded-xl border border-line bg-panel-2 p-3">
-        <span className="mb-1 block text-xs text-muted">
+      {/* Thẻ câu hỏi (.card) */}
+      <div className="card rounded-xl bg-[var(--panel2)] p-4 shadow-sm border-none">
+        <span className="mb-1 block text-xs font-bold uppercase tracking-wider text-[var(--muted)]">
           Câu {pos + 1}/{questions.length} · {FOCUS_LABELS[current.focus]}
         </span>
-        <p className="m-0 text-[15.5px] font-semibold leading-relaxed">
+        <p className="qtext m-0 text-[15px] font-semibold leading-relaxed text-[var(--text)]">
           <PlainText text={question?.feynman_question ?? current.feynman_question} />
         </p>
       </div>
@@ -142,14 +201,22 @@ export function FeynmanQuestionSection() {
             change={changes[key]}
           />
           {next ? (
-            <Button variant="primary" className="w-full py-2.5 text-[15px]" onClick={() => pick(next.question_index)}>
-              Sang câu {circled(pos + 2)} →
-            </Button>
+            <div className="mt-1">
+              <button
+                type="button"
+                className="duo-btn-primary w-full py-3 text-[14px]"
+                onClick={() => pick(next.question_index)}
+              >
+                Sang câu {circled(pos + 2)} →
+              </button>
+            </div>
           ) : null}
         </>
       )}
 
-      {questions.every((q) => q.finished) ? <RunSummary nodeId={nodeId} questions={run.questions.map((q) => q.state)} /> : null}
+      {questions.every((q) => q.finished) ? (
+        <RunSummary nodeId={nodeId} questions={run.questions.map((q) => q.state)} />
+      ) : null}
     </div>
   );
 }

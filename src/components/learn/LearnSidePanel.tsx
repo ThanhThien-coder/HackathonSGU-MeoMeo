@@ -1,7 +1,6 @@
 "use client";
 
-// Cột phải: 2 tab X-Ray / Feynman (`active_tab`). docs/spec/30_UI.md Mục 6.
-// Nội dung tab Feynman do PH-08 nối; ở đây chỉ giữ chỗ và cổng bật/tắt.
+// Cột phải: 2 tab X-Ray / Feynman (`active_tab`). docs/spec/30_UI.md Mục 6, prototype.html.
 import type { KeyboardEvent } from "react";
 import { FeynmanQuestionSection } from "@/components/learn/FeynmanQuestionSection";
 import { PREPARE_QUESTIONS_HINT } from "@/components/learn/waiting-label";
@@ -10,9 +9,6 @@ import { displayTitle } from "@/lib/derive";
 import { mainPathOf } from "@/lib/lesson-map";
 import { analysisOf } from "@/lib/role-card";
 import { useWorkbenchStore } from "@/store/workbench";
-
-const TAB =
-  "border-0 border-b-2 bg-transparent px-3.5 py-[11px] font-semibold transition-colors hover:text-text aria-disabled:cursor-not-allowed aria-disabled:opacity-50";
 
 export function LearnSidePanel() {
   const result = useWorkbenchStore((s) => s.result);
@@ -31,11 +27,11 @@ export function LearnSidePanel() {
         result.nodes.find((n) => progress?.nodes[n.id]?.status === "AVAILABLE"))
       : undefined;
     return (
-      <div className="p-6 text-muted">
-        <h2 id="rp-title" tabIndex={-1} className="mb-1.5 text-base font-bold text-text outline-none">
+      <div className="p-6 text-[var(--muted)]">
+        <h2 id="rp-title" tabIndex={-1} className="mb-1.5 text-base font-bold text-[var(--text)] outline-none">
           Chưa chọn bài
         </h2>
-        <p className="m-0">
+        <p className="m-0 text-sm">
           Chọn một bài ở bản đồ bên trái{first ? `, hoặc bấm “Bắt đầu với: ${displayTitle(first, overview === "PENDING" ? null : overview)}”` : ""}.
         </p>
       </div>
@@ -43,7 +39,6 @@ export function LearnSidePanel() {
   }
 
   const feynmanReady = analysisOf(analyses[activeNodeId]) !== null;
-  // Tab Feynman tắt khi chưa có bản phân tích ⇒ luôn rơi về X-Ray, không để cột trống.
   const tab = activeTab === "FEYNMAN" && feynmanReady ? "FEYNMAN" : "XRAY";
   const left = run?.questions.filter((q) => !q.state.finished && q.state.ended_by !== "DROPPED").length;
 
@@ -57,12 +52,13 @@ export function LearnSidePanel() {
   };
 
   return (
-    <div>
+    <div className="min-w-0">
+      {/* Thanh tab X-Ray / Feynman dính cố định đỉnh cột (.rtabs) */}
       <div
         role="tablist"
         aria-label="X-Ray và Feynman"
         onKeyDown={onTabKey}
-        className="sticky top-0 z-[3] flex border-b border-line bg-panel px-2"
+        className="rtabs sticky top-0 z-10 flex bg-[var(--panel)] px-3 border-none min-w-0 overflow-x-auto"
       >
         <button
           id="rtab-XRAY"
@@ -70,9 +66,13 @@ export function LearnSidePanel() {
           role="tab"
           aria-selected={tab === "XRAY"}
           onClick={() => setActiveTab("XRAY")}
-          className={`${TAB} ${tab === "XRAY" ? "border-b-accent text-text" : "border-b-transparent text-muted"}`}
+          className={`rtab py-3 px-4 text-[13.5px] font-semibold transition-all whitespace-nowrap ${
+            tab === "XRAY"
+              ? "text-[var(--accent)] font-bold border-b-2 border-[var(--accent)]"
+              : "text-[var(--muted)] hover:text-[var(--text)] border-b-2 border-transparent"
+          }`}
         >
-          X-Ray
+          Luồng code (X-Ray)
         </button>
         <button
           id="rtab-FEYNMAN"
@@ -84,9 +84,13 @@ export function LearnSidePanel() {
           onClick={() => {
             if (feynmanReady) setActiveTab("FEYNMAN");
           }}
-          className={`${TAB} ${tab === "FEYNMAN" ? "border-b-accent text-text" : "border-b-transparent text-muted"}`}
+          className={`rtab py-3 px-4 text-[13.5px] font-semibold transition-all whitespace-nowrap ${
+            tab === "FEYNMAN"
+              ? "text-[var(--accent)] font-bold border-b-2 border-[var(--accent)]"
+              : "text-[var(--muted)] hover:text-[var(--text)] border-b-2 border-transparent"
+          } ${!feynmanReady ? "opacity-50 cursor-not-allowed" : ""}`}
         >
-          Feynman
+          Vũ đài phản biện (Feynman)
           {left !== undefined ? ` (${left})` : ""}
           {preparing ? (
             <span
@@ -100,12 +104,9 @@ export function LearnSidePanel() {
           ) : null}
         </button>
       </div>
-      <div role="tabpanel" aria-labelledby={`rtab-${tab}`}>
-        {tab === "XRAY" ? (
-          <XRayPanel />
-        ) : (
-          <FeynmanQuestionSection />
-        )}
+
+      <div role="tabpanel" aria-labelledby={`rtab-${tab}`} className="min-w-0">
+        {tab === "XRAY" ? <XRayPanel /> : <FeynmanQuestionSection />}
       </div>
     </div>
   );

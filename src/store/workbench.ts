@@ -969,13 +969,17 @@ export const useWorkbenchStore = create<WorkbenchStore>()((set, get) => {
     },
 
     /** UI-32b: "Mở Bước {n} trong tour" từ gợi ý `CODE_POINTER`. */
-    openHintStep: (step) =>
+    openHintStep: (step) => {
       set((s) => ({
         active_tab: "XRAY",
         active_step: step,
         // Giữ nguyên `active_question_index` và `ui.drafts`: "Quay lại câu hỏi" về đúng câu, nháp còn đó.
         ui: { ...s.ui, xray_stage: "TOUR", return_question: true, hl: [] },
-      })),
+      }));
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("sf:open-hint-step", { detail: { step } }));
+      }
+    },
 
     setHl: (hl) => set((s) => ({ ui: { ...s.ui, hl } })),
     setDraft: (key, text) => set((s) => ({ ui: { ...s.ui, drafts: { ...s.ui.drafts, [key]: text } } })),
