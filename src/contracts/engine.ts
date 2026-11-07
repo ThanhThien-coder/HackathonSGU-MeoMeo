@@ -20,6 +20,12 @@ export interface ProjectFingerprint {
 export type NodeTitleSource = "ROUTE" | "ENTRY_SYMBOL" | "DOMAIN_TERMS" | "DIRECTORY" | "FILE_BASENAME" | "VIRTUAL";
 // Nhóm suy ra (UI thêm tiền tố "~"): DOMAIN_TERMS, DIRECTORY, FILE_BASENAME
 
+// Bước chỉ chạy khi một điều kiện đúng (nhánh phụ). Điều kiện lấy nguyên từ code, không dùng AI.
+export interface StepBranch {
+  kind: "IF" | "ELSE" | "SWITCH" | "TERNARY" | "CATCH" | "LOOP";
+  condition: string;            // Đoạn code điều kiện, 1 dòng, ≤ 80 ký tự
+}
+
 export interface ExecutionTraceStep {
   step_number: number;          // 1..n theo thứ tự gọi
   layer: ArchitecturalLayer;
@@ -30,6 +36,7 @@ export interface ExecutionTraceStep {
   snippet: string;              // ≤ CONFIG.STEP_MAX_LINES dòng, đã che secret, dòng bị lược = 1 marker comment
   snippet_line_map: number[];   // snippet_line_map[i] = số dòng gốc của dòng i trong snippet (marker ⇒ 0)
   origin_note?: string;         // File ảo từ .ipynb/.vue/.svelte: "cell 4" / "<script>" (SourceMapStore)
+  branch?: StepBranch | null;   // Thiếu hoặc null ⇒ luồng chính
 }
 
 export interface UncleBobMetrics {
