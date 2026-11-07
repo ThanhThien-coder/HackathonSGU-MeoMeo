@@ -45,7 +45,7 @@ const STATUS_VIEW: Record<
   { icon: string; label: string; cls: string }
 > = {
   LOCKED: {
-    icon: "🔒",
+    icon: "",
     label: "Khóa",
     cls: "border-dashed border-st-lock-border bg-st-lock-bg text-st-lock-fg",
   },

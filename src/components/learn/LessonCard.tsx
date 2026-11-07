@@ -43,7 +43,6 @@ export function LessonCard({
   title,
   status,
   hasWarning,
-  weakNames,
   blockedNames,
   isStart,
   active,
@@ -91,20 +90,11 @@ export function LessonCard({
         } ${status === "LOCKED" ? "opacity-60" : ""}`}
       >
         <div className="s-top flex items-baseline gap-2 flex-wrap">
-          {hasWarning ? (
-            <span
-              role="img"
-              aria-label={`Node trước chưa vững: ${weakNames.join(", ")}`}
-              title={`Node trước chưa vững: ${weakNames.join(", ")}`}
-              className="text-[var(--ready)]"
-            >
-              ⚠
-            </span>
-          ) : null}
+
           <span className="s-name text-[14px] font-semibold text-[var(--text)]">{title}</span>
           {node.is_capstone ? (
-            <span role="img" aria-label="bài quan trọng" className="star text-[var(--ready)] font-bold text-xs">
-              ★ (Trọng tâm)
+            <span className="star text-[var(--ready)] font-bold text-xs">
+              (Trọng tâm)
             </span>
           ) : null}
           {inferred ? (

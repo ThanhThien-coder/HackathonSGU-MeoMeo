@@ -10,8 +10,8 @@ const TOAST_MS = 5000;
 
 const KIND_VIEW: Record<UiToast["kind"], { icon: string; cls: string }> = {
   info: { icon: "ℹ", cls: "text-accent" },
-  success: { icon: "✓", cls: "text-st-done-fg" },
-  error: { icon: "⚠", cls: "text-st-fail-fg" },
+  success: { icon: "", cls: "text-st-done-fg" },
+  error: { icon: "", cls: "text-st-fail-fg" },
 };
 
 function ToastRow({ toast }: { toast: UiToast }) {

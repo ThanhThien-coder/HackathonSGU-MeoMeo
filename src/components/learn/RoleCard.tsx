@@ -20,21 +20,17 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
-export function RoleCard({ view, hasWarning = false, rolePending = false }: RoleCardProps) {
+export function RoleCard({ view, rolePending = false }: RoleCardProps) {
   return (
     <section aria-labelledby="rp-title" className="card rounded-xl bg-[var(--panel2)] p-4 shadow-sm border-none min-w-0 break-words">
       <h2 id="rp-title" tabIndex={-1} className="m-0 flex flex-wrap items-baseline gap-2 text-base font-bold outline-none text-[var(--text)] min-w-0 break-words">
-        {hasWarning ? (
-          <span role="img" aria-label="Node trước chưa vững" title="Node trước chưa vững" className="text-[var(--ready)] flex-none">
-            ⚠
-          </span>
-        ) : null}
+
         <span className="min-w-0 break-words">
           {view.name} · {view.evidence}
         </span>
         {view.is_capstone ? (
-          <span role="img" aria-label="bài quan trọng" className="text-[var(--ready)] font-bold text-sm flex-none">
-            ★ (Trọng tâm)
+          <span className="text-[var(--ready)] font-bold text-sm flex-none">
+            (Trọng tâm)
           </span>
         ) : null}
         {view.is_algorithmic ? <Chip tone="violet">Thuật toán</Chip> : null}

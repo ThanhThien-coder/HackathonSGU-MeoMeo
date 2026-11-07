@@ -32,11 +32,17 @@ export function OverviewContent({ titleId, onStarted }: OverviewContentProps) {
     if (!result) return null;
     const facts = buildOverviewFacts(result);
     const startId = startNodeId(result, progress);
+    const completedCount = progress
+      ? Object.values(progress.nodes).filter((n) => n.status === "COMPLETED").length
+      : 0;
+    const totalCount = result.nodes.length;
     return {
       lead: overviewLead(result, overview, facts),
       groups: overviewGroups(result, overview),
       startId,
       startTitle: startId ? overviewNodeTitle(result, overview, startId) : null,
+      completedCount,
+      totalCount,
     };
   }, [result, overview, progress]);
 
@@ -59,13 +65,18 @@ export function OverviewContent({ titleId, onStarted }: OverviewContentProps) {
         {view.groups.map((g) => (
           <div key={g.group_id} className="rounded-[10px] border border-line bg-panel-2 px-3 py-2.5">
             <b className="mb-0.5 block text-text">
-              {g.recommended ? "★ " : ""}
+              
               {g.name}
             </b>
             <small className="block break-words text-muted">{g.titles.join(" · ")}</small>
           </div>
         ))}
       </div>
+      {view.completedCount > 0 ? (
+        <div className="mb-3 rounded-lg bg-[var(--panel2)] p-2.5 text-xs text-[var(--text)]">
+          Đã mở lại phiên học: <b>{view.completedCount}/{view.totalCount} bài</b> đã hoàn thành.
+        </div>
+      ) : null}
       {view.startId && view.startTitle ? (
         <Button
           variant="primary"
@@ -75,7 +86,7 @@ export function OverviewContent({ titleId, onStarted }: OverviewContentProps) {
             onStarted?.();
           }}
         >
-          Bắt đầu với: {view.startTitle} →
+          {view.completedCount > 0 ? `Học tiếp: ${view.startTitle} →` : `Bắt đầu với: ${view.startTitle} →`}
         </Button>
       ) : null}
     </div>

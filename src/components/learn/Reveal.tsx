@@ -81,7 +81,7 @@ export function Reveal({ question, pointsCovered, change }: RevealProps) {
                       c === undefined ? "text-[var(--muted)]" : c ? "text-[var(--done)]" : "text-[var(--fail)]"
                     }`}
                   >
-                    {c === undefined ? "•" : c ? "✓" : "✗"}
+                    {c === undefined ? "•" : c ? "Đạt" : "Chưa đạt"}
                   </span>
                   <PlainText text={p} />
                 </li>

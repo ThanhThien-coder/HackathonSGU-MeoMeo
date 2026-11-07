@@ -97,10 +97,8 @@ export function LearnSidePanel() {
               role="status"
               aria-label={run ? "Đang chuẩn bị câu hỏi" : `Đang chuẩn bị câu hỏi. ${PREPARE_QUESTIONS_HINT}`}
               title={run ? undefined : PREPARE_QUESTIONS_HINT}
-              className="ml-1.5 inline-block animate-spin"
-            >
-              ⟳
-            </span>
+              className="ml-1.5 inline-block h-2.5 w-2.5 animate-spin rounded-full border-2 border-[var(--text)] border-t-transparent"
+            />
           ) : null}
         </button>
       </div>

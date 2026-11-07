@@ -36,9 +36,9 @@ export function RunSummary({ nodeId, questions }: RunSummaryProps) {
   const line = (mark: string, picked: QuestionState[]) =>
     picked.length > 0 ? `${mark} ${picked.map((q) => skillLabel(q.skill)).join(", ")}` : null;
   const lines = [
-    line("✅", visible.filter((q) => q.finished && q.outcome !== "FAILED" && !q.disputed)),
-    line("❌", visible.filter((q) => q.finished && q.outcome === "FAILED" && !q.disputed)),
-    line("🚩", visible.filter((q) => q.disputed)),
+    line("Đạt:", visible.filter((q) => q.finished && q.outcome !== "FAILED" && !q.disputed)),
+    line("Chưa đạt:", visible.filter((q) => q.finished && q.outcome === "FAILED" && !q.disputed)),
+    line("Khiếu nại:", visible.filter((q) => q.disputed)),
   ].filter((l): l is string => l !== null);
 
   const unlocked = newly.filter((id) => progress?.nodes[id] && progress.nodes[id].status !== "LOCKED");
@@ -60,7 +60,7 @@ export function RunSummary({ nodeId, questions }: RunSummaryProps) {
       }`}
     >
       <h3 className="m-0 text-[15px] font-bold">
-        {done ? `✓ Đã xong bài “${title}”` : `✗ Chưa đạt bài “${title}”`}
+        {done ? `Đã xong bài “${title}”` : `Chưa đạt bài “${title}”`}
       </h3>
       {lines.length > 0 ? <p className="m-0">{lines.join(" · ")}</p> : null}
       {done ? (
@@ -82,7 +82,7 @@ export function RunSummary({ nodeId, questions }: RunSummaryProps) {
           ))}
         </>
       ) : (
-        <p className="m-0">Có câu chưa đạt. Các bài sau vẫn mở, kèm ⚠.</p>
+        <p className="m-0">Có câu chưa đạt. Các bài sau vẫn mở.</p>
       )}
     </section>
   );

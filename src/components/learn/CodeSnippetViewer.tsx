@@ -4,7 +4,6 @@
 // docs/spec/30_UI.md Mục 5, docs/prototype.html `.ftabs` / `.fpath`.
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { CONFIG } from "@/contracts/config";
 import { SelectionPopover } from "@/components/code/SelectionPopover";
 import { buildFileTabs, findStep, type CodeSelection } from "@/components/code/slice-model";
 import { RepoOverview } from "@/components/learn/RepoOverview";
@@ -18,7 +17,6 @@ const MonacoPane = dynamic(() => import("@/components/code/MonacoPane"), {
 });
 
 const BASE_FONT_SIZE = 13;
-const PRESENTATION_FONT_SIZE = Math.round(BASE_FONT_SIZE * CONFIG.UI_PRESENTATION_FONT_SCALE);
 
 const MONO = "font-mono";
 
@@ -33,7 +31,6 @@ export function CodeSnippetViewer() {
   const setActiveStep = useWorkbenchStore((s) => s.setActiveStep);
   const setXrayStage = useWorkbenchStore((s) => s.setXrayStage);
 
-  const [zoomed, setZoomed] = useState(false);
   const [dtoKey, setDtoKey] = useState<string | null>(null);
   const [selection, setSelection] = useState<CodeSelection | null>(null);
   const closeSelection = useCallback(() => setSelection(null), []);
@@ -98,7 +95,7 @@ export function CodeSnippetViewer() {
   };
 
   const beforeLines = showDto ? 0 : step.line_start - 1;
-  const fontSize = zoomed ? PRESENTATION_FONT_SIZE : BASE_FONT_SIZE;
+  const fontSize = BASE_FONT_SIZE;
 
   return (
     <div className="mid-frame sf-code flex h-full min-h-0 flex-col bg-[var(--code-bg)] text-[var(--code-text)]">
@@ -124,26 +121,10 @@ export function CodeSnippetViewer() {
                 } ${disabled ? "cursor-not-allowed opacity-50" : ""}`}
               >
                 <span>{t.name}</span>
-                {t.has_weak ? (
-                  <span
-                    role="img"
-                    aria-label="Có điểm dở do AI nhận định"
-                    title="Có điểm dở do AI nhận định"
-                    className="weak-dot h-[7px] w-[7px] rounded-full bg-[var(--fail)] shadow-[0_0_6px_var(--fail)]"
-                  />
-                ) : null}
               </button>
             );
           })}
         </div>
-        <button
-          type="button"
-          aria-pressed={zoomed}
-          onClick={() => setZoomed((z) => !z)}
-          className="flex-none px-3.5 text-xs font-semibold text-[var(--muted)] hover:text-[var(--text)] hover:bg-[var(--panel3)] transition-colors"
-        >
-          {zoomed ? "Thu nhỏ" : "Trình chiếu"}
-        </button>
       </div>
 
       {/* Dòng File Path (.fpath) */}

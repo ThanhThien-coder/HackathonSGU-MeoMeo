@@ -62,8 +62,8 @@ export function QuestionChips({ questions, activeIndex, onSelect }: QuestionChip
               }`}
             >
               {circled(k)}
-              {q.finished ? (passed ? " ✓" : " ✗") : ""}
-              {q.disputed ? " 🚩" : ""}
+              
+              
             </button>
           );
         })}

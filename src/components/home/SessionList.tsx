@@ -33,7 +33,7 @@ function titleLine(s: LearningSessionSummary): string {
 
 /** Hàng 2: "3/7 node (1 ✗) · 2 giờ trước". */
 function progressLine(s: LearningSessionSummary, now: number): string {
-  return `${s.completed_count}/${s.total_nodes} node (${s.failed_count} ✗) · ${formatAgo(s.last_active_at, now)}`;
+  return `${s.completed_count}/${s.total_nodes} node (${s.failed_count} chưa đạt) · ${formatAgo(s.last_active_at, now)}`;
 }
 
 type LoadState = "idle" | "loading" | "failed";

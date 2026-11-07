@@ -32,7 +32,7 @@ export function RunReadOnly({ nodeId }: { nodeId: string }) {
                   {passed ? "Đạt" : "Chưa đạt"}
                 </span>
               ) : null}
-              {q.disputed ? " 🚩" : ""}
+              
             </div>
             <p className="m-0 text-[15.5px] font-semibold leading-relaxed">
               <PlainText text={q.feynman_question} />

@@ -126,7 +126,7 @@ html[data-theme="light"] .sf-code{--code-bg:#f8f9fb;--code-text:#1f2733;--gutter
 .sf-code .sf-bar-bad{box-shadow:inset 3px 0 0 var(--red)}
 .sf-code .sf-marker{opacity:.55;font-style:italic}
 .sf-code .sf-glyph-weak{display:flex;align-items:center;justify-content:center;cursor:help}
-.sf-code .sf-glyph-weak::before{content:"\\26A0";color:var(--amber);font-size:12px}
+.sf-code .sf-glyph-weak::before{content:"";display:block;width:6px;height:6px;border-radius:50%;background:var(--amber)}
 @keyframes sfFlash{0%,100%{background:transparent}25%,75%{background:rgba(56,189,248,0.35)}50%{background:rgba(56,189,248,0.15)}}
 .sf-code .sf-flash-line{animation:sfFlash .5s ease-in-out 3}
 .sf-code .sf-bar-flash{box-shadow:inset 4px 0 0 var(--accent)}

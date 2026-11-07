@@ -49,6 +49,7 @@ export function IngestBox() {
   const ingest = useWorkbenchStore((s) => s.ingest);
   const ingesting = useWorkbenchStore((s) => s.ui.ingesting);
   const storeError = useWorkbenchStore((s) => s.ui.ingest_error);
+  const pushToast = useWorkbenchStore((s) => s.pushToast);
 
   const [url, setUrl] = useState("");
   const [localError, setLocalError] = useState<LocalError | null>(null);
@@ -95,6 +96,15 @@ export function IngestBox() {
     } catch {
       // localStorage bị chặn: bỏ qua, vẫn chuyển trang.
     }
+
+    if (res.data.resumed) {
+      const completed = Object.values(res.data.progress.nodes).filter((n) => n.status === "COMPLETED").length;
+      const total = res.data.result.nodes.length;
+      pushToast(`Đã mở lại ${res.data.result.repo_name} — ${completed}/${total} bài đã hoàn thành`, "info");
+    } else if (res.data.from_cache) {
+      pushToast(`Đã tải kết quả lưu sẵn của ${res.data.result.repo_name}`, "info");
+    }
+
     router.push(`/learn?session=${encodeURIComponent(res.data.session_id)}`);
   }
 
