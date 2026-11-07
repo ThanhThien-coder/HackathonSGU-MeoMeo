@@ -6,6 +6,7 @@ import { useState, type CSSProperties, type ReactNode } from "react";
 import { CONFIG } from "@/contracts/config";
 import { LoginScreen } from "@/components/home/LoginScreen";
 import { CockpitHeader } from "@/components/learn/CockpitHeader";
+import { LearnSidePanel } from "@/components/learn/LearnSidePanel";
 import { LessonGraphPanel } from "@/components/learn/LessonGraphPanel";
 import { Button } from "@/components/ui/common";
 import { EmptyState } from "@/components/ui/Page";
@@ -134,11 +135,7 @@ export function LearnShell() {
           </p>
         </section>
         <aside hidden={!rightOpen} aria-label="X-Ray và Feynman" className={COLUMN}>
-          <p className="p-4 text-sm text-muted">
-            {activeTitle
-              ? "X-Ray và Feynman sẽ hiện ở bước sau."
-              : "Chưa chọn bài. Chọn một bài ở bản đồ bên trái."}
-          </p>
+          <LearnSidePanel />
         </aside>
       </main>
     </div>

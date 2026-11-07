@@ -1,7 +1,7 @@
 # 08 — Tiến độ từng phiếu
 
 > Bảng theo dõi trạng thái của **68 phiếu** (Thiện 19, Minh 13, Nhân 13, Phát 15, Quý 8). Mỗi người cập nhật dòng phiếu của mình ngay sau khi merge, rồi nhắn nhóm "đã merge <mã phiếu>" như `00_CAM_TAY_CHI_VIEC.md` Mục 3.
-> **Cập nhật lần cuối:** 07/11/2026, 14:30 (đối chiếu với `origin/main` và danh sách PR trên GitHub).
+> **Cập nhật lần cuối:** 07/11/2026, 15:30 (đối chiếu với `origin/main` tới PR #34 và danh sách PR trên GitHub).
 > Danh sách phiếu, giờ và cách làm gốc nằm ở `02_PHIEU_<TEN>.md`. File này chỉ ghi trạng thái, không đổi nội dung phiếu.
 
 ## Cách đọc
@@ -9,6 +9,7 @@
 | Ký hiệu | Nghĩa |
 | :-- | :-- |
 | ✅ | Đã merge vào `main` (ghi số PR) |
+| ◐ | Xong một phần: PR đã merge nhưng phiếu còn việc (ví dụ phần lõi đã có, route hoặc deploy chưa). Cột "Ghi chú" nói còn thiếu gì |
 | 🔄 | Đang làm: PR đang mở, hoặc nhánh đã push nhưng chưa có PR |
 | ⬜ | Chưa làm |
 | ❓ | Chưa thấy dấu vết trên git (phiếu làm tay, hoặc làm ngoài repo). Người phụ trách tự xác nhận |
@@ -17,16 +18,18 @@
 
 ## Tổng quan
 
-| Người | Xong | Đang làm | Chưa làm | Tổng | Phiếu tiếp theo |
-| :-- | :-: | :-: | :-: | :-: | :-- |
-| Thiện | 4 | 1 | 14 | 19 | TH-06 (đang mở PR #20), TH-04 và TH-19 chưa thấy dấu vết |
-| Minh | 3 | 0 | 10 | 13 | MI-04 |
-| Nhân | 4 | 1 | 8 | 13 | NH-05 (đã push nhánh, chưa mở PR) |
-| Phát | 5 | 0 | 10 | 15 | PH-06 |
-| Quý | 4 | 0 | 4 | 8 | QU-04 (làm tay, áp phích) |
-| **Cả đội** | **20** | **2** | **46** | **68** | |
+| Người | Xong ✅ | Một phần ◐ | Đang làm 🔄 | Chưa làm ⬜ | Tổng | Phiếu tiếp theo |
+| :-: | :-: | :-: | :-: | :-: | :-: | :-- |
+| Thiện | 5 | 1 | 0 | 13 | 19 | TH-07 (`/api/ingest`); TH-19 (pipeline); nốt deploy Cloud Run của TH-04 |
+| Minh | 4 | 0 | 0 | 9 | 13 | MI-05 |
+| Nhân | 4 | 4 | 0 | 5 | 13 | Mở PR route cho NH-05, NH-06, NH-07, NH-09 (chờ TH-07); NH-08 |
+| Phát | 7 | 0 | 0 | 8 | 15 | PH-08 (và gắn `LearnSidePanel`, `CodeSnippetViewer` vào `LearnShell`) |
+| Quý | 4 | 0 | 0 | 4 | 8 | QU-04 (làm tay, áp phích) |
+| **Cả đội** | **24** | **5** | **0** | **39** | **68** | |
 
-Ghi chú: các con số trên đếm theo PR đã merge trên `main`. Phiếu làm tay (không có PR) tính là ⬜ hoặc ❓ cho tới khi người phụ trách xác nhận.
+Ghi chú: các con số trên đếm theo PR đã merge trên `main`; hiện không còn PR nào đang mở. Phiếu làm tay (không có PR) tính là ⬜ hoặc ❓ cho tới khi người phụ trách xác nhận.
+
+**Điểm nghẽn hiện tại:** 4 phiếu của Nhân (NH-05, 06, 07, 09) đã xong phần lõi nhưng **chưa có route** trong `src/app/api/` (hiện chỉ có `health` và `me`). Các route này chờ **TH-07** (`src/server/session.ts`, `/api/ingest`) của Thiện, riêng route chấm bài còn chờ **TH-12** (`progress.ts`, ~22:00). Trước khi TH-07 xong, Phát chạy giao diện bằng `?fixture=1`.
 
 ## Thiện — trưởng tích hợp, Tầng 0 engine, deploy
 
@@ -35,11 +38,11 @@ Ghi chú: các con số trên đếm theo PR đã merge trên `main`. Phiếu l�
 | TH-01 | Khung dự án và commit đầu | 12:00 → 12:20 | ✅ | — | Đẩy thẳng `main` (commit khung dự án và commit `docs/`) |
 | TH-02 | Contracts phần chung và cờ menu | 12:20 → 13:00 | ✅ | #3 | |
 | TH-03 | CI tối thiểu và thử luồng PR | 13:00 → 13:20 | ✅ | #4 | |
-| TH-04 | Bản khung đầu tiên lên Cloud Run, có Vercel dự phòng | 13:20 → 14:30 | ❓ | — | Việc trên Cloud Run, không có PR. Thiện xác nhận cổng G2 |
+| TH-04 | Bản khung đầu tiên lên Cloud Run, có Vercel dự phòng | 13:20 → 14:30 | ◐ | #26 | Mới merge `/api/health`. Chưa thấy deploy Cloud Run, Vercel, Redirect URLs (cần `gcloud`, Thiện xác nhận cổng G2) |
 | TH-19 | Pipeline deploy: Dockerfile, 2 image, staging, smoke, duyệt production | 14:30 → 16:15 | ⬜ | — | Chạy song song TH-05, TH-06 |
 | TH-05 | Bảng DB, kết nối Postgres, lỗi API, log | 14:30 → 15:30 | ✅ | #16, #18 | #18 là sửa bổ sung: cho phép log lời gọi AI bản tối giản |
-| TH-06 | Đăng nhập GitHub và `/api/me` gọi 1 lần | 15:30 → 16:15 | 🔄 | #20 (mở) | Phát đang chờ để bật nút đăng nhập thật ở PH-04 |
-| TH-07 | `/api/ingest`, phiên học, snapshot và cache RAM (engine giả) | 16:15 → 17:00 | ⬜ | — | |
+| TH-06 | Đăng nhập GitHub và `/api/me` gọi 1 lần | 15:30 → 16:15 | ✅ | #20 | Làm sớm hơn kế hoạch. Phát có thể bật nút đăng nhập thật ở PH-04 |
+| TH-07 | `/api/ingest`, phiên học, snapshot và cache RAM (engine giả) | 16:15 → 17:00 | ⬜ | — | **Đang chặn** các route của Nhân (cần `src/server/session.ts`) |
 | TH-08 | Tầng 0 phần A: link, kiểm repo, tải zip | 17:00 → 18:00 | ⬜ | — | |
 | TH-09 | Tầng 0 phần B: giải nén, lọc, che secret, chọn file, vân tay tối giản | 18:00 → 19:15 | ⬜ | — | |
 | TH-10 | Ghép engine thật, lát dọc 1, deploy và kiểm Vertex AI | 19:15 → 20:00 | ⬜ | — | Cổng G3, G4 |
@@ -59,7 +62,7 @@ Ghi chú: các con số trên đếm theo PR đã merge trên `main`. Phiếu l�
 | MI-01 | Contracts engine và kiểu nối với Tầng 0 | 12:20 → 13:00 | ✅ | #8 | |
 | MI-02 | Parser Tree-sitter, bảng ngôn ngữ, grammar, bộ chạy thử | 13:00 → 14:00 | ✅ | #12 | |
 | MI-03 | Danh bạ tên và resolver TS/JS | 14:00 → 15:30 | ✅ | #19 | |
-| MI-04 | Đồ thị gọi hàm và điểm entry | 15:30 → 17:00 | ⬜ | — | |
+| MI-04 | Đồ thị gọi hàm và điểm entry | 15:30 → 17:00 | ✅ | #33 | Làm sớm. Còn sót ENG-23 phần NestJS `provide/useClass`; Java thuộc MI-08 |
 | MI-05 | Lát cắt, node và tên bài | 17:00 → 18:30 | ⬜ | — | |
 | MI-06 | Khử chu trình, xếp hạng, giữ tối đa 20 bài, nhóm và cạnh, điểm nhập engine | 18:30 → 19:30 | ⬜ | — | |
 | MI-07 | Chạy repo TS dự phòng, sửa bài lỗi, test tất định | 19:30 → 20:30 | ⬜ | — | |
@@ -78,11 +81,11 @@ Ghi chú: các con số trên đếm theo PR đã merge trên `main`. Phiếu l�
 | NH-02 | Fixture phản hồi AI cho giao diện | 13:00 → 13:30 | ✅ | #7 | |
 | NH-03 | Hàm thuần: BKT, kế hoạch câu hỏi, trạng thái node, độ giống, bộ lọc an toàn | 13:30 → 15:00 | ✅ | #5 | |
 | NH-04 | Lời gọi Gemini, hạn mức token, cổng gác bản nới | 15:00 → 16:45 | ✅ | #14 | |
-| NH-05 | `analyze-node`: X-Ray có điểm dở thật | 16:45 → 18:30 | 🔄 | chưa mở | Nhánh `nhan/nh-05` đã push. Phát cần API thật này cho PH-07 lúc 18:30 |
-| NH-06 | `enrich-node`: câu hỏi dễ hiểu cho người mới | 18:30 → 20:30 | ⬜ | — | |
-| NH-07 | `evaluate-feynman` và `reveal`: chấm bài không khóa gắt | 20:30 → 22:30 | ⬜ | — | |
+| NH-05 | `analyze-node`: X-Ray có điểm dở thật | 16:45 → 18:30 | ◐ | #28 | Xong lõi phân tích, sửa gọi Vertex express, chuyển model 3.8-flash → flash-lite. **Chưa có** route `analyze-node` (chờ TH-07). Cloud Run cần `GEMINI_BACKEND=vertex` + secret `GEMINI_API_KEY` |
+| NH-06 | `enrich-node`: câu hỏi dễ hiểu cho người mới | 18:30 → 20:30 | ◐ | #31 | Xong lõi. **Chưa có** route `enrich-node`; `createRun` đang ghi tạm bằng `db.tx`, đổi sang `progress.ts` sau TH-12. `ERR_AI_REJECTED` chưa nằm trong `RETRYABLE_CODES` |
+| NH-07 | `evaluate-feynman` và `reveal`: chấm bài không khóa gắt | 20:30 → 22:30 | ◐ | #34 | Xong lõi chấm bài và luật Đạt nới. **Chưa có** `evaluate.ts`, `reveal.ts` và 2 route (chờ TH-07, TH-12). Chưa gọi Gemini thật |
 | NH-08 | Ghép lát dọc 2 và chạy bài thử "giám khảo" | 22:30 → 23:30 | ⬜ | — | |
-| NH-09 | Giải thích đoạn chọn phía server | 23:30 → 00:30 | ⬜ | — | |
+| NH-09 | Giải thích đoạn chọn phía server | 23:30 → 00:30 | ◐ | #32 | Làm sớm. Xong lõi, **chưa có** route `explain-selection` và bước cắt lại vùng chọn từ snapshot. Chưa gọi Gemini thật |
 | NH-10 | Logic Offline và script ghi bundle; giữ quyền merge | 00:30 → 02:30 | ⬜ | — | Quyền merge 00:30–03:30 |
 | NH-11 | Duyệt tay output AI trên repo demo đã chốt | 02:30 → 04:00 | ⬜ | — | Làm tay |
 | NH-12 | Ghi bundle Offline trên bản đóng băng | 04:00 → 05:00 | ⬜ | — | Làm tay |
@@ -97,8 +100,8 @@ Ghi chú: các con số trên đếm theo PR đã merge trên `main`. Phiếu l�
 | PH-03 | Fixture bản đồ `shop-api` | 14:15 → 14:45 | ✅ | #13 | |
 | PH-04 | Trang chủ tối thiểu: đăng nhập, ô link, thả zip, đồng hồ quét | 14:45 → 15:45 | ✅ | #17 | Nút đăng nhập thật bật sau khi TH-06 (#20) merge |
 | PH-05 | Khung trang học 3 cột, thanh trên, bản đồ bài học | 15:45 → 17:15 | ✅ | #23, #22 | #22 thêm `CONFIG.UI_PANE_WIDTHS_PCT` vào contracts (Thiện đã merge) |
-| PH-06 | Khung code Monaco, tab theo file, code theo bước | 17:15 → 18:30 | ⬜ | — | |
-| PH-07 | Tour X-Ray: thẻ vai trò, từng bước, tóm tắt; hàng phân tích | 18:30 → 19:45 | ⬜ | — | Hạn cứng 19:45 (đường găng) |
+| PH-06 | Khung code Monaco, tab theo file, code theo bước | 17:15 → 18:30 | ✅ | #27 | Làm sớm. `CodeSnippetViewer` chưa gắn vào `LearnShell` |
+| PH-07 | Tour X-Ray: thẻ vai trò, từng bước, tóm tắt; hàng phân tích | 18:30 → 19:45 | ✅ | #30 | Làm sớm. **Chưa gắn** `LearnSidePanel` vào cột phải `LearnShell` (cột giữa và cột phải vẫn là chỗ giữ chỗ). Thanh mài mòn chưa thử vì fixture không có `profile` |
 | PH-08 | Feynman: câu hỏi, ô trả lời, kết quả trong cột, gợi ý, đáp án mẫu | 19:45 → 21:45 | ⬜ | — | |
 | PH-09 | Áp kết quả: đổi trạng thái node, mở khóa, toast, mài mòn | 21:45 → 22:45 | ⬜ | — | Hạn cứng 22:45 (đường găng) |
 | PH-10 | Nút "Giải thích" cho đoạn bôi đen | 22:45 → 23:45 | ⬜ | — | |
@@ -126,10 +129,10 @@ Ghi chú: các con số trên đếm theo PR đã merge trên `main`. Phiếu l�
 | Cổng | Giờ | Điều kiện | Tình trạng |
 | :-- | :-- | :-- | :-- |
 | G1 | 13:00 | Đủ 5 người có commit | ✅ Cả 5 đã có PR merge (xem `git shortlog -sn`) |
-| G2 | 14:00 | Cloud Run sống (TH-04) | ❓ Thiện xác nhận |
+| G2 | 14:00 | Cloud Run sống (TH-04) | ❓ Mới có `/api/health`. Thiện xác nhận deploy |
 | GP | 20:00, 00:00 | Pipeline deploy (TH-19) | ⬜ TH-19 chưa làm |
-| G3 | 20:15 | Vertex AI (TH-10) | ⬜ |
-| G4 | 20:00 | Lát dọc 1 (TH-10) | ⬜ Cần PH-07 trước 19:45 và NH-05 xong |
+| G3 | 20:15 | Vertex AI (TH-10) | ⬜ Nhân đã chạy thử Vertex express (số đo trong PR #28) |
+| G4 | 20:00 | Lát dọc 1 (TH-10) | ⬜ PH-07 và lõi NH-05 đã xong. Còn thiếu TH-07, route `analyze-node`, gắn `LearnSidePanel` vào `LearnShell` |
 | G7 | 04:00 | Đóng băng tính năng | ⬜ |
 
 ## Nhật ký cập nhật
@@ -137,3 +140,4 @@ Ghi chú: các con số trên đếm theo PR đã merge trên `main`. Phiếu l�
 | Lúc | Ai | Việc |
 | :-- | :-- | :-- |
 | 07/11 14:30 | Phát | Lập bảng, điền trạng thái theo PR đã merge trên `main` (PR #1 → #23) |
+| 07/11 15:30 | Phát | Cập nhật tới PR #34: thêm trạng thái ◐; đổi TH-06, MI-04, PH-06, PH-07 sang ✅; NH-05, 06, 07, 09 và TH-04 sang ◐; thêm mục điểm nghẽn |
