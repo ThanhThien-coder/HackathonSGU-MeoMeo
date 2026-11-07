@@ -275,9 +275,16 @@ export function decideFollowUp(
   if (isPassed || g.misconception === INJECTION_MARKER) return null;
   if (attempt >= maxAttempts) return null;
 
-  // K4: OFF_TOPIC và GIVE_UP (không phải chèn lệnh) chưa phải lượt cuối ⇒ luôn có gợi ý tĩnh CODE_POINTER
+  // K4: OFF_TOPIC và GIVE_UP (không phải chèn lệnh) chưa phải lượt cuối ⇒ luôn có gợi ý CODE_POINTER.
+  // Câu mồi của AI qua cổng gác thì dùng (cụ thể hơn); không thì dùng mẫu tĩnh.
   if (g.intent === "OFF_TOPIC" || g.intent === "GIVE_UP") {
-    return staticHint("CODE_POINTER", t, g.follow_up_step_index);
+    const aiOk =
+      g.follow_up_type === "CODE_POINTER" &&
+      g.follow_up_question !== null &&
+      verifyFollowUp(g, t, answer, isPassed).follow_up_ok;
+    return aiOk
+      ? { type: "CODE_POINTER", question: g.follow_up_question!, step_index: g.follow_up_step_index }
+      : staticHint("CODE_POINTER", t, g.follow_up_step_index);
   }
 
   const expected = expectedFollowUpType(attempt, maxAttempts, t.tier);

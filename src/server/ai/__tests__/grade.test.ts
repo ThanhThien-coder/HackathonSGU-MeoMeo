@@ -468,6 +468,25 @@ describe("server/ai/grade", () => {
       expect(followUp?.type).toBe("CODE_POINTER");
     });
 
+    it("[K4] GIVE_UP: câu mồi của AI qua cổng gác ⇒ dùng câu AI; lộ số đáp án ⇒ dùng câu tĩnh", () => {
+      const t = createMockGradeContext();
+      const base: GradingRaw = {
+        core_accuracy: 0, simplicity: 0, intent: "GIVE_UP",
+        points: [{ index: 1, covered: false, quote: "" }, { index: 2, covered: false, quote: "" }],
+        misconception: "", follow_up_question: null, follow_up_type: "CODE_POINTER", follow_up_step_index: 2,
+        feedback: "Chưa đạt.", detected_jargons: [],
+      };
+      const goodQ = "Giả sử chỉ có vài sản phẩm, lệnh tìm loại hàng trong vòng lặp sẽ chạy mấy lần?";
+      const good = decideFollowUp({ ...base, follow_up_question: goodQ }, 1, 3, false, t, "chịu");
+      expect(good?.question).toBe(goodQ);
+
+      const secretNum = (t.reference_answer.match(/\d+/) ?? ["201"])[0];
+      const leakQ = `Tổng cộng có phải ${secretNum} truy vấn không?`;
+      const leak = decideFollowUp({ ...base, follow_up_question: leakQ }, 1, 3, false, t, "chịu");
+      expect(leak?.type).toBe("CODE_POINTER");
+      expect(leak?.question).not.toBe(leakQ);
+    });
+
     it("[K4] GIVE_UP lượt cuối ⇒ không follow_up (null)", () => {
       const t = createMockGradeContext();
       const g: GradingRaw = {
