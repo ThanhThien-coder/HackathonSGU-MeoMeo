@@ -32,6 +32,7 @@ import {
 import { CONFIG } from "@/contracts/config";
 import { deriveNodeStates, displayTitle } from "@/lib/derive";
 import { formatErrorMessage } from "@/lib/messages";
+import { explanationKey } from "@/lib/selection-explain";
 
 // ---------- Kiểu của slice `ui` (docs/spec/30_UI.md Mục 7.1) ----------
 
@@ -195,6 +196,31 @@ const FIXTURE_NOT_READY: ApiResult<never> = {
   message: "Chế độ fixture chưa có dữ liệu cho thao tác này.",
   retryable: false,
 };
+
+const FIXTURE_EXPLAIN_DELAY_MS = 400;
+
+/** Kết quả mẫu cho nút "Giải thích" ở `?fixture=1`; tham chiếu tới 1 bài khác của bản đồ để thử chip "Còn dùng ở". */
+function buildFixtureExplanation(
+  result: ClientStaticEngineResult | null,
+  nodeId: string,
+  selectedText: string,
+  tokensUsed: number,
+): ExplainSelectionResponse {
+  const other = result?.nodes.find((n) => n.id !== nodeId && n.trace_steps.length > 0);
+  return {
+    explanation: {
+      kind: "CODE",
+      what: "Đây là đoạn giải thích mẫu của chế độ fixture: AI thật không được gọi.",
+      here: `Ở bước này, đoạn "${selectedText.trim().slice(0, 60)}" là một phần của luồng xử lý đang xem.`,
+      analogy: "Giống một trạm kiểm tra trên đường đi: mỗi yêu cầu phải qua đó trước khi đi tiếp.",
+      skill: "HTTP_ROUTING",
+    },
+    references: other
+      ? [{ node_id: other.id, step_number: other.trace_steps[0].step_number, name: other.title }]
+      : [],
+    tokens_used: tokensUsed,
+  };
+}
 
 function omit<T extends object, K extends keyof T>(obj: T, keys: readonly K[]): Omit<T, K> {
   const copy = { ...obj };
@@ -817,23 +843,37 @@ export const useWorkbenchStore = create<WorkbenchStore>()((set, get) => {
     setDraft: (key, text) => set((s) => ({ ui: { ...s.ui, drafts: { ...s.ui.drafts, [key]: text } } })),
 
     explainSelection: async (nodeId, stepNumber, range, selectedText) => {
-      const { session_id: sessionId, ui } = get();
-      if (!sessionId || ui.fixture) return null;
-      const res = await explainSelectionSafe({
-        session_id: sessionId,
-        node_id: nodeId,
-        step_number: stepNumber,
-        range,
-        selected_text: selectedText,
-      });
+      const { session_id: sessionId, ui, result } = get();
+      if (!sessionId) return null;
+      // Bôi lại đúng vùng đã giải thích ⇒ hiện liền, 0 request (UI-34).
+      const key = explanationKey(nodeId, stepNumber, range);
+      const cached = ui.explanations[key];
+      if (cached) return { ok: true, data: cached };
+
+      let res: ApiResult<ExplainSelectionResponse>;
+      if (ui.fixture) {
+        // `?fixture=1`: không gọi API, trả 1 kết quả mẫu đúng kiểu ExplainSelectionResponse.
+        await new Promise((resolve) => setTimeout(resolve, FIXTURE_EXPLAIN_DELAY_MS));
+        res = { ok: true, data: buildFixtureExplanation(result, nodeId, selectedText, get().progress?.tokens_used ?? 0) };
+      } else {
+        res = await explainSelectionSafe({
+          session_id: sessionId,
+          node_id: nodeId,
+          step_number: stepNumber,
+          range,
+          selected_text: selectedText,
+        });
+      }
       if (!sameSession(sessionId)) return null;
       if (res.ok) {
-        const key = `${nodeId}:${stepNumber}:${range.line_start}:${range.col_start}:${range.line_end}:${range.col_end}`;
+        const data = res.data;
         set((s) => ({
-          ui: { ...s.ui, explanations: { ...s.ui.explanations, [key]: res.data } },
-          progress: s.progress
-            ? { ...s.progress, tokens_used: res.data.tokens_used }
-            : s.progress,
+          ui: {
+            ...s.ui,
+            // Không nhớ `explanation = null` (cổng gác chặn) và lỗi: lần sau bôi lại vẫn được thử lại.
+            explanations: data.explanation ? { ...s.ui.explanations, [key]: data } : s.ui.explanations,
+          },
+          progress: s.progress ? { ...s.progress, tokens_used: data.tokens_used } : s.progress,
         }));
       }
       return res;
