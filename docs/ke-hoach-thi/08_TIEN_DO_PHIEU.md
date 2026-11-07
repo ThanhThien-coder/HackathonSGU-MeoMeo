@@ -23,11 +23,11 @@
 | Thiện | 5 | 1 | 0 | 13 | 19 | TH-07 (`/api/ingest`); TH-19 (pipeline); nốt deploy Cloud Run của TH-04 |
 | Minh | 4 | 0 | 0 | 9 | 13 | MI-05 |
 | Nhân | 4 | 4 | 0 | 5 | 13 | Mở PR route cho NH-05, NH-06, NH-07, NH-09 (chờ TH-07); NH-08 |
-| Phát | 7 | 0 | 0 | 8 | 15 | PH-08 (và gắn `LearnSidePanel`, `CodeSnippetViewer` vào `LearnShell`) |
+| Phát | 8 | 0 | 0 | 7 | 15 | PH-09; PH-10 (dùng `?fixture=1`); gắn `CodeSnippetViewer` vào `LearnShell`; nối nút đăng nhập (PR #40) |
 | Quý | 4 | 0 | 0 | 4 | 8 | QU-04 (làm tay, áp phích) |
-| **Cả đội** | **24** | **5** | **0** | **39** | **68** | |
+| **Cả đội** | **25** | **5** | **0** | **38** | **68** | |
 
-Ghi chú: các con số trên đếm theo PR đã merge trên `main`; hiện không còn PR nào đang mở. Phiếu làm tay (không có PR) tính là ⬜ hoặc ❓ cho tới khi người phụ trách xác nhận.
+Ghi chú: các con số trên đếm theo PR đã merge trên `main` (tới PR #36). PR đang mở: #40 (nối nút Đăng nhập GitHub, bổ sung PH-04). Phiếu làm tay (không có PR) tính là ⬜ hoặc ❓ cho tới khi người phụ trách xác nhận.
 
 **Điểm nghẽn hiện tại:** 4 phiếu của Nhân (NH-05, 06, 07, 09) đã xong phần lõi nhưng **chưa có route** trong `src/app/api/` (hiện chỉ có `health` và `me`). Các route này chờ **TH-07** (`src/server/session.ts`, `/api/ingest`) của Thiện, riêng route chấm bài còn chờ **TH-12** (`progress.ts`, ~22:00). Trước khi TH-07 xong, Phát chạy giao diện bằng `?fixture=1`.
 
@@ -102,7 +102,7 @@ Ghi chú: các con số trên đếm theo PR đã merge trên `main`; hiện kh�
 | PH-05 | Khung trang học 3 cột, thanh trên, bản đồ bài học | 15:45 → 17:15 | ✅ | #23, #22 | #22 thêm `CONFIG.UI_PANE_WIDTHS_PCT` vào contracts (Thiện đã merge) |
 | PH-06 | Khung code Monaco, tab theo file, code theo bước | 17:15 → 18:30 | ✅ | #27 | Làm sớm. `CodeSnippetViewer` chưa gắn vào `LearnShell` |
 | PH-07 | Tour X-Ray: thẻ vai trò, từng bước, tóm tắt; hàng phân tích | 18:30 → 19:45 | ✅ | #30 | Làm sớm. **Chưa gắn** `LearnSidePanel` vào cột phải `LearnShell` (cột giữa và cột phải vẫn là chỗ giữ chỗ). Thanh mài mòn chưa thử vì fixture không có `profile` |
-| PH-08 | Feynman: câu hỏi, ô trả lời, kết quả trong cột, gợi ý, đáp án mẫu | 19:45 → 21:45 | ⬜ | — | |
+| PH-08 | Feynman: câu hỏi, ô trả lời, kết quả trong cột, gợi ý, đáp án mẫu | 19:45 → 21:45 | ✅ | #36 | Làm sớm. Đã gắn `LearnSidePanel` vào cột phải `LearnShell` (cột giữa vẫn giữ chỗ, `CodeSnippetViewer` chưa gắn). **Chưa chạy được A3–A6 trên `?fixture=1`**: fixture không có bản phân tích nên tab Feynman tắt, và action store bỏ qua khi `fixture=true`; cần thêm dữ liệu fixture hoặc chờ route thật. Chưa có test mới cho component/store |
 | PH-09 | Áp kết quả: đổi trạng thái node, mở khóa, toast, mài mòn | 21:45 → 22:45 | ⬜ | — | Hạn cứng 22:45 (đường găng) |
 | PH-10 | Nút "Giải thích" cho đoạn bôi đen | 22:45 → 23:45 | ⬜ | — | |
 | PH-11 | Tổng quan nhịp 1, ô persona, menu tài khoản, kiểm dưới 1024 px | 23:45 → 02:00 | ⬜ | — | |
@@ -132,7 +132,7 @@ Ghi chú: các con số trên đếm theo PR đã merge trên `main`; hiện kh�
 | G2 | 14:00 | Cloud Run sống (TH-04) | ❓ Mới có `/api/health`. Thiện xác nhận deploy |
 | GP | 20:00, 00:00 | Pipeline deploy (TH-19) | ⬜ TH-19 chưa làm |
 | G3 | 20:15 | Vertex AI (TH-10) | ⬜ Nhân đã chạy thử Vertex express (số đo trong PR #28) |
-| G4 | 20:00 | Lát dọc 1 (TH-10) | ⬜ PH-07 và lõi NH-05 đã xong. Còn thiếu TH-07, route `analyze-node`, gắn `LearnSidePanel` vào `LearnShell` |
+| G4 | 20:00 | Lát dọc 1 (TH-10) | ⬜ PH-07, PH-08 và lõi NH-05 đã xong; `LearnSidePanel` đã gắn vào `LearnShell` (#36). Còn thiếu TH-07, các route `analyze-node`, `enrich-node`, `evaluate-feynman`, `reveal`, và gắn `CodeSnippetViewer` vào cột giữa |
 | G7 | 04:00 | Đóng băng tính năng | ⬜ |
 
 ## Nhật ký cập nhật
@@ -141,3 +141,4 @@ Ghi chú: các con số trên đếm theo PR đã merge trên `main`; hiện kh�
 | :-- | :-- | :-- |
 | 07/11 14:30 | Phát | Lập bảng, điền trạng thái theo PR đã merge trên `main` (PR #1 → #23) |
 | 07/11 15:30 | Phát | Cập nhật tới PR #34: thêm trạng thái ◐; đổi TH-06, MI-04, PH-06, PH-07 sang ✅; NH-05, 06, 07, 09 và TH-04 sang ◐; thêm mục điểm nghẽn |
+| 07/11 15:45 | Phát | Cập nhật tới PR #36: PH-08 sang ✅ (ghi rõ A3–A6 trên fixture chưa chạy được); cập nhật G4; ghi PR #40 đang mở |
