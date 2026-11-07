@@ -552,7 +552,6 @@ html[data-theme="light"] .duo-btn-sec {
 .arch-node:hover:not(.active) {
   background: var(--panel3);
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18);
-  transform: translateY(-1px);
 }
 .arch-node.active {
   background: var(--hl-step);

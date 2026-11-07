@@ -47,7 +47,7 @@ export function TourStep({
       {/* Vùng nội dung các bước phía trên */}
       <div className="flex-1 flex flex-col gap-3 min-w-0 min-h-[220px]">
         {/* Mini-diagram 3 tầng kiến trúc theo prototype.html */}
-      <div className="arch-diagram min-w-0 overflow-x-auto" role="navigation" aria-label="Sơ đồ 3 tầng kiến trúc">
+      <div className="arch-diagram min-w-0" role="navigation" aria-label="Sơ đồ 3 tầng kiến trúc">
         <button
           type="button"
           onClick={() => onJumpStep?.(1)}
