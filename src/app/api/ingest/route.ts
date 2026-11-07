@@ -16,7 +16,7 @@ import {
   setInFlightPromise,
 } from "@/server/cache";
 import { sql } from "@/server/db";
-import { runEngine, toClientResult } from "@/server/engine/stub";
+import { runEngine, toClientResult } from "@/server/engine";
 import { ApiHttpError, toErrorResponse } from "@/server/errors";
 import {
   createOrResumeSession,
