@@ -420,3 +420,188 @@ export class TestController {
     expect(parsed.url).toBe("http://x");
   });
 });
+
+describe("các ca dễ sót của bảng symbol và import", () => {
+  beforeAll(async () => {
+    await initParsers();
+  });
+
+  const moduleInfo = {
+    go_module_path: null,
+    dart_package_name: null,
+    package_entry_files: [],
+  };
+
+  async function build(
+    sources: Record<string, string>,
+    lang: LanguageId = "TYPESCRIPT",
+    manifests = new Map<string, string>()
+  ) {
+    const files = await parseVirtualFiles(sources, lang);
+    const idx = collectSymbols(files);
+    resolveImports(files, idx, manifests, moduleInfo);
+    return idx;
+  }
+
+  it("arrow function có tham số, biến cục bộ, biến vòng lặp và catch", async () => {
+    const idx = await build({
+      "src/a.ts":
+        "export const create = async (req: Req, res: Res) => {\n" +
+        "  const user = 1;\n" +
+        "  for (const item of items) { use(item); }\n" +
+        "  try { run(); } catch (err) { log(err); }\n" +
+        "};",
+    });
+    const fn = idx.functions.get("src/a.ts#create");
+    expect(fn?.params).toEqual(["req", "res"]);
+    expect(fn?.locals).toEqual(expect.arrayContaining(["user", "item", "err"]));
+  });
+
+  it("arrow function 1 tham số không ngoặc", async () => {
+    const idx = await build({ "src/a.js": "const f = x => x + 1;" }, "JAVASCRIPT");
+    expect(idx.functions.get("src/a.js#f")?.params).toEqual(["x"]);
+  });
+
+  it("destructuring có giá trị mặc định", async () => {
+    const idx = await build({ "src/a.ts": "function f({ a = 1, b }: P) { return a + b; }" });
+    expect(idx.functions.get("src/a.ts#f")?.params).toEqual(["a", "b"]);
+  });
+
+  it("require nằm trong hàm có export vẫn được ghi", async () => {
+    const idx = await build({
+      "src/m.ts": 'export function f() { const a = require("./a"); return a; }',
+      "src/a.ts": "export const x = 1;",
+    });
+    expect(idx.imports.get("src/m.ts")?.get("a")?.resolved_file).toBe("src/a.ts");
+  });
+
+  it("require lấy 1 thuộc tính", async () => {
+    const idx = await build(
+      {
+        "src/m.js": 'const y = require("./a").y;',
+        "src/a.js": "exports.y = function () {};",
+      },
+      "JAVASCRIPT"
+    );
+    const imp = idx.imports.get("src/m.js")?.get("y");
+    expect(imp?.imported_name).toBe("y");
+    expect(imp?.is_namespace).toBe(false);
+    expect(imp?.resolved_file).toBe("src/a.js");
+  });
+
+  it("abstract class ở file sau vẫn ghi được lớp con", async () => {
+    const idx = await build({
+      "src/a.ts": 'import { Base } from "./z";\nexport class A extends Base {}',
+      "src/z.ts": "export abstract class Base {}",
+    });
+    expect(idx.interface_impls.get("Base")).toEqual(["src/a.ts#A"]);
+  });
+
+  it("ghi lớp cha của mọi class, cả TS và JS", async () => {
+    const ts = await build({ "src/a.ts": "class P {}\nclass C extends P {}" });
+    expect(ts.class_parents.get("src/a.ts#C")).toBe("P");
+    const js = await build({ "src/a.js": "class P {}\nclass C extends P {}" }, "JAVASCRIPT");
+    expect(js.class_parents.get("src/a.js#C")).toBe("P");
+  });
+
+  it("method của interface Java có tên interface trong khóa", async () => {
+    const idx = await build(
+      { "UserRepo.java": "public interface UserRepo { User find(int id); }" },
+      "JAVA"
+    );
+    expect(idx.symbols.has("UserRepo.java#UserRepo.find")).toBe(true);
+  });
+
+  it("hàm lồng trong hàm export không tính là export", async () => {
+    const idx = await build({
+      "src/a.ts": "export function a() { function b() {} const c = () => {}; return [b, c]; }",
+    });
+    expect(idx.symbols.get("src/a.ts#a")?.is_exported).toBe(true);
+    expect(idx.symbols.get("src/a.ts#b")?.is_exported).toBe(false);
+    expect(idx.symbols.get("src/a.ts#c")?.is_exported).toBe(false);
+  });
+
+  it("CommonJS: module.exports.x, module.exports = X, object và exports.x = function", async () => {
+    const idx = await build(
+      {
+        "src/a.js": "function a() {}\nmodule.exports.a = a;",
+        "src/b.js": "function b() {}\nmodule.exports = b;",
+        "src/c.js": "module.exports = { m() {}, n: function () {}, o: () => {} };",
+        "src/d.js": "exports.p = function () {};",
+        "src/e.js": "module.exports = function () {};",
+      },
+      "JAVASCRIPT"
+    );
+    expect(idx.symbols.get("src/a.js#a")?.is_exported).toBe(true);
+    expect(idx.symbols.get("src/b.js#default")?.name).toBe("b");
+    expect(idx.symbols.get("src/c.js#m")?.is_exported).toBe(true);
+    expect(idx.symbols.get("src/c.js#n")?.is_exported).toBe(true);
+    expect(idx.symbols.get("src/c.js#o")?.is_exported).toBe(true);
+    expect(idx.symbols.get("src/d.js#p")?.is_exported).toBe(true);
+    expect(idx.functions.has("src/e.js#default")).toBe(true);
+  });
+
+  it("export default hàm không tên", async () => {
+    const idx = await build({ "src/a.ts": "export default function () { return 1; }" });
+    expect(idx.functions.has("src/a.ts#default")).toBe(true);
+  });
+
+  it("export default object có method", async () => {
+    const idx = await build({ "src/a.ts": "export default { n: () => 1 };" });
+    expect(idx.symbols.get("src/a.ts#n")?.is_exported).toBe(true);
+  });
+
+  it("kiểu field bỏ null và mảng", async () => {
+    const idx = await build({
+      "src/a.ts": "class C { constructor(private r: Repo | null) {} items: Item[] = []; }",
+    });
+    expect(idx.field_types.get("src/a.ts#C.r")).toBe("Repo");
+    expect(idx.field_types.get("src/a.ts#C.items")).toBe("Item");
+  });
+
+  it("new T() cục bộ không ghi đè kiểu cấp file, this.x = new T() trong constructor có ghi", async () => {
+    const idx = await build({
+      "src/a.ts":
+        "const s = new A();\n" +
+        "function f() { const s = new B(); return s; }\n" +
+        "class C { constructor() { this.x = new T(); } }",
+    });
+    expect(idx.field_types.get("src/a.ts#s")).toBe("A");
+    expect(idx.field_types.get("src/a.ts#C.x")).toBe("T");
+  });
+
+  it("export { r as router } cùng file nối về tên gốc", async () => {
+    const idx = await build({
+      "src/b.ts": "const r = 1;\nexport { r as router };",
+      "src/m.ts": 'import { router } from "./b";',
+    });
+    const imp = idx.imports.get("src/m.ts")?.get("router");
+    expect(imp?.resolved_file).toBe("src/b.ts");
+    expect(imp?.imported_name).toBe("r");
+  });
+
+  it("barrel kiểu import rồi export lại", async () => {
+    const idx = await build({
+      "src/x.ts": "export default function x() {}",
+      "src/index.ts": 'import X from "./x";\nexport { X };',
+      "src/m.ts": 'import { X } from "./index";',
+      "src/d.ts": 'import X from "./x";\nexport default X;',
+      "src/n.ts": 'import Y from "./d";',
+    });
+    expect(idx.imports.get("src/m.ts")?.get("X")?.resolved_file).toBe("src/x.ts");
+    expect(idx.imports.get("src/m.ts")?.get("X")?.imported_name).toBe("default");
+    expect(idx.imports.get("src/n.ts")?.get("Y")?.resolved_file).toBe("src/x.ts");
+  });
+
+  it("@/ không có paths thì lấy src cạnh tsconfig gần nhất", async () => {
+    const idx = await build(
+      {
+        "server/src/a.ts": 'import { b } from "@/b";',
+        "server/src/b.ts": "export const b = 1;",
+      },
+      "TYPESCRIPT",
+      new Map([["server/tsconfig.json", "{}"]])
+    );
+    expect(idx.imports.get("server/src/a.ts")?.get("b")?.resolved_file).toBe("server/src/b.ts");
+  });
+});
