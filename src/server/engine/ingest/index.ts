@@ -109,7 +109,15 @@ function sanitizeCode(raw: Map<string, string>, report: IngestionReport): Map<st
   return code;
 }
 
-export async function runIngest(src: IngestSource, signal?: AbortSignal): Promise<IngestOutput> {
+/**
+ * `autoScope`: link hoặc zip không chọn thư mục ⇒ tự chọn thư mục backend (ING-80).
+ * Dựng lại phiên (`GITHUB_COMMIT`) luôn theo đúng `subdir` đã lưu, không tự chọn lại.
+ */
+export async function runIngest(
+  src: IngestSource,
+  signal?: AbortSignal,
+  options: { autoScope?: boolean } = {},
+): Promise<IngestOutput> {
   const startedAt = performance.now();
   signal?.throwIfAborted();
   const report = emptyReport();
@@ -132,7 +140,8 @@ export async function runIngest(src: IngestSource, signal?: AbortSignal): Promis
 
   const listed = listEntries(archive, signal, report);
   const entries = listed.map((e) => classifyEntry(e, DEFAULT_LANGUAGE_REGISTRY, report));
-  const scope = detectScope(entries, acquired.explicit_subdir, report);
+  const autoScope = src.kind !== "GITHUB_COMMIT" && options.autoScope !== false;
+  const scope = detectScope(entries, acquired.explicit_subdir, report, autoScope);
   const plan = selectFiles(entries, scope, report);
 
   const inflated = inflateSelected(archive.bytes, plan, report, signal);
