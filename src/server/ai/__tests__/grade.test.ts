@@ -1,4 +1,4 @@
-import { leaksNumbers } from "../guard/followup";
+import { echoesQuestion, leaksNumbers, verifyFollowUp } from "../guard/followup";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { CONFIG } from "@/contracts/config";
 import type {
@@ -18,6 +18,8 @@ import {
   staticFeedback,
   staticHint,
   staticTeachHint,
+  isGiveUpText,
+  giveUpGrading,
   toEvaluateResponse,
   type EvaluateResponseExtra,
 } from "../grade";
@@ -442,6 +444,51 @@ describe("server/ai/grade", () => {
 
       const isPassed = decidePass(g, t.must_have_points, answer);
       expect(isPassed).toBe(false);
+    });
+  });
+
+  describe("Câu bí và gợi ý nhắc lại đề", () => {
+    it("isGiveUpText bắt câu bí ngắn (đúng các câu đã gõ khi thử tay)", () => {
+      for (const a of ["em không biết", "em không biết á", "không biết luôn", "chưa biết luôn", "cũng chưa biết nó xử lí sao luôn", "Chịu.", "k biết", "ko bít", "bó tay", "?", "idk", "mình thật sự không hiểu"]) {
+        expect(isGiveUpText(a), a).toBe(true);
+      }
+    });
+
+    it("isGiveUpText KHÔNG nuốt câu trả lời thật có chữ 'không biết'", () => {
+      for (const a of [
+        "Hàm register không biết email đã tồn tại nên gọi findByEmail để kiểm tra",
+        "không biết, nhưng chắc là parse ném lỗi",
+        "Vì không biết trước số sản phẩm nên vòng lặp chạy nhiều lần",
+        "hôm nay trời đẹp quá",
+      ]) {
+        expect(isGiveUpText(a), a).toBe(false);
+      }
+    });
+
+    it("giveUpGrading: GIVE_UP, 0 điểm, không ý nào trúng, lời nhắn thân thiện", () => {
+      const t = createMockGradeContext();
+      const g = giveUpGrading(t);
+      expect(g.intent).toBe("GIVE_UP");
+      expect(g.core_accuracy).toBe(0);
+      expect(g.points.every((p) => !p.covered)).toBe(true);
+      expect(g.feedback).toContain("Không sao");
+      expect(decideFollowUp(g, 1, 3, false, t, "em không biết")?.type).toBe("CODE_POINTER");
+    });
+
+    it("Gợi ý chỉ nhắc lại đề ⇒ cổng gác không dùng; câu mồi có tình huống mới ⇒ dùng", () => {
+      const q = "Ở Bước 1, nếu dữ liệu gửi lên không đúng định dạng thì hàm registerSchema.parse sẽ phản hồi thế nào?";
+      expect(echoesQuestion("Hàm registerSchema.parse sẽ phản hồi thế nào khi nhận dữ liệu không đúng định dạng?", q)).toBe(true);
+      expect(echoesQuestion("Giả sử gửi lên body rỗng {}, hàm registerSchema.parse sẽ trả về kết quả gì?", q)).toBe(false);
+
+      const t = { ...createMockGradeContext(), feynman_question: "Trang danh sách có 200 sản phẩm. Vì sao càng nhiều sản phẩm thì trang càng chậm?" };
+      const g: GradingRaw = {
+        core_accuracy: 10, simplicity: 50, intent: "ANSWER",
+        points: [{ index: 1, covered: false, quote: "" }, { index: 2, covered: false, quote: "" }],
+        misconception: "", follow_up_question: "Vì sao càng nhiều sản phẩm thì trang càng chậm?",
+        follow_up_type: "CODE_POINTER", follow_up_step_index: 2,
+        feedback: "Còn thiếu một chút.", detected_jargons: [],
+      };
+      expect(verifyFollowUp(g, t, "vì dữ liệu nhiều", false).follow_up_ok).toBe(false);
     });
   });
 
