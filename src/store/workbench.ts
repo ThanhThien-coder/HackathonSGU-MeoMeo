@@ -404,6 +404,45 @@ export const useWorkbenchStore = create<WorkbenchStore>()((set, get) => {
     if (get().active_node_id === nodeId && data.analysis) void get().loadRun(nodeId);
   };
 
+  /**
+   * `enrich-node` (LEARN) cho bài `nodeId`. `force` = tải lại im lặng khi run ở client lệch server
+   * (`ERR_ATTEMPT_OUT_OF_SYNC` / `ERR_QUESTION_FINISHED`, UI-77): bỏ qua điều kiện "đã có run chưa xong".
+   * Giữ câu đang mở nếu câu đó vẫn còn trong run mới.
+   */
+  const fetchRun = async (nodeId: string, force: boolean) => {
+    const { session_id: sessionId, ui, runs, analyses, progress } = get();
+    const key = `enrich:${nodeId}`;
+    if (!sessionId || ui.fixture || ui.pending[key]) return;
+    const analysis = analyses[nodeId];
+    if (!analysis || analysis === "PENDING" || analysis === "FAILED") return;
+    const state = progress?.nodes[nodeId];
+    const openRun = runs[nodeId] && runs[nodeId].questions.some((q) => !q.state.finished);
+    const needRun = force || (!openRun && (state?.status === "AVAILABLE" || state?.last_run?.finished_at === null));
+    if (!needRun) return;
+
+    setPending(key, true);
+    if (!force) set((s) => ({ ui: { ...s.ui, submit_error: null } }));
+    const res = await enrichNodeSafe(sessionId, nodeId, "LEARN");
+    setPending(key, false);
+    if (!sameSession(sessionId)) return;
+    if (!res.ok) {
+      if (!force) set((s) => ({ ui: { ...s.ui, submit_error: toUiError(res) } }));
+      return;
+    }
+    set((s) => {
+      const current = s.active_question_index;
+      const stillThere =
+        current !== null &&
+        res.data.questions.some((q) => q.question_index === current && q.state.ended_by !== "DROPPED");
+      return {
+        runs: { ...s.runs, [nodeId]: res.data },
+        active_question_index:
+          s.active_node_id !== nodeId ? s.active_question_index : force && stillThere ? current : FIRST_UNFINISHED(res.data),
+      };
+    });
+    mergeNodeState(res.data.node_state, res.data.tokens_used);
+  };
+
   return {
     ...emptySession(),
     profile: null,
@@ -577,31 +616,7 @@ export const useWorkbenchStore = create<WorkbenchStore>()((set, get) => {
     },
 
 
-    loadRun: async (nodeId) => {
-      const { session_id: sessionId, ui, runs, analyses, progress } = get();
-      const key = `enrich:${nodeId}`;
-      if (!sessionId || ui.fixture || ui.pending[key]) return;
-      const analysis = analyses[nodeId];
-      if (!analysis || analysis === "PENDING" || analysis === "FAILED") return;
-      const state = progress?.nodes[nodeId];
-      const openRun = runs[nodeId] && runs[nodeId].questions.some((q) => !q.state.finished);
-      const needRun = !openRun && (state?.status === "AVAILABLE" || state?.last_run?.finished_at === null);
-      if (!needRun) return;
-
-      setPending(key, true);
-      const res = await enrichNodeSafe(sessionId, nodeId, "LEARN");
-      setPending(key, false);
-      if (!sameSession(sessionId)) return;
-      if (!res.ok) {
-        set((s) => ({ ui: { ...s.ui, submit_error: toUiError(res) } }));
-        return;
-      }
-      set((s) => ({
-        runs: { ...s.runs, [nodeId]: res.data },
-        active_question_index: s.active_node_id === nodeId ? FIRST_UNFINISHED(res.data) : s.active_question_index,
-      }));
-      mergeNodeState(res.data.node_state, res.data.tokens_used);
-    },
+    loadRun: (nodeId) => fetchRun(nodeId, false),
 
     // ---- Nộp / bỏ qua câu (Mục 7.5) ----
     submitAnswer: async (nodeId, questionIndex, answer) => {
@@ -612,6 +627,7 @@ export const useWorkbenchStore = create<WorkbenchStore>()((set, get) => {
       if (!question) return null;
 
       const key = answerKey(run.run_id, questionIndex);
+      if (ui.pending[`submit:${key}`]) return null; // đang chờ kết quả của chính câu này
       setPending(`submit:${key}`, true);
       set((s) => ({ ui: { ...s.ui, submit_error: null } }));
       const before = get().progress?.nodes[nodeId]?.status;
@@ -626,21 +642,27 @@ export const useWorkbenchStore = create<WorkbenchStore>()((set, get) => {
       if (!sameSession(sessionId)) return null;
 
       if (!res.ok) {
-        set((s) => ({ ui: { ...s.ui, submit_error: toUiError(res) } }));
         if (res.code === "ERR_ATTEMPT_OUT_OF_SYNC" || res.code === "ERR_QUESTION_FINISHED") {
+          // UI-77: tải lại run im lặng + toast; nội dung ô (ui.drafts) giữ nguyên.
           get().pushToast("Câu này vừa được nộp ở tab khác", "info");
-          void get().loadRun(nodeId);
+          void fetchRun(nodeId, true);
+        } else {
+          set((s) => ({ ui: { ...s.ui, submit_error: toUiError(res) } }));
         }
         return res;
       }
 
       const r = res.data;
+      // Chấm xong (kể cả chưa đạt): câu đã nằm trong lịch sử lượt, ô trả lời để trống cho lượt sau.
+      const draftKey = key;
       set((s) => ({
         runs: {
           ...s.runs,
           [nodeId]: {
-            ...run,
-            questions: run.questions.map((q) => (q.question_index === questionIndex ? { ...q, state: r.question } : q)),
+            ...(s.runs[nodeId] ?? run),
+            questions: (s.runs[nodeId] ?? run).questions.map((q) =>
+              q.question_index === questionIndex ? { ...q, state: r.question } : q,
+            ),
           },
         },
         last_failed_answers: r.is_passed
@@ -648,6 +670,7 @@ export const useWorkbenchStore = create<WorkbenchStore>()((set, get) => {
           : { ...s.last_failed_answers, [key]: answer },
         ui: {
           ...s.ui,
+          drafts: { ...s.ui.drafts, [draftKey]: "" },
           last_evaluations: { ...s.ui.last_evaluations, [key]: r },
           attempt_log: { ...s.ui.attempt_log, [key]: [...(s.ui.attempt_log[key] ?? []), { answer, response: r }] },
           last_changes: r.skill_change ? { ...s.ui.last_changes, [key]: r.skill_change } : s.ui.last_changes,
@@ -663,6 +686,7 @@ export const useWorkbenchStore = create<WorkbenchStore>()((set, get) => {
       const run = runs[nodeId];
       if (!sessionId || !run || ui.fixture) return;
       const key = answerKey(run.run_id, questionIndex);
+      if (ui.pending[`submit:${key}`]) return;
       const before = get().progress?.nodes[nodeId]?.status;
 
       setPending(`submit:${key}`, true);
@@ -671,8 +695,12 @@ export const useWorkbenchStore = create<WorkbenchStore>()((set, get) => {
       if (!sameSession(sessionId)) return;
 
       if (!res.ok) {
-        set((s) => ({ ui: { ...s.ui, submit_error: toUiError(res) } }));
-        if (res.code === "ERR_QUESTION_FINISHED") void get().loadRun(nodeId);
+        if (res.code === "ERR_QUESTION_FINISHED") {
+          get().pushToast("Câu này vừa được nộp ở tab khác", "info");
+          void fetchRun(nodeId, true);
+        } else {
+          set((s) => ({ ui: { ...s.ui, submit_error: toUiError(res) } }));
+        }
         return;
       }
       const r = res.data;
@@ -680,8 +708,10 @@ export const useWorkbenchStore = create<WorkbenchStore>()((set, get) => {
         runs: {
           ...s.runs,
           [nodeId]: {
-            ...run,
-            questions: run.questions.map((q) => (q.question_index === questionIndex ? { ...q, state: r.question } : q)),
+            ...(s.runs[nodeId] ?? run),
+            questions: (s.runs[nodeId] ?? run).questions.map((q) =>
+              q.question_index === questionIndex ? { ...q, state: r.question } : q,
+            ),
           },
         },
         ui: { ...s.ui, last_changes: { ...s.ui.last_changes, [key]: r.skill_change } },
@@ -739,7 +769,8 @@ export const useWorkbenchStore = create<WorkbenchStore>()((set, get) => {
       set((s) => ({
         active_tab: "XRAY",
         active_step: step,
-        ui: { ...s.ui, xray_stage: "TOUR", return_question: true },
+        // Giữ nguyên `active_question_index` và `ui.drafts`: "Quay lại câu hỏi" về đúng câu, nháp còn đó.
+        ui: { ...s.ui, xray_stage: "TOUR", return_question: true, hl: [] },
       })),
 
     setHl: (hl) => set((s) => ({ ui: { ...s.ui, hl } })),
