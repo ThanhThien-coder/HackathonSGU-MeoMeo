@@ -2,14 +2,12 @@ import type postgres from "postgres";
 import { CONFIG } from "@/contracts";
 import type {
   GraphSkeletonNode,
-  NodeStateView,
   RunMode,
   RunQuestion,
   RunStepRef,
   SessionProgress,
   StaticEngineResult,
 } from "@/contracts";
-import { deriveNodeStates, type NodeProgressRow } from "@/lib/derive";
 import { getEngineResultCache, setEngineResultCache } from "./cache";
 import { db, sql } from "./db";
 import { ApiHttpError } from "./errors";
@@ -326,34 +324,14 @@ export async function touchSession(sessionId: string): Promise<void> {
   await sql`update learning_sessions set last_active_at = now() where id = ${sessionId}`;
 }
 
+/**
+ * Tiến độ đầy đủ của phiên, gồm `last_run` của từng bài (đọc `node_runs`).
+ * Bản tạm cũ luôn trả `last_run: null` nên bài đã xong/chưa đạt mở lại không thấy kết quả.
+ * Import động vì `progress.ts` import ngược `session.ts`.
+ */
 export async function loadSessionProgress(
   session: SessionRecord,
 ): Promise<SessionProgress> {
-  const rows = await sql<NodeProgressRow[]>`
-    select node_id, status, analysis_failed
-    from node_progress
-    where session_id = ${session.id}
-  `;
-
-  const skeleton = (
-    typeof session.graph_skeleton === "string"
-      ? JSON.parse(session.graph_skeleton)
-      : session.graph_skeleton
-  ) as GraphSkeletonNode[];
-
-  const derived = deriveNodeStates(skeleton, rows);
-  const nodes: Record<string, NodeStateView> = {};
-  for (const [nodeId, state] of Object.entries(derived)) {
-    nodes[nodeId] = {
-      ...state,
-      last_run: null,
-    };
-  }
-
-  // TH-12 thay bằng getSessionProgress đầy đủ.
-  return {
-    session_id: session.id,
-    nodes,
-    tokens_used: session.tokens_used,
-  };
+  const { getSessionProgress } = await import("./progress");
+  return getSessionProgress(session.id, session.user_id);
 }
