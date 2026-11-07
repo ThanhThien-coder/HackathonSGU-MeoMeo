@@ -243,10 +243,15 @@ export function assembleGraph(
 ): { nodes: HybridArchitecturalNode[]; edges: GraphEdge[] } {
   void _report;
   // 1. Bỏ candidate 0 bước
-  const validCandidates = candidates.filter((c) => c.trace_steps.length > 0);
-  if (validCandidates.length === 0) {
+  const nonEmptyCandidates = candidates.filter((c) => c.trace_steps.length > 0);
+  if (nonEmptyCandidates.length === 0) {
     return { nodes: [], edges: [] };
   }
+
+  // Bài chỉ có handler thì không có luồng để học: bỏ khi vẫn đủ số bài tối thiểu.
+  const multiStepCandidates = nonEmptyCandidates.filter((c) => c.trace_steps.length >= 2);
+  const validCandidates =
+    multiStepCandidates.length >= CONFIG.DISPLAY_MIN_NODES ? multiStepCandidates : nonEmptyCandidates;
 
   // Sắp xếp đầu vào theo order_key tất định (ENG-01)
   validCandidates.sort((a, b) =>

@@ -372,7 +372,9 @@ function nameFromRoute(
     return { title: sanitizeTitle(`Create ${targetSingular}`), evidence };
   }
   if (method === "GET") {
-    if (endsWithParam) {
+    // `GET /user` trả 1 đối tượng, `List User` khó hiểu.
+    const isSingularRoute = toSingular(S[0]).toLowerCase() === S[0].toLowerCase();
+    if (endsWithParam || isSingularRoute) {
       return { title: sanitizeTitle(`Get ${targetSingular}`), evidence };
     }
     return { title: sanitizeTitle(`List ${targetPlural}`), evidence };
