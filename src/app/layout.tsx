@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { JetBrains_Mono, Plus_Jakarta_Sans } from "next/font/google";
+import { Toasts } from "@/components/ui/Toasts";
 import { THEME_SCRIPT } from "@/components/ui/theme-script";
 import "./globals.css";
 
@@ -34,7 +35,10 @@ export default function RootLayout({
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
       </head>
-      <body>{children}</body>
+      <body>
+        {children}
+        <Toasts />
+      </body>
     </html>
   );
 }
