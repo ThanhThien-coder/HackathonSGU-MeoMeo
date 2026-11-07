@@ -61,7 +61,7 @@ Ghi chú: các con số trên đếm theo PR đã merge trên `main` (tới PR #
 | TH-16 | Diễn tập đường lùi và giao agent trước khi ngủ | 00:15 → 00:30 | ⬜ | — | Làm tay |
 | TH-17 | Đóng băng tính năng, Definition of Done, deploy production | 03:30 → 05:00 | ⬜ | — | Làm tay |
 | TH-18 | Trực sửa lỗi chặn demo, nộp slide, commit cuối | 05:00 → 09:15 | ⬜ | — | |
-| TH-20 | Giảm số lần hỏi DB khi nộp bài (tăng tốc T6) | 21:00 → 22:00, trong TH-12 | ◐ | #64 | Làm cùng TH-12: đọc `graph_skeleton` 1 lần trong transaction nộp bài và bỏ qua câu (bớt 2 lần đọc mỗi lần ghi); ghi `ai_usage` không chờ. **Chưa có** số đo "số câu SQL mỗi lần nộp: ? → ?" |
+| TH-20 | Giảm số lần hỏi DB khi nộp bài (tăng tốc T6) | 21:00 → 22:00, trong TH-12 | 🔄 | #64, nhánh `thien/th-20-it-lan-hoi-db` | Làm cùng TH-12: đọc `graph_skeleton` 1 lần trong transaction nộp bài và bỏ qua câu (bớt 2 lần đọc mỗi lần ghi); ghi `ai_usage` không chờ. Phần còn lại: `loadProgressContext`, `node_progress` đọc 1 lần. Số câu SQL trong transaction của lần nộp kết thúc bài: 11 ⇒ 9 (mock `tx`); cả lần nộp ước 12–14 câu, chưa đạt mốc ≈8. Chưa chạy Postgres thật |
 | TH-21 | Cloud Run min-instances, kiểm cache (tăng tốc T4) | 04:00 → 05:00 | ⬜ | — | Làm tay, trên bản đóng băng, cùng NH-16 |
 
 ## Minh — Engine Tầng 1–2

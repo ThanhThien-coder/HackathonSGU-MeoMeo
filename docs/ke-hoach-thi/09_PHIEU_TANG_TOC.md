@@ -57,7 +57,7 @@ Cập nhật trạng thái vào [`08_TIEN_DO_PHIEU.md`](08_TIEN_DO_PHIEU.md) the
 | :-- | :-: | :-: | :-: | :-- |
 | NH-14 | Nhân | ⬜ | #39 (cùng PR) | thời gian chấm: ? → ? |
 | NH-15 | Nhân | ⬜ | #39 (cùng PR) | trường hợp xấu nhất: ? → ? |
-| TH-20 | Thiện | ⬜ | cùng TH-12 | số câu SQL mỗi lần nộp: ? → ? |
+| TH-20 | Thiện | 🔄 | #64 và nhánh `thien/th-20-it-lan-hoi-db` | số câu SQL trong transaction, lần nộp kết thúc bài: 11 → 9 (mock `tx`) |
 | PH-16 | Phát | ⬜ | — | chờ câu hỏi sau "Bắt đầu trả lời": ? → ? |
 | PH-17 | Phát | ⬜ | — | — |
 | NH-16 | Nhân | ⬜ | — | repo demo, tài khoản mới: ? → ? |

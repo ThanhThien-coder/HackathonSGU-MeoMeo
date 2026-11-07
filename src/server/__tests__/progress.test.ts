@@ -14,6 +14,7 @@ import {
   finalizeRunIfDone,
   getSessionProgress,
   loadNodeState,
+  loadProgressContext,
   lockRun,
   normalizeRunRecord,
   parseJsonb,
@@ -332,7 +333,7 @@ describe("TASK_09: progress.ts", () => {
         mockTx as unknown as TransactionSql,
         run,
         Date.now(),
-        skeleton,
+        { skeleton, progress: progressBefore },
       );
 
       const upsertQuery = recordedTxQueries.find((r) =>
@@ -366,7 +367,7 @@ describe("TASK_09: progress.ts", () => {
         mockTx as unknown as TransactionSql,
         run,
         Date.now(),
-        skeleton,
+        { skeleton, progress: progressBefore },
       );
 
       const upsertQuery = recordedTxQueries.find((r) =>
@@ -376,7 +377,7 @@ describe("TASK_09: progress.ts", () => {
       expect(upsertQuery?.params).toContain("FAILED");
     });
 
-    it("có truyền skeleton thì không có câu SQL nào chứa graph_skeleton from learning_sessions", async () => {
+    it("có truyền ctx thì không đọc lại learning_sessions và node_progress", async () => {
       const run = createMockRun([
         createMockQuestion(1, 1, true, "PASS_FIRST", "ANSWER"),
       ]);
@@ -399,13 +400,161 @@ describe("TASK_09: progress.ts", () => {
         mockTx as unknown as TransactionSql,
         run,
         Date.now(),
-        skeleton,
+        { skeleton, progress: progressBefore },
       );
 
       const hasSkeletonQuery = recordedTxQueries.some((r) =>
         normalizeSql(r.query).includes("graph_skeleton from learning_sessions"),
       );
       expect(hasSkeletonQuery).toBe(false);
+      const hasProgressRead = recordedTxQueries.some((r) =>
+        normalizeSql(r.query).includes("from node_progress"),
+      );
+      expect(hasProgressRead).toBe(false);
+    });
+
+    it("cập nhật ctx tại chỗ: mở khóa đúng và loadNodeState sau đó thấy COMPLETED, không đọc lại", async () => {
+      const run = createMockRun([
+        createMockQuestion(1, 1, true, "PASS_FIRST", "ANSWER"),
+      ]);
+      const ctx = {
+        skeleton: createMockSkeleton(),
+        progress: [
+          { node_id: "N1", status: "COMPLETED", analysis_failed: false },
+          { node_id: "N3", status: "AVAILABLE", analysis_failed: false },
+        ] as NodeProgressRow[],
+      };
+      const tx = mockTx as unknown as TransactionSql;
+
+      const unlocked = await finalizeRunIfDone(tx, run, Date.now(), ctx);
+      const state = await loadNodeState(tx, run, ctx);
+
+      expect(unlocked).toEqual(["N5"]);
+      expect(state.status).toBe("COMPLETED");
+      expect(ctx.progress).toContainEqual({
+        node_id: "N3",
+        status: "COMPLETED",
+        analysis_failed: false,
+      });
+      expect(
+        recordedTxQueries.some((r) =>
+          normalizeSql(r.query).includes("from node_progress"),
+        ),
+      ).toBe(false);
+    });
+
+    it("giữ analysis_failed của node khi cập nhật ctx", async () => {
+      const run = createMockRun([
+        createMockQuestion(1, 1, true, "PASS_FIRST", "ANSWER"),
+      ]);
+      const ctx = {
+        skeleton: createMockSkeleton(),
+        progress: [
+          { node_id: "N3", status: "AVAILABLE", analysis_failed: true },
+        ] as NodeProgressRow[],
+      };
+
+      await finalizeRunIfDone(
+        mockTx as unknown as TransactionSql,
+        run,
+        Date.now(),
+        ctx,
+      );
+
+      expect(ctx.progress).toEqual([
+        { node_id: "N3", status: "COMPLETED", analysis_failed: true },
+      ]);
+    });
+
+    it("node chưa có dòng node_progress thì thêm dòng mới vào ctx", async () => {
+      const run = createMockRun([
+        createMockQuestion(1, 1, true, "PASS_FIRST", "ANSWER"),
+      ]);
+      const ctx = {
+        skeleton: createMockSkeleton(),
+        progress: [
+          { node_id: "N1", status: "COMPLETED", analysis_failed: false },
+        ] as NodeProgressRow[],
+      };
+
+      const unlocked = await finalizeRunIfDone(
+        mockTx as unknown as TransactionSql,
+        run,
+        Date.now(),
+        ctx,
+      );
+
+      expect(unlocked).toEqual(["N5"]);
+      expect(ctx.progress).toContainEqual({
+        node_id: "N3",
+        status: "COMPLETED",
+        analysis_failed: false,
+      });
+    });
+
+    it("node FAILED vẫn mở node con", async () => {
+      const run = createMockRun([
+        createMockQuestion(1, 3, true, "FAILED", "ANSWER"),
+      ]);
+      const ctx = {
+        skeleton: createMockSkeleton(),
+        progress: [
+          { node_id: "N1", status: "COMPLETED", analysis_failed: false },
+          { node_id: "N3", status: "AVAILABLE", analysis_failed: false },
+        ] as NodeProgressRow[],
+      };
+
+      const unlocked = await finalizeRunIfDone(
+        mockTx as unknown as TransactionSql,
+        run,
+        Date.now(),
+        ctx,
+      );
+
+      expect(unlocked).toEqual(["N5"]);
+    });
+
+    it("không truyền ctx thì tự đọc khung bài và tiến độ đúng một lần", async () => {
+      const run = createMockRun([
+        createMockQuestion(1, 1, true, "PASS_FIRST", "ANSWER"),
+      ]);
+      const skeleton = createMockSkeleton();
+      const progress: NodeProgressRow[] = [
+        { node_id: "N1", status: "COMPLETED", analysis_failed: false },
+        { node_id: "N3", status: "AVAILABLE", analysis_failed: false },
+      ];
+
+      mockTx.mockImplementation((strings: TemplateStringsArray, ...params: unknown[]) => {
+        const q = strings.join("?");
+        recordedTxQueries.push({ query: q, params });
+        if (q.includes("graph_skeleton from learning_sessions")) {
+          return Promise.resolve([{ graph_skeleton: JSON.stringify(skeleton) }]);
+        }
+        if (q.includes("from node_progress")) {
+          return Promise.resolve([...progress]);
+        }
+        return Promise.resolve([]);
+      });
+
+      const unlocked = await finalizeRunIfDone(
+        mockTx as unknown as TransactionSql,
+        run,
+        Date.now(),
+      );
+
+      expect(unlocked).toEqual(["N5"]);
+      const count = (text: string) =>
+        recordedTxQueries.filter((r) => normalizeSql(r.query).includes(text)).length;
+      expect(count("graph_skeleton from learning_sessions")).toBe(1);
+      expect(count("from node_progress")).toBe(1);
+    });
+  });
+
+  describe("loadProgressContext", () => {
+    it("không có phiên thì ném ERR_SESSION_NOT_FOUND", async () => {
+      await expect(
+        loadProgressContext(mockTx as unknown as TransactionSql, "session-uuid-1"),
+      ).rejects.toMatchObject({ code: "ERR_SESSION_NOT_FOUND" });
     });
   });
 
@@ -524,7 +673,7 @@ describe("TASK_09: progress.ts", () => {
       const state = await loadNodeState(
         mockTx as unknown as TransactionSql,
         mockRun,
-        skeleton,
+        { skeleton, progress },
       );
 
       expect(state.node_id).toBe("N3");
