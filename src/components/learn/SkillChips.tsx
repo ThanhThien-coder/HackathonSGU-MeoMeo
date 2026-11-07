@@ -85,7 +85,7 @@ export function SkillChips({ skills, profile, serverClockOffsetMs }: SkillChipsP
                   className="block h-1 overflow-hidden rounded-full bg-line"
                 >
                   <i
-                    className="block h-full rounded-full bg-accent"
+                    className="block h-full rounded-full bg-accent transition-[width,opacity] duration-500 ease-out motion-reduce:transition-none"
                     style={{ width: `${Math.min(100, v.bar.decayed * 100)}%`, opacity: v.bar.opacity }}
                   />
                 </span>
