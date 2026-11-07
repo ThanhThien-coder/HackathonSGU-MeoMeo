@@ -2,6 +2,7 @@
 
 import { IngestBox } from "@/components/home/IngestBox";
 import { LoginScreen, OfflineCard } from "@/components/home/LoginScreen";
+import { SessionList } from "@/components/home/SessionList";
 import { Boot } from "@/components/layout/Boot";
 import { Navbar } from "@/components/layout/Navbar";
 import { Button } from "@/components/ui/common";
@@ -14,12 +15,19 @@ import { useWorkbenchStore } from "@/store/workbench";
 export default function Home() {
   const auth = useWorkbenchStore((s) => s.ui.auth);
   const fixture = useWorkbenchStore((s) => s.ui.fixture);
+  const offline = useWorkbenchStore((s) => s.is_offline_mode);
   const bootError = useWorkbenchStore((s) => s.ui.boot_error);
   const loadMe = useWorkbenchStore((s) => s.loadMe);
 
   let view;
   if (auth === "SIGNED_IN" || fixture) {
-    view = <IngestBox />;
+    view = (
+      <div className="flex flex-col gap-8">
+        <IngestBox />
+        {/* Fixture và Offline không có API: không hiện "Tiếp tục học" (nó sẽ báo lỗi tải oan). */}
+        {auth === "SIGNED_IN" && !fixture && !offline ? <SessionList /> : null}
+      </div>
+    );
   } else if (auth === "SIGNED_OUT") {
     view = <LoginScreen />;
   } else {
