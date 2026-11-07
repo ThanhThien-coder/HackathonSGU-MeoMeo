@@ -180,7 +180,7 @@ function collectFileExportedNames(root: Node): Set<string> {
   return exported;
 }
 
-function extractBoundNames(node: Node): string[] {
+export function extractBoundNames(node: Node): string[] {
   const names: string[] = [];
 
   function walk(n: Node): void {
