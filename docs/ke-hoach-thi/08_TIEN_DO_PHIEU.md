@@ -1,7 +1,7 @@
 # 08 — Tiến độ từng phiếu
 
 > Bảng theo dõi trạng thái của **68 phiếu** (Thiện 19, Minh 13, Nhân 13, Phát 15, Quý 8). Mỗi người cập nhật dòng phiếu của mình ngay sau khi merge, rồi nhắn nhóm "đã merge <mã phiếu>" như `00_CAM_TAY_CHI_VIEC.md` Mục 3.
-> **Cập nhật lần cuối:** 07/11/2026, 16:55 (đối chiếu với `origin/main` tới PR #52 và danh sách PR trên GitHub, gồm PR đang mở #39, #50, #53).
+> **Cập nhật lần cuối:** 07/11/2026, 17:25 (đối chiếu với `origin/main` tới PR #58 và danh sách PR trên GitHub, gồm PR đang mở #39, #50, #53, #59).
 > Danh sách phiếu, giờ và cách làm gốc nằm ở `02_PHIEU_<TEN>.md`. File này chỉ ghi trạng thái, không đổi nội dung phiếu.
 
 ## Cách đọc
@@ -20,23 +20,23 @@
 
 | Người | Xong ✅ | Một phần ◐ | Đang làm 🔄 | Chưa làm ⬜ | Tổng | Phiếu tiếp theo |
 | :-: | :-: | :-: | :-: | :-: | :-: | :-- |
-| Thiện | 6 | 1 | 0 | 12 | 19 | TH-08 (tải zip, Tầng 0 phần A), TH-09, TH-19 (pipeline); nốt deploy Cloud Run của TH-04; TH-11, TH-12 (các API còn thiếu) |
-| Minh | 6 | 1 | 0 | 6 | 13 | `src/server/engine/index.ts` của MI-06 (chờ TH-09); MI-07 |
-| Nhân | 7 | 1 | 2 | 3 | 13 | Merge #53 (NH-07 route chấm bài) và #50 (script ghi bundle); #39 (NH-08) |
-| Phát | 12 | 0 | 0 | 3 | 15 | PH-13 (đủ điều kiện từ bây giờ); sửa lỗi toast (xem Điểm nghẽn) |
+| Thiện | 6 | 1 | 1 | 11 | 19 | Merge #59 (TH-08); TH-09 (giải nén, lọc, che secret), TH-19 (pipeline); nốt deploy Cloud Run của TH-04; TH-11, TH-12 (các API còn thiếu) |
+| Minh | 7 | 2 | 0 | 4 | 13 | `src/server/engine/index.ts` của MI-06 (chờ TH-09); nốt MI-09 (kiểm trên Cloud Run, chốt repo demo) |
+| Nhân | 7 | 1 | 2 | 3 | 13 | Merge #53 (NH-07 route chấm bài) và #50 (script ghi bundle); #39 (NH-08); đọc 3 bài của MI-07 |
+| Phát | 13 | 0 | 0 | 2 | 15 | Không còn phiếu nào làm được ngay: PH-14 chờ TH-17 và NH-12, PH-15 lúc 08:00 |
 | Quý | 4 | 0 | 0 | 4 | 8 | QU-04 (làm tay, áp phích) |
-| **Cả đội** | **35** | **3** | **2** | **28** | **68** | |
+| **Cả đội** | **37** | **4** | **3** | **24** | **68** | |
 
-Ghi chú: các con số trên đếm theo PR đã merge trên `main` (tới PR #52). PR đang mở: #39 (NH-08, phần chỉnh prompt làm sớm), #50 (NH-10, script ghi bundle), #53 (NH-07, route chấm bài). Phiếu làm tay (không có PR) tính là ⬜ hoặc ❓ cho tới khi người phụ trách xác nhận.
+Ghi chú: các con số trên đếm theo PR đã merge trên `main` (tới PR #58). PR đang mở: #39 (NH-08, phần chỉnh prompt làm sớm), #50 (NH-10, script ghi bundle), #53 (NH-07, route chấm bài), #59 (TH-08, tải zip). Phiếu làm tay (không có PR) tính là ⬜ hoặc ❓ cho tới khi người phụ trách xác nhận.
 
 **Điểm nghẽn hiện tại:**
-- `src/app/api/` đã có `health`, `me`, `ingest`, `analyze-node`, `enrich-node`, `explain-selection` (#46). Còn thiếu `evaluate-feynman`, `reveal` (#53 đang mở, bản tạm `db.tx`, đổi sang `progress.ts` khi TH-12 xong) và `GET /api/sessions`, `GET /api/sessions/{id}/progress` (TH-11). PH-09 đã gọi endpoint progress nên bản thật chưa chạy được.
-- **Chưa có tầng thu thập mã nguồn thật:** TH-08, TH-09 chưa làm, nên `src/server/engine/index.ts` của Minh (cần `runIngest`) chưa viết được và `/api/ingest` vẫn chạy bằng engine giả `stub.ts` (xóa ở TH-10).
-- **Toast của store không hiện trên màn hình** (lỗi chung, file của Phát): `pushToast` ghi vào `ui.toasts` của `useWorkbenchStore`, còn `src/components/ui/Toasts.tsx` đọc store riêng `useToastStore`. Hậu quả: toast "Bài đã xong! Đã mở khóa…", "Bài chưa đạt." (PH-09), toast "Không đọc được gói demo Offline" (PH-12), `ERR_DEMO_MODE_DISABLED` (PH-11) đều không thấy. Đã được ghi trong PR #49 và #51 nhưng chưa ai sửa.
-- `public/demo/mock_bundle.json` chưa có (NH-12, ghi trên bản đóng băng). Tới lúc đó bấm Offline sẽ rơi vào đường "bundle hỏng" (toast, chạy chế độ thật), nên chưa thử tay được X-06 của PH-12.
-- `setOfflinePersona` của store chưa dựng lại `profile` và `progress` khi đổi persona Offline (spec Mục 9); `PersonaSelect` đang tự gọi `offline.ts` để bù.
-- PH-08 chưa chạy được A3–A6 trên `?fixture=1` (fixture không có bản phân tích).
+- `src/app/api/` đã có `health`, `me`, `ingest`, `analyze-node`, `enrich-node`, `explain-selection`. Còn thiếu `evaluate-feynman`, `reveal` (#53 đang mở, bản tạm `db.tx`, đổi sang `progress.ts` khi TH-12 xong) và `GET /api/sessions`, `GET /api/sessions/{id}/progress` (TH-11). PH-09 đã gọi endpoint progress nên bản thật chưa chạy được.
+- **Tầng thu thập mã nguồn thật còn dở:** TH-08 (#59) đang chờ merge, TH-09 chưa làm. `src/server/engine/index.ts` của Minh cần `runIngest` của TH-09 nên chưa viết được; `/api/ingest` vẫn chạy bằng engine giả `stub.ts` (xóa ở TH-10).
+- `public/demo/mock_bundle.json` chưa có (NH-12, ghi trên bản đóng băng). Bấm Offline lúc này rơi vào đường "bundle hỏng" (toast, chạy chế độ thật), nên chưa thử tay được X-06 của PH-12. `?fixture=1` giờ chạy được kịch bản A (#58) nhưng bằng bundle riêng, không thay cho bundle thật.
+- **Cổng G4 (lát dọc 1) còn thiếu**: route chấm bài, API tiến độ (TH-11), tầng thu thập thật (TH-09), ghép engine thật (TH-10).
 - TH-07 chưa thử trên Supabase thật và `loadSessionProgress` đang là bản tạm (`last_run` luôn `null`).
+- Chưa chốt repo demo cuối (cổng G5): Minh đề xuất bài trên repo Spring (xem PR #57), chờ Nhân đọc output AI (NH-11) và Thiện.
+- Sau #57, **không đổi tên bài hoặc route nữa** vì `node_id` của bài `GET /user` đã đổi; Nhân đã bắt đầu NH-11.
 
 ## Thiện — trưởng tích hợp, Tầng 0 engine, deploy
 
@@ -50,7 +50,7 @@ Ghi chú: các con số trên đếm theo PR đã merge trên `main` (tới PR #
 | TH-05 | Bảng DB, kết nối Postgres, lỗi API, log | 14:30 → 15:30 | ✅ | #16, #18 | #18 là sửa bổ sung: cho phép log lời gọi AI bản tối giản |
 | TH-06 | Đăng nhập GitHub và `/api/me` gọi 1 lần | 15:30 → 16:15 | ✅ | #20 | Làm sớm hơn kế hoạch. Phát có thể bật nút đăng nhập thật ở PH-04 |
 | TH-07 | `/api/ingest`, phiên học, snapshot và cache RAM (engine giả) | 16:15 → 17:00 | ✅ | #38 | Làm sớm. Mở khóa route của Nhân. Engine giả `stub.ts` xóa ở TH-10. Kiểm trên Postgres tạm (PGlite), **chưa thử Supabase thật**; chưa thử 2 request song song cùng repo; `loadSessionProgress` là bản tạm |
-| TH-08 | Tầng 0 phần A: link, kiểm repo, tải zip | 17:00 → 18:00 | ⬜ | — | |
+| TH-08 | Tầng 0 phần A: link, kiểm repo, tải zip | 17:00 → 18:00 | 🔄 | #59 (mở) | Xong code `url.ts`, `probe.ts`, `download.ts` và test (721 test xanh); đã gọi GitHub thật trên repo Spring (tải 510 KB, ghim SHA). Chờ merge. Thêm `probeErrorCode`, `EntryClass.NO_GRAMMAR` ngoài phiếu |
 | TH-09 | Tầng 0 phần B: giải nén, lọc, che secret, chọn file, vân tay tối giản | 18:00 → 19:15 | ⬜ | — | |
 | TH-10 | Ghép engine thật, lát dọc 1, deploy và kiểm Vertex AI | 19:15 → 20:00 | ⬜ | — | Cổng G3, G4 |
 | TH-11 | Danh sách phiên, mở lại phiên, API tiến độ | 20:00 → 21:00 | ⬜ | — | |
@@ -72,9 +72,9 @@ Ghi chú: các con số trên đếm theo PR đã merge trên `main` (tới PR #
 | MI-04 | Đồ thị gọi hàm và điểm entry | 15:30 → 17:00 | ✅ | #33 | Làm sớm. Còn sót ENG-23 phần NestJS `provide/useClass`; Java thuộc MI-08 |
 | MI-05 | Lát cắt, node và tên bài | 17:00 → 18:30 | ✅ | #42 | Làm sớm. Thêm `complexity.ts`, `slice-lines.ts`; sửa lỗi `<module>` trùng khoảng dòng của MI-04 |
 | MI-06 | Khử chu trình, xếp hạng, giữ tối đa 20 bài, nhóm và cạnh, điểm nhập engine | 18:30 → 19:30 | ◐ | #48 | Xong `buildGraph` (khử chu trình, xếp hạng, nhóm, vị trí theo tầng tô-pô). **Chưa có** `src/server/engine/index.ts` vì cần `runIngest` của TH-09. TH-10 cần kiểm `/api/ingest` nhận `ERR_NO_ARCHITECTURAL_SLICE` |
-| MI-07 | Chạy repo TS dự phòng, sửa bài lỗi, test tất định | 19:30 → 20:30 | ⬜ | — | Chưa làm; MI-08 làm trước vì không đụng file MI-07 |
+| MI-07 | Chạy repo TS dự phòng, sửa bài lỗi, test tất định | 19:30 → 20:30 | ✅ | #57 | Làm sớm, gộp với phần chạy máy của MI-09. Sửa bài 1 bước, bước rỗng, tầng sai, tên `GET /user`. **Đổi `node_id` của bài `GET /user`**. Còn chờ Nhân đọc 3 bài (tiêu chí MI-07) |
 | MI-08 | Java và Spring Boot cho repo demo Q-03 | 20:30 → 23:00 | ✅ | #52 | Làm sớm. Thử trên `spring-boot-realworld-example-app`: 116 file, 19 bài, 15 cạnh. MyBatis `@Mapper` tính là `DATA_SINK` (spec không nhắc) |
-| MI-09 | Sửa theo repo demo đã chốt và các dòng engine của DoD | 23:00 → 00:30 | ⬜ | — | |
+| MI-09 | Sửa theo repo demo đã chốt và các dòng engine của DoD | 23:00 → 00:30 | ◐ | #57 | Xong phần chạy máy: DoD engine trên 3 repo (Spring 19 bài, Express 19, NestJS 20) đạt các dòng 1, 2, 3, 17. **Chưa làm:** đồng hồ `ingest_ms + engine_ms` (cần `/api/ingest` thật, TH-10), kiểm trên Cloud Run, sửa theo repo demo đã chốt |
 | MI-10 | Bàn giao engine trước khi ngủ | 00:30 → 01:00 | ⬜ | — | Làm tay |
 | MI-11 | Kiểm engine theo DoD và sửa lỗi chặn demo | 04:00 → 05:30 | ⬜ | — | Mẫu sửa lỗi |
 | MI-12 | Slide thuyết trình (người chính) và đoạn video Offline | 05:30 → 07:30 | ⬜ | — | Làm tay. Phát cần slide lúc 08:00 (PH-15) |
@@ -109,12 +109,12 @@ Ghi chú: các con số trên đếm theo PR đã merge trên `main` (tới PR #
 | PH-05 | Khung trang học 3 cột, thanh trên, bản đồ bài học | 15:45 → 17:15 | ✅ | #23, #22 | #22 thêm `CONFIG.UI_PANE_WIDTHS_PCT` vào contracts (Thiện đã merge) |
 | PH-06 | Khung code Monaco, tab theo file, code theo bước | 17:15 → 18:30 | ✅ | #27 | Làm sớm. `CodeSnippetViewer` chưa gắn vào `LearnShell` |
 | PH-07 | Tour X-Ray: thẻ vai trò, từng bước, tóm tắt; hàng phân tích | 18:30 → 19:45 | ✅ | #30 | Làm sớm. **Chưa gắn** `LearnSidePanel` vào cột phải `LearnShell` (cột giữa và cột phải vẫn là chỗ giữ chỗ). Thanh mài mòn chưa thử vì fixture không có `profile` |
-| PH-08 | Feynman: câu hỏi, ô trả lời, kết quả trong cột, gợi ý, đáp án mẫu | 19:45 → 21:45 | ✅ | #36 | Làm sớm. Đã gắn `LearnSidePanel` vào cột phải `LearnShell` (cột giữa vẫn giữ chỗ, `CodeSnippetViewer` chưa gắn). **Chưa chạy được A3–A6 trên `?fixture=1`**: fixture không có bản phân tích nên tab Feynman tắt, và action store bỏ qua khi `fixture=true`; cần thêm dữ liệu fixture hoặc chờ route thật. Chưa có test mới cho component/store |
+| PH-08 | Feynman: câu hỏi, ô trả lời, kết quả trong cột, gợi ý, đáp án mẫu | 19:45 → 21:45 | ✅ | #36, #58 | Làm sớm. #58 bổ sung: `?fixture=1` chạy được kịch bản A3–A6 trên bài N3 (bundle ghép từ fixture NH-02, chạy trên `offline.ts`, điểm 0.4202 và 0.5767 khớp spec); câu gõ phải gần như y hệt kịch bản. Test: `fixture-scenario.test.ts`. Chưa thử bằng trình duyệt |
 | PH-09 | Áp kết quả: đổi trạng thái node, mở khóa, toast, mài mòn | 21:45 → 22:45 | ✅ | #43 | Làm sớm. Gọi `GET /api/sessions/{id}/progress` (chưa có, TH-11). Tiêu chí đạt bản thật (học xong N3, 1 lần `/api/me`) chưa thử vì chưa có route chấm bài |
 | PH-10 | Nút "Giải thích" cho đoạn bôi đen | 22:45 → 23:45 | ✅ | #44, #47 | Làm sớm. #47 bổ sung: gắn `CodeSnippetViewer` vào `LearnShell`. Thử bằng `?fixture=1`; API thật (route `explain-selection` đã có từ #46) chưa thử |
-| PH-11 | Tổng quan nhịp 1, ô persona, menu tài khoản, kiểm dưới 1024 px | 23:45 → 02:00 | ✅ | #51 | Làm sớm. Có sửa `CodeSnippetViewer` ngoài danh sách (cột giữa hiện Tổng quan khi chưa chọn bài). Kiểm 375 px bằng Chrome headless. Chưa thử với Supabase/API thật (xóa tài khoản, `/api/demo/persona` chờ TH-15); chưa có test cho `overview-view.ts`; toast `ERR_DEMO_MODE_DISABLED` chưa hiện vì lỗi toast |
-| PH-12 | Nối giao diện Offline | 02:00 → 03:00 | ✅ | #49 | Làm sớm. `Ctrl+Shift+D` và `?offline=1` chạy, bundle hỏng thì rơi về chế độ thật. **Chưa thử với bundle thật** (`mock_bundle.json` chưa có); toast "bundle hỏng" chưa hiện vì lỗi toast; `setOfflinePersona` chưa đồng bộ sang `offline.ts` |
-| PH-13 | So ảnh với `prototype.html` và sửa lệch | 03:00 → 04:00 | ⬜ | — | |
+| PH-11 | Tổng quan nhịp 1, ô persona, menu tài khoản, kiểm dưới 1024 px | 23:45 → 02:00 | ✅ | #51 | Làm sớm. Có sửa `CodeSnippetViewer` ngoài danh sách (cột giữa hiện Tổng quan khi chưa chọn bài). Kiểm 375 px bằng Chrome headless. Chưa thử với Supabase/API thật (xóa tài khoản, `/api/demo/persona` chờ TH-15); chưa có test cho `overview-view.ts` (toast đã sửa ở #55) |
+| PH-12 | Nối giao diện Offline | 02:00 → 03:00 | ✅ | #49 | Làm sớm. `Ctrl+Shift+D` và `?offline=1` chạy, bundle hỏng thì rơi về chế độ thật. **Chưa thử với bundle thật** (`mock_bundle.json` chưa có) (toast đã sửa ở #55; `setOfflinePersona` dựng lại hồ sơ và tiến độ ở #58) |
+| PH-13 | So ảnh với `prototype.html` và sửa lệch | 03:00 → 04:00 | ✅ | #56 | Làm sớm. 6/6 cặp ảnh khớp 4 điều (chụp 1366×768, chủ đề tối, bằng API giả vì lúc đó fixture chưa tới được Feynman). Sửa 1 lỗi CSS: quy tắc `button` ngoài `@layer` thắng class Tailwind, đưa vào `@layer base`. Nên chụp lại cặp 4–6 bằng `?fixture=1` mới (#58) |
 | PH-14 | Sửa lỗi giao diện sau DoD và quay video dự phòng | 04:00 → 05:00 | ⬜ | — | Mẫu sửa lỗi |
 | PH-15 | Tập bấm demo và commit cuối | 08:00 → 09:00 | ⬜ | — | Mẫu sửa lỗi |
 
@@ -139,7 +139,7 @@ Ghi chú: các con số trên đếm theo PR đã merge trên `main` (tới PR #
 | G2 | 14:00 | Cloud Run sống (TH-04) | ❓ Mới có `/api/health`. Thiện xác nhận deploy |
 | GP | 20:00, 00:00 | Pipeline deploy (TH-19) | ⬜ TH-19 chưa làm |
 | G3 | 20:15 | Vertex AI (TH-10) | ⬜ Nhân đã chạy thử Vertex express (số đo trong PR #28) |
-| G4 | 20:00 | Lát dọc 1 (TH-10) | ⬜ Đã có: TH-07, PH-06 → PH-10, lõi và route `analyze-node`, `enrich-node`, `explain-selection` (#46), khung code đã gắn vào `LearnShell` (#47). Còn thiếu: route chấm bài (#53 đang mở), `GET /api/sessions/{id}/progress` (TH-11), tầng thu thập mã nguồn thật (TH-08, TH-09), `engine/index.ts` (MI-06), ghép engine thật (TH-10) |
+| G4 | 20:00 | Lát dọc 1 (TH-10) | ⬜ Đã có: TH-07, PH-06 → PH-13, lõi và route `analyze-node`, `enrich-node`, `explain-selection` (#46), khung code đã gắn vào `LearnShell` (#47). Còn thiếu: route chấm bài (#53 đang mở), `GET /api/sessions/{id}/progress` (TH-11), tầng thu thập mã nguồn thật (TH-08 chờ merge #59, TH-09), `engine/index.ts` (MI-06), ghép engine thật (TH-10) |
 | G7 | 04:00 | Đóng băng tính năng | ⬜ |
 
 ## Nhật ký cập nhật
@@ -151,3 +151,4 @@ Ghi chú: các con số trên đếm theo PR đã merge trên `main` (tới PR #
 | 07/11 15:45 | Phát | Cập nhật tới PR #36: PH-08 sang ✅ (ghi rõ A3–A6 trên fixture chưa chạy được); cập nhật G4; ghi PR #40 đang mở |
 | 07/11 16:20 | Phát | Cập nhật tới PR #44: TH-07, MI-05, PH-09, PH-10 sang ✅; PH-04 thêm #40; NH-10 sang ◐ (#37); NH-08 sang 🔄 (#39 đang mở); viết lại mục điểm nghẽn |
 | 07/11 16:55 | Phát | Cập nhật tới PR #52: MI-08, NH-05, NH-06, NH-09, PH-11, PH-12 sang ✅; MI-06 sang ◐; NH-07 sang 🔄 (#53); NH-10 thêm #50; viết lại mục điểm nghẽn (thêm lỗi toast) |
+| 07/11 17:25 | Phát | Cập nhật tới PR #58: MI-07, PH-13 sang ✅; MI-09 sang ◐; TH-08 sang 🔄 (#59); PH-08 thêm #58; ghi #55 đã sửa lỗi toast; viết lại mục điểm nghẽn |
