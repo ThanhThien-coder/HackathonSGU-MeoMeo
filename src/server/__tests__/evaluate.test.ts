@@ -500,6 +500,31 @@ describe("TASK_11: evaluate-feynman", () => {
       expect(insertAttemptQuery).toBeDefined();
     });
 
+    it("D10b: Gõ 'em không biết' ⇒ chấm sẵn bằng code, KHÔNG gọi AI, tính lượt, có câu mồi; lượt 2 'em không biết á' ⇒ gợi ý dạy", async () => {
+      const req1: EvaluateFeynmanRequest = {
+        session_id: mockSession.id,
+        run_id: mockRun.id,
+        question_index: 1,
+        attempt_number: 1,
+        student_answer: "em không biết",
+      };
+      const r1 = await evaluateFeynman(req1, mockSession.user_id);
+      expect(mockCallLLMWithRetry).not.toHaveBeenCalled();
+      expect(r1.intent).toBe("GIVE_UP");
+      expect(r1.question.attempts_used).toBe(1);
+      expect(r1.follow_up?.type).toBe("CODE_POINTER");
+      expect(r1.feedback).toContain("Không sao");
+
+      mockRun.questions[0].attempts_used = 1;
+      mockRun.questions[0].last_answer = "em không biết";
+      const r2 = await evaluateFeynman(
+        { ...req1, attempt_number: 2, student_answer: "em không biết á" },
+        mockSession.user_id,
+      );
+      expect(mockCallLLMWithRetry).not.toHaveBeenCalled();
+      expect(r2.follow_up?.question).toContain(`Gợi ý: ${mockRun.questions[0].must_have_points[0]}`);
+    });
+
     it("D10: Gõ 'chịu' (intent GIVE_UP) ở lượt 1 => có follow_up loại CODE_POINTER", async () => {
       mockCallLLMWithRetry.mockResolvedValueOnce({
         ok: true,
