@@ -7,6 +7,7 @@ import {
   resolveTypedCall,
 } from "./callgraph";
 import type { CallGraphResult } from "./callgraph";
+import { guardOf } from "./branch";
 import { javaTypeName } from "./resolvers/java";
 import { combineRoutePath } from "./routes";
 import type {
@@ -298,6 +299,7 @@ export function buildJavaCallGraph(files: ParsedFile[], idx: SymbolIndex): CallG
       end_index: node.endIndex,
       confidence,
       ambiguous,
+      guard: guardOf(node),
     };
     const sites = call_sites.get(caller);
     if (sites) {

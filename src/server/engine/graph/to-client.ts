@@ -68,6 +68,7 @@ export function toClientResult(r: StaticEngineResult): ClientStaticEngineResult 
         snippet: s.snippet,
         snippet_line_map: [...s.snippet_line_map],
         origin_note: s.origin_note,
+        branch: s.branch ? { ...s.branch } : null,
       })),
       dto_snippet: n.dto_snippet,
       group_id: n.group_id,

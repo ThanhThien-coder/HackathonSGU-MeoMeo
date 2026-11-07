@@ -1,6 +1,6 @@
 import type { Node } from "web-tree-sitter";
 import { CONFIG } from "@/contracts";
-import type { ArchitecturalLayer, ExecutionTraceStep } from "@/contracts";
+import type { ArchitecturalLayer, ExecutionTraceStep, StepBranch } from "@/contracts";
 import { findFunctionNode } from "./complexity";
 import { hash6, nameCandidate, slug } from "./naming";
 import { getAdapter } from "./registry";
@@ -804,6 +804,55 @@ function enforceNodeBudget(steps: DraftStep[], protectedKeys: Set<string>): Draf
   return current;
 }
 
+/**
+ * Nhánh phụ của từng bước. Có 1 chỗ gọi không điều kiện từ bước luồng chính ⇒ luồng chính; chỗ gọi
+ * không điều kiện từ bước nhánh phụ ⇒ thừa kế nhánh đó; còn lại ⇒ điều kiện ở chỗ gọi từ hàm cha.
+ * Mọi bước (trừ entry) đều có điều kiện ⇒ coi cả bài là luồng chính.
+ */
+function stepBranches(steps: DraftStep[], entry: EntryPoint, ctx: EngineContext): Map<string, StepBranch | null> {
+  const keys = steps.map((s) => s.reached.key);
+  const parentOf = new Map(steps.map((s) => [s.reached.key, s.reached.parent]));
+  const fixed = new Set([entry.key, ...(entry.binding?.middlewares ?? [])]);
+  const memo = new Map<string, StepBranch | null>();
+  const visiting = new Set<string>();
+
+  const resolve = (key: string): StepBranch | null => {
+    if (memo.has(key)) return memo.get(key) ?? null;
+    if (fixed.has(key) || visiting.has(key)) return null;
+    visiting.add(key);
+
+    const incoming = keys
+      .filter((caller) => caller !== key)
+      .flatMap((caller) =>
+        resolvedSitesOf(caller, ctx)
+          .filter((site) => site.callee === key)
+          .map((site) => ({ caller, guard: site.guard ?? null }))
+      );
+    // Chỗ gọi từ hàm cha (thứ tự DFS) xét trước.
+    incoming.sort((a, b) => Number(b.caller === parentOf.get(key)) - Number(a.caller === parentOf.get(key)));
+
+    let result: StepBranch | null = null;
+    const unguarded = incoming.filter((i) => i.guard === null);
+    if (unguarded.length > 0) {
+      const callerBranches = unguarded.map((i) => resolve(i.caller));
+      result = callerBranches.includes(null) ? null : (callerBranches[0] ?? null);
+    } else if (incoming.length > 0) {
+      result = incoming[0].guard;
+    }
+
+    visiting.delete(key);
+    memo.set(key, result);
+    return result;
+  };
+
+  const branches = new Map(keys.map((key) => [key, resolve(key)]));
+  const others = keys.filter((key) => key !== entry.key);
+  if (others.length > 0 && others.every((key) => branches.get(key) !== null)) {
+    for (const key of others) branches.set(key, null);
+  }
+  return branches;
+}
+
 export function buildSlice(
   entry: EntryPoint,
   ctx: EngineContext,
@@ -843,6 +892,7 @@ export function buildSlice(
     }
 
     const steps = enforceNodeBudget(drafts, protectedStepKeys(entry, criterion, drafts));
+    const branches = stepBranches(steps, entry, ctx);
 
     const traceSteps: ExecutionTraceStep[] = steps.map((step, index) => {
       const { lines, lineMap } = renderStep(step);
@@ -856,6 +906,7 @@ export function buildSlice(
         line_end: Math.max(...rows),
         snippet: lines.join("\n"),
         snippet_line_map: lineMap,
+        branch: branches.get(step.reached.key) ?? null,
       };
     });
 

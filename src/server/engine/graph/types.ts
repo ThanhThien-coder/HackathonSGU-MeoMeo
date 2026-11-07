@@ -5,6 +5,7 @@ import type {
   IngestOutput,
   LanguageId,
   LanguageSupportTier,
+  StepBranch,
   SymbolDefinition,
 } from "@/contracts";
 
@@ -62,6 +63,7 @@ export interface CallSite {
   end_index: number; // Vị trí kết thúc: lời gọi nằm trong đối số kết thúc trước hàm bọc nó
   confidence: "RESOLVED" | "INFERRED";
   ambiguous: boolean;
+  guard?: StepBranch | null; // Điều kiện gần nhất bao lời gọi trong hàm gọi, null ⇒ luôn chạy
 }
 
 export interface FunctionInfo extends SymbolDefinition {
