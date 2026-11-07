@@ -3,7 +3,6 @@
 // Nội dung tab Feynman Arena. docs/spec/30_UI.md Mục 6.2, 7.4, 7.5.
 // Bổ sung Bộ nấc bậc người học (.seg) và TasteSkill 2.5 theo prototype.html.
 import { useEffect, useState } from "react";
-import type { PersonaMode } from "@/contracts";
 import { AnswerBox } from "@/components/learn/AnswerBox";
 import { Eval, type AttemptEntry } from "@/components/learn/Eval";
 import {
@@ -24,12 +23,6 @@ import { useWorkbenchStore } from "@/store/workbench";
 
 const NO_ENTRIES: AttemptEntry[] = [];
 
-const PERSONA_LEVELS: Array<{ mode: PersonaMode; label: string }> = [
-  { mode: "NEWBIE", label: "Mới học" },
-  { mode: "MID_LEVEL", label: "Đã làm" },
-  { mode: "SENIOR_RUSTY", label: "Kiến trúc sư" },
-];
-
 export function FeynmanQuestionSection() {
   const nodeId = useWorkbenchStore((s) => s.active_node_id);
   const run = useWorkbenchStore((s) => (s.active_node_id ? s.runs[s.active_node_id] : undefined));
@@ -43,34 +36,11 @@ export function FeynmanQuestionSection() {
   const loadRun = useWorkbenchStore((s) => s.loadRun);
   const skipQuestion = useWorkbenchStore((s) => s.skipQuestion);
 
-  const offline = useWorkbenchStore((s) => s.is_offline_mode);
-  const offlinePersona = useWorkbenchStore((s) => s.ui.offline_persona);
-  const setOfflinePersona = useWorkbenchStore((s) => s.setOfflinePersona);
-  const switchPersona = useWorkbenchStore((s) => s.switchPersona);
-
   const [skipping, setSkipping] = useState(false);
-  const [selectedPersona, setSelectedPersona] = useState<PersonaMode>(
-    offline ? offlinePersona : "NEWBIE"
-  );
 
   const hasRun = run !== undefined;
   const status = nodeState?.status;
   const lastRunOpen = nodeState?.last_run?.finished_at === null;
-
-  useEffect(() => {
-    if (offline) {
-      setSelectedPersona(offlinePersona);
-    }
-  }, [offline, offlinePersona]);
-
-  const handlePersonaChange = async (mode: PersonaMode) => {
-    setSelectedPersona(mode);
-    if (offline) {
-      setOfflinePersona(mode);
-    } else {
-      await switchPersona(mode);
-    }
-  };
 
   useEffect(() => {
     if (nodeId && !hasRun && (status === "AVAILABLE" || lastRunOpen)) void loadRun(nodeId);
@@ -138,32 +108,8 @@ export function FeynmanQuestionSection() {
   return (
     <div className="grid gap-3 p-3.5">
       <h2 id="rp-title" tabIndex={-1} className="sr-only outline-none">
-        Vũ đài phản biện Feynman
+        Hỏi đáp Feynman
       </h2>
-
-      {/* Bộ chuyển bậc người học (.seg) theo prototype.html */}
-      <div>
-        <span className="lbl text-xs font-semibold text-[var(--muted)] mb-1.5 block">
-          Bậc người học (Persona):
-        </span>
-        <div className="seg" role="radiogroup" aria-label="Bậc người học">
-          {PERSONA_LEVELS.map((lvl) => {
-            const isChecked = selectedPersona === lvl.mode;
-            return (
-              <button
-                key={lvl.mode}
-                type="button"
-                role="radio"
-                aria-checked={isChecked}
-                className={isChecked ? "active" : ""}
-                onClick={() => void handlePersonaChange(lvl.mode)}
-              >
-                {lvl.label}
-              </button>
-            );
-          })}
-        </div>
-      </div>
 
       <QuestionChips questions={questions} activeIndex={current.question_index} onSelect={pick} />
 

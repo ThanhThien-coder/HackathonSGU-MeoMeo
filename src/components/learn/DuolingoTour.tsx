@@ -24,8 +24,8 @@ const TOUR_STEPS: TourStepDef[] = [
   {
     targetId: "colRight",
     tag: "BƯỚC 1 / 4 · BẮT ĐẦU TẠI ĐÂY",
-    title: "TRUNG TÂM X-RAY & FEYNMAN",
-    text: "Đây là trái tim của việc học! Tab X-Ray dẫn dắt bạn qua từng tầng kiến trúc của chức năng (Controller → Service → DB). Sau đó, tab Feynman giúp bạn củng cố bằng cách tự giải thích code.",
+    title: "LUỒNG XỬ LÝ & HỎI ĐÁP FEYNMAN",
+    text: "Đây là trái tim của việc học! Tab Học luồng xử lý dẫn dắt bạn qua từng tầng kiến trúc của chức năng (Controller → Service → DB). Sau đó, tab Hỏi đáp Feynman giúp bạn củng cố bằng cách tự giải thích code.",
     btnNext: "Tiếp theo: Khung Code →",
     prefer: "left",
   },

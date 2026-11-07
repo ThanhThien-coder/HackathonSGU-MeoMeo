@@ -175,10 +175,12 @@ export function XRayPanel() {
   }
 
   return (
-    <div className="grid gap-3 p-3.5 min-w-0 break-words overflow-hidden">
+    <div className="flex flex-col gap-3 p-3.5 min-w-0 break-words overflow-hidden h-full">
       {banner}
       {notice}
-      {body}
+      <div className="flex-1 flex flex-col min-h-0">
+        {body}
+      </div>
     </div>
   );
 }
