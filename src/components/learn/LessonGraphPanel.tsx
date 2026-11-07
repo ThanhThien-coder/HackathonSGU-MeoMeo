@@ -9,23 +9,15 @@ import { displayTitle } from "@/lib/derive";
 import {
   blockedBy,
   cardAction,
+  crossGroupBlockers,
   firstOpenableBlocker,
+  groupTree,
   lessonGroups,
   nodeStatesOf,
   startNodeIds,
   weakParents,
 } from "@/lib/lesson-map";
 import { useWorkbenchStore } from "@/store/workbench";
-
-// Tạm thời cho tới khi có phần 0 (`groupTree` trong lesson-map.ts): mọi bài nằm thẳng trong nhóm.
-// Có phần 0 rồi ⇒ xóa hàm này, import `groupTree` và giữ nguyên chỗ gọi.
-function groupTree(nodeIds: string[], byId: Map<string, unknown>): {
-  direct: string[];
-  subs: Array<{ key: string; label: string; node_ids: string[] }>;
-} {
-  void byId;
-  return { direct: nodeIds, subs: [] };
-}
 
 interface BlockedNotice {
   hint: string;
@@ -107,8 +99,8 @@ export function LessonGraphPanel() {
         status={state.status}
         hasWarning={state.has_warning}
         weakNames={weakParents(node, states).map(titleOf)}
-        // Có phần 0 ⇒ đổi thành crossGroupBlockers(node, states, groups).map(titleOf)
-        blockedNames={blockedBy(node, states).map(titleOf)}
+        // Bài cần học trước cùng nhóm chỉ hiện ổ khóa; khác nhóm mới hiện "cần thêm: …"
+        blockedNames={crossGroupBlockers(node, states, groups).map(titleOf)}
         isStart={starts.has(id)}
         active={activeNodeId === id}
         analysis={analysisOf(id)}
