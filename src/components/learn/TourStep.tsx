@@ -96,9 +96,32 @@ export function TourStep({
         </div>
       </div>
 
-      <div className="where font-mono text-[11.5px] text-[var(--muted)] break-all overflow-x-auto">
+      <div className="where font-mono text-[11.5px] leading-[1.6] text-[var(--muted)] break-all min-w-0">
         {step.file_path} · {rangeLabel(step.line_start, step.line_end)}
       </div>
+
+      {step.branch ? (
+        <div
+          className="my-1 flex min-w-0 flex-col gap-2 rounded-xl border-l-[3px] border-[var(--accent)] bg-[var(--panel2)] px-3.5 py-3"
+          title="Bước này nằm trong nhánh phụ: chỉ chạy khi điều kiện trong code đúng"
+        >
+          <div className="flex items-center gap-2 text-[11.5px] font-semibold uppercase tracking-wide text-[var(--accent)]">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <circle cx="6" cy="5" r="2.2" />
+              <circle cx="6" cy="19" r="2.2" />
+              <circle cx="18" cy="9" r="2.2" />
+              <path d="M6 7.2v9.6M18 11.2c0 3.6-6 3-12 5.6" />
+            </svg>
+            Nhánh phụ
+          </div>
+          <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1.5 text-[13px] leading-[1.5] text-[var(--muted)]">
+            <span>{step.branch.label}</span>
+            <code className="min-w-0 break-all rounded-md bg-[var(--panel3)] px-2 py-0.5 font-mono text-[12.5px] text-[var(--text)]">
+              {step.branch.condition}
+            </code>
+          </div>
+        </div>
+      ) : null}
 
       {step.text ? (
         <p className="expl m-0 text-[14.5px] leading-[1.65] text-[var(--text)] break-words">

@@ -3,6 +3,9 @@ import type { StaticEngineResult } from "@/contracts";
 import fixtureJson from "@/server/engine/__fixtures__/shop-api.json";
 import {
   blockedBy,
+  crossGroupBlockers,
+  groupTree,
+  routeSubOf,
   cardAction,
   firstOpenableBlocker,
   groupOfNode,
@@ -136,5 +139,55 @@ describe("firstOpenableBlocker", () => {
     const states: NodeStates = { a: st("a", "COMPLETED"), b: st("b", "AVAILABLE"), c: st("c", "LOCKED") };
     expect(firstOpenableBlocker(nodes, states, "a")).toBeNull();
     expect(firstOpenableBlocker(nodes, states, "c")).toBe("b");
+  });
+});
+
+describe("cây bài học: routeSubOf, groupTree, crossGroupBlockers", () => {
+  it("routeSubOf theo luật sub của engine", () => {
+    expect(routeSubOf("PUT /api/v1/projects/{id}/phases/{phaseId}")).toBe("phases");
+    expect(routeSubOf("POST /api/v1/projects")).toBe("");
+    expect(routeSubOf("GET /projects/:id")).toBe("");
+    expect(routeSubOf("POST /articles/:slug/comments")).toBe("comments");
+    expect(routeSubOf("POST /users/login")).toBe("");
+    expect(routeSubOf("ProjectService.createProject")).toBe("");
+    expect(routeSubOf(null)).toBe("");
+  });
+
+  const ev = (id: string, title_evidence: string) => ({ id, title_evidence });
+  const byId = new Map(
+    [
+      ev("create", "POST /api/v1/projects"),
+      ev("publish", "POST /api/v1/projects/{id}/publish"),
+      ev("artifact", "POST /api/v1/projects/{id}/artifacts"),
+      ev("phase-new", "POST /api/v1/projects/{id}/phases"),
+      ev("phase-upd", "PUT /api/v1/projects/{id}/phases/{pid}"),
+      ev("job", "ProjectJob.run"),
+    ].map((n) => [n.id, n]),
+  );
+
+  it("groupTree: ≥ 2 bài cùng sub mới thành thư mục, bài lẻ nằm thẳng, giữ thứ tự", () => {
+    const tree = groupTree(["create", "phase-new", "publish", "artifact", "phase-upd", "job"], byId);
+    expect(tree.direct).toEqual(["create", "publish", "artifact", "job"]);
+    expect(tree.subs).toEqual([{ key: "phases", label: "Phases", node_ids: ["phase-new", "phase-upd"] }]);
+  });
+
+  it("groupTree: mọi bài cùng 1 sub ⇒ không tạo thư mục", () => {
+    const tree = groupTree(["phase-new", "phase-upd"], byId);
+    expect(tree.direct).toEqual(["phase-new", "phase-upd"]);
+    expect(tree.subs).toEqual([]);
+  });
+
+  it("crossGroupBlockers chỉ giữ bài cha chưa thông ở nhóm khác", () => {
+    const groups = [
+      { group_id: "g1", name: "Template", key_kind: "ENTITY" as const, node_ids: ["tpl"], recommended: false },
+      { group_id: "g2", name: "Dự án", key_kind: "ENTITY" as const, node_ids: ["create", "from-tpl"], recommended: true },
+    ];
+    const states: NodeStates = {
+      tpl: st("tpl", "AVAILABLE"),
+      create: st("create", "AVAILABLE"),
+      "from-tpl": st("from-tpl", "LOCKED"),
+    };
+    expect(crossGroupBlockers(node("from-tpl", ["create", "tpl"]), states, groups)).toEqual(["tpl"]);
+    expect(crossGroupBlockers(node("from-tpl", ["create"]), states, groups)).toEqual([]);
   });
 });
