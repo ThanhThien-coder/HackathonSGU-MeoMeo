@@ -130,6 +130,8 @@ export function planNodeQuestions(
     }
   }
   items.unshift(...items.splice(f, 1));
+  // Số câu theo độ dài bài: 1 bước ⇒ 1 câu, 2 bước ⇒ tối đa 2, ≥ 3 bước ⇒ tối đa 3 (câu FLOW luôn giữ, đứng đầu).
+  items.splice(Math.max(1, Math.min(3, stepCount)));
 
   return items.map((it, i) => ({
     question_index: i + 1,

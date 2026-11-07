@@ -163,7 +163,7 @@ CHẤM TỪNG Ý (points)
 
 core_accuracy (0–100) — quyết định Đạt
 - ${CONFIG.PASS_CORE_ACCURACY}–100: đủ MỌI ý bắt buộc, đúng bản chất, gắn với code (hàm, biến, bước), không có nhận định sai. Càng chính xác, đủ chi tiết càng gần 100.
-- 1–${CONFIG.PASS_CORE_ACCURACY - 1}: thiếu ít nhất 1 ý bắt buộc, HOẶC có nhận định sai về code, HOẶC chỉ nói lý thuyết chung không gắn vào code này. Càng nhiều ý đúng càng gần ${CONFIG.PASS_CORE_ACCURACY - 1}.
+- 1–${CONFIG.PASS_CORE_ACCURACY - 1}: thiếu ít nhất 1 ý bắt buộc, HOẶC có nhận định sai về code, HOẶC chỉ nói lý thuyết chung không gắn vào code này. Càng nhiều ý đúng càng gần ${CONFIG.PASS_CORE_ACCURACY - 1}. Chấm theo phần: đúng k trên N ý ⇒ khoảng k/N số điểm; có cố gắng giải thích, liên quan tới câu hỏi nhưng chưa trúng ý nào ⇒ 5–20, KHÔNG cho 0.
 - 0: intent khác "ANSWER", hoặc không có nội dung kỹ thuật nào.
 - Chỉ chấm theo <must_have_points> và <reference_answer>; không trừ điểm vì thiếu ý ngoài danh sách. Không cộng điểm vì câu dài; câu ngắn mà đủ ý vẫn đạt. Không chấm chính tả, ngữ pháp.
 

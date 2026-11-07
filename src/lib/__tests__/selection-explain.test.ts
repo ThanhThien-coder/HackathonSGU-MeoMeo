@@ -44,7 +44,7 @@ describe("explainButtonState", () => {
   it("dài hơn EXPLAIN_SELECTION_MAX_CHARS ⇒ hiện, tắt, tooltip 'Chọn đoạn ngắn hơn'", () => {
     const long = { selected_text: "a".repeat(CONFIG.EXPLAIN_SELECTION_MAX_CHARS + 1), invalid_reason: null };
     expect(explainButtonState(long, false)).toEqual({ visible: true, disabled: true, tooltip: REASON_TOO_LONG });
-    expect(REASON_TOO_LONG).toBe("Chọn đoạn ngắn hơn");
+    expect(REASON_TOO_LONG).toContain("chọn vài dòng");
   });
 
   it("đúng bằng trần ký tự vẫn dùng được", () => {

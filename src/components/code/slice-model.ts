@@ -64,7 +64,8 @@ export interface ModelHlRange {
 export const REASON_EMPTY = "Chưa chọn đoạn code nào";
 export const REASON_MARKER = "Vùng chọn có dòng không thuộc bài học (dòng đã lược)";
 export const REASON_DISCONTINUOUS = "Vùng chọn gồm các dòng không liền nhau";
-export const REASON_TOO_LONG = "Chọn đoạn ngắn hơn";
+export const REASON_TOO_LONG = "Đoạn bạn chọn hơi dài, chọn vài dòng thôi để giải thích kỹ hơn nhé";
+export const REASON_NO_WORD = "Chọn một tên hàm, tên biến hoặc một dòng code có chữ để mình giải thích nhé";
 
 const EMPTY_MODEL: StepModel = { text: "", lineMap: [] };
 
@@ -223,6 +224,8 @@ export function toOriginalSelection(model: StepModel, selection: ModelSelection)
     if (touchesMarker) invalid = REASON_MARKER;
     else if (!continuous) invalid = REASON_DISCONTINUOUS;
     else if (selectedText.length > CONFIG.EXPLAIN_SELECTION_MAX_CHARS) invalid = REASON_TOO_LONG;
+    // Chỉ có dấu ngoặc, dấu câu (VD "{ {") ⇒ không có gì để giải thích, không gọi AI.
+    else if (!/[\p{L}\p{N}]/u.test(selectedText)) invalid = REASON_NO_WORD;
   }
 
   return { range, selected_text: selectedText, invalid_reason: invalid };

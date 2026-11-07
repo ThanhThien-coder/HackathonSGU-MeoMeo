@@ -314,12 +314,15 @@ export function staticFeedback(
   isPassed: boolean,
   attempt: number,
   maxAttempts: number,
+  score = 50,
 ): string {
   if (isPassed) {
     return "Chính xác! Bạn đã nắm được ý chính của đoạn code này.";
   }
   if (attempt < maxAttempts) {
-    return "Còn thiếu một chút thôi. Xem gợi ý bên dưới rồi thử nói thêm nhé.";
+    return score < 30
+      ? "Mình chưa thấy ý chính của đoạn code trong câu này. Xem gợi ý bên dưới rồi thử lại nhé."
+      : "Bạn đã nói đúng một phần rồi. Xem gợi ý bên dưới rồi nói thêm phần còn thiếu nhé.";
   }
   return "Bạn đã dùng hết lượt cho câu này. Xem đáp án mẫu bên dưới để so với cách bạn nghĩ nhé.";
 }
@@ -418,6 +421,12 @@ export async function gradeWithAI(
 
   const g = normalizeGrading(outcome.value, t, answer);
   const isPassed = decidePass(g, t.must_have_points, answer);
+  if (!isPassed && g.intent === "ANSWER") {
+    // Nói được bao nhiêu ý thì được bấy nhiêu điểm (tối thiểu); vẫn dưới ngưỡng Đạt nên không đổi kết quả.
+    const flags = coveredFlags(g, t.must_have_points, answer);
+    const share = Math.round((flags.filter(Boolean).length / Math.max(1, flags.length)) * 100);
+    g.core_accuracy = Math.min(CONFIG.PASS_CORE_ACCURACY - 1, Math.max(g.core_accuracy, share));
+  }
   const check = verifyFollowUp(g, t, answer, isPassed);
 
   const issues: GuardIssue[] = [];
@@ -438,7 +447,7 @@ export async function gradeWithAI(
 
   if (!check.feedback_ok) {
     issues.push({ code: "G2" });
-    g.feedback = staticFeedback(isPassed, attempt, maxAttempts);
+    g.feedback = staticFeedback(isPassed, attempt, maxAttempts, g.core_accuracy);
   }
 
   if (issues.length > 0) {
