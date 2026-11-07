@@ -283,6 +283,9 @@ export function topoOrderOf(nodes: Array<{ id: string; prerequisites: string[] }
 /** Số bài kế tiếp (sau bài đang mở) được tải trước, D-46. */
 const ANALYZE_LOOKAHEAD = 2;
 
+/** Số bài đang mở khóa được phân tích trước ngay sau khi quét repo xong (PH-16). */
+const PREFETCH_ON_INGEST = 3;
+
 /** Bài đã có kết quả phân tích (bản đủ hoặc lỗi) thì không đưa vào hàng nữa. */
 const analysisSettled = (a: ClientWorkbenchState["analyses"][string] | undefined) => a !== undefined && a !== "PENDING";
 
@@ -473,6 +476,43 @@ export const useWorkbenchStore = create<WorkbenchStore>()((set, get) => {
     for (const job of waiting) job.finish();
   };
 
+  /**
+   * Tính trước (PH-16): đưa các bài đang mở khóa (`AVAILABLE`) vào hàng phân tích mà không chờ người dùng bấm.
+   * Chỉ bài `AVAILABLE` (bài khóa không tốn token). Offline / `?fixture=1` / hết hạn mức / phiên đã đổi ⇒ 0 việc.
+   * Chỉ thêm vào cuối hàng, không đụng việc người dùng đã yêu cầu; `requestAnalysis` vẫn chuyển ưu tiên như cũ.
+   */
+  const prefetchNodes = (sessionId: string, nodeIds: string[]) => {
+    if (!sameSession(sessionId) || isLocal() || get().ui.quota_stopped) return;
+    const { progress, analyses } = get();
+    const queued = new Set(analysisQueue.map((j) => analysisKey(j)));
+    const added: string[] = [];
+    for (const nodeId of nodeIds) {
+      if (progress?.nodes[nodeId]?.status !== "AVAILABLE") continue;
+      if (analyses[nodeId] !== undefined) continue; // đã có kết quả, đang chờ hoặc đã lỗi (người dùng bấm "Thử lại")
+      const key = analysisKey({ sessionId, nodeId });
+      if (queued.has(key) || analysisRunning.has(key)) continue;
+      analysisQueue.push(newAnalysisJob(sessionId, nodeId));
+      added.push(nodeId);
+    }
+    if (added.length === 0) return;
+    set((s) => {
+      const updated = { ...s.analyses };
+      for (const nodeId of added) if (updated[nodeId] === undefined) updated[nodeId] = "PENDING";
+      return { analyses: updated };
+    });
+    pumpAnalysis();
+  };
+
+  /** Sau `ingest` ok ở chế độ thật: tối đa `PREFETCH_ON_INGEST` bài `AVAILABLE` đầu theo thứ tự tô-pô. */
+  const prefetchFirstAvailable = (sessionId: string) => {
+    const { result, progress } = get();
+    if (!result || !progress) return;
+    const first = topoOrderOf(result.nodes)
+      .filter((id) => progress.nodes[id]?.status === "AVAILABLE")
+      .slice(0, PREFETCH_ON_INGEST);
+    prefetchNodes(sessionId, first);
+  };
+
   const runAnalysis = async ({ sessionId, nodeId }: AnalysisJob) => {
     const res = await analyzeNodeSafe(sessionId, nodeId);
     if (!sameSession(sessionId)) return;
@@ -605,6 +645,7 @@ export const useWorkbenchStore = create<WorkbenchStore>()((set, get) => {
       if (res.ok) {
         get().applyIngest(res.data);
         if (get().is_offline_mode || (get().ui.fixture && getOfflineBundle())) seedOfflineSession();
+        else prefetchFirstAvailable(res.data.session_id);
       } else set((s) => ({ ui: { ...s.ui, ingesting: false, ingest_error: toUiError(res) } }));
       return res;
     },
