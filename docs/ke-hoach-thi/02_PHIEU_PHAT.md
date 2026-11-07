@@ -47,3 +47,10 @@ Mỗi mã phiếu là 1 file trong thư mục [`phieu/phat/`](phieu/phat/). Đ�
 | [PH-13](phieu/phat/PH-13.md) | So ảnh với `prototype.html` và sửa lệch (ghi chú 5) | 03:00 → 04:00 | Claude |
 | [PH-14](phieu/phat/PH-14.md) | Sửa lỗi giao diện sau DoD và quay video dự phòng | 04:00 → 05:00 | Claude (mẫu sửa lỗi, điền lỗi trước khi dán) |
 | [PH-15](phieu/phat/PH-15.md) | Tập bấm demo và commit cuối | 08:00 → 09:00 | Claude (mẫu sửa lỗi, điền lỗi trước khi dán) |
+
+### Phiếu tăng tốc (thêm sau, xem [`09_PHIEU_TANG_TOC.md`](09_PHIEU_TANG_TOC.md))
+
+| Mã | Tên việc | Giờ | Cách làm |
+| :-- | :-- | :-- | :-- |
+| [PH-16](phieu/phat/PH-16.md) | Tính trước, chạy ngầm trong lúc người dùng đọc (T3) | Sau phiếu đang làm, trước 22:30 | Claude |
+| [PH-17](phieu/phat/PH-17.md) | Hiện phần có sẵn trước, báo từng bước khi chờ (T5) | Sau PH-16, nếu còn giờ (trước 04:00) | Claude |

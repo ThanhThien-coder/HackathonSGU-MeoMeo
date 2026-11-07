@@ -47,3 +47,10 @@ Mỗi mã phiếu là 1 file trong thư mục [`phieu/thien/`](phieu/thien/). Đ
 | [TH-16](phieu/thien/TH-16.md) | Diễn tập đường lùi và giao agent trước khi ngủ | 00:15 → 00:30 | Không dùng Claude |
 | [TH-17](phieu/thien/TH-17.md) | Đóng băng tính năng, Definition of Done, deploy production | 03:30 → 05:00 | Không dùng Claude |
 | [TH-18](phieu/thien/TH-18.md) | Trực sửa lỗi chặn demo, nộp slide, commit cuối | 05:00 → 09:15 | Claude (mẫu sửa lỗi, điền lỗi trước khi dán) |
+
+### Phiếu tăng tốc (thêm sau, xem [`09_PHIEU_TANG_TOC.md`](09_PHIEU_TANG_TOC.md))
+
+| Mã | Tên việc | Giờ | Cách làm |
+| :-- | :-- | :-- | :-- |
+| [TH-20](phieu/thien/TH-20.md) | Giảm số lần hỏi DB khi nộp bài, làm cùng TH-12 (T6) | 21:00 → 22:00, trong TH-12 | Claude (dán thêm vào prompt TH-12) |
+| [TH-21](phieu/thien/TH-21.md) | Cloud Run min-instances và kiểm cache sau deploy (T4, phần Thiện) | 04:00 → 05:00, cùng TH-17 và TH-18 | Không dùng Claude |
