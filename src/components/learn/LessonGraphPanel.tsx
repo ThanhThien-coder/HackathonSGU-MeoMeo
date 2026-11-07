@@ -5,7 +5,8 @@ import { LessonCard, type CardAnalysis } from "@/components/learn/LessonCard";
 import { LessonGroup, LessonSubfolder } from "@/components/learn/LessonGroup";
 import { StatusPill } from "@/components/ui/Page";
 import { Button } from "@/components/ui/common";
-import { displayTitle } from "@/lib/derive";
+import { aiTitleOf, displayTitle } from "@/lib/derive";
+import { folderLabel } from "@/lib/folder-label";
 import {
   blockedBy,
   cardAction,
@@ -62,6 +63,7 @@ export function LessonGraphPanel() {
   if (!result || !view) return null;
   const { groups, states, byId, starts } = view;
 
+  const aiOverview = overview === "PENDING" ? null : overview;
   const titleOf = (id: string) => {
     const n = byId.get(id);
     return n ? displayTitle(n, overview === "PENDING" ? null : overview) : id;
@@ -156,7 +158,7 @@ export function LessonGraphPanel() {
               <LessonSubfolder
                 key={sub.key}
                 id={`${group.group_id}-${sub.key}`}
-                label={sub.label}
+                label={folderLabel(sub.node_ids.map((id) => aiTitleOf(id, aiOverview)), sub.label)}
                 count={sub.node_ids.length}
               >
                 {sub.node_ids.map(renderCard)}
