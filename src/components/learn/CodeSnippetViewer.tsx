@@ -7,6 +7,7 @@ import { useCallback, useMemo, useState } from "react";
 import { CONFIG } from "@/contracts/config";
 import { SelectionPopover } from "@/components/code/SelectionPopover";
 import { buildFileTabs, findStep, type CodeSelection } from "@/components/code/slice-model";
+import { RepoOverview } from "@/components/learn/RepoOverview";
 import { explanationKey } from "@/lib/selection-explain";
 import { useWorkbenchStore } from "@/store/workbench";
 
@@ -49,7 +50,7 @@ export function CodeSnippetViewer() {
   const tabs = useMemo(() => (node ? buildFileTabs(node, analysis) : []), [node, analysis]);
 
   if (!node) {
-    return <p className="p-4 text-sm text-muted">Chọn một bài ở bản đồ bên trái để bắt đầu.</p>;
+    return <RepoOverview />;
   }
   if (node.trace_steps.length === 0) {
     return <p className="p-4 text-sm text-muted">Bài này chưa có code để hiển thị.</p>;
