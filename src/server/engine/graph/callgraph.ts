@@ -432,6 +432,7 @@ export function buildCallGraph(
       callee: target,
       line: node.startPosition.row + 1,
       column: node.startPosition.column + 1,
+      end_index: node.endIndex,
       confidence,
       ambiguous,
     };

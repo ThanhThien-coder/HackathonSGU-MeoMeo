@@ -246,7 +246,7 @@ export function toNodeEntities(
 /**
  * ENG-119: Nhóm (groups).
  * - STANDALONE: ALGORITHMIC_CORE, node không có cạnh hoặc không có thực thể chính
- *   key = "Học riêng", group_id = "group-standalone"
+ *   key = "Bài độc lập", group_id = "group-standalone"
  * - ROUTE_PREFIX: theo thực thể chính, group_id = "group-route-<slug(key)>"
  * - depth = đường dài nhất từ điểm bắt đầu
  * - node_ids sort theo (depth, id)
@@ -327,7 +327,7 @@ export function buildGroups(
     let g = groupNodesMap.get(n.group_id);
     if (!g) {
       if (n.group_id === "group-standalone") {
-        g = { key: "Học riêng", key_kind: "STANDALONE", nodeIds: [] };
+        g = { key: "Bài độc lập", key_kind: "STANDALONE", nodeIds: [] };
       } else {
         const ld = dataById.get(n.id);
         const key = ld?.primary_entity ?? "Chung";

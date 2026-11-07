@@ -238,6 +238,24 @@ public class A {
     expect(edge(`${BASE}/app/A.java#A.go`, `${BASE}/app/Svc.java#Svc.q`)).toBeDefined();
   });
 
+  it("ENG-80: lời gọi trong đối số kết thúc trước hàm bọc nó", async () => {
+    const { graph } = await javaGraph({
+      [`${BASE}/api/Api.java`]: ctrl(`@RestController
+public class Api {
+  @GetMapping("/a")
+  public String get() {
+    return wrap(load());
+  }
+  private String load() { return "x"; }
+  private String wrap(String v) { return v; }
+}`),
+    });
+    const sites = graph.call_sites.get(`${BASE}/api/Api.java#Api.get`) ?? [];
+    const endOf = (name: string) => sites.find((s) => s.callee.endsWith(name))?.end_index ?? -1;
+    expect(endOf("load")).toBeGreaterThan(0);
+    expect(endOf("load")).toBeLessThan(endOf("wrap"));
+  });
+
   it("kế thừa vòng không treo", async () => {
     const { graph } = await javaGraph({
       [`${BASE}/app/A.java`]: `package io.spring.app;

@@ -634,4 +634,63 @@ describe("slicing (Spec 11 §8, ENG-80 -> ENG-89)", () => {
     );
     expect(buildSlice(entries[0], ctx).base_title).toBe("Home");
   });
+
+  describe("ENG-80 thứ tự bước theo thứ tự chạy", () => {
+    const order = (c: { trace_steps: { function_name: string }[] }): string[] =>
+      c.trace_steps.map((s) => s.function_name.split(".").pop() ?? "");
+
+    it("TS: lời gọi trong đối số đứng trước hàm bọc nó", async () => {
+      const { ctx, entries } = await createTestContext(
+        {
+          "src/app.ts": [
+            'import express from "express";',
+            'import { wrap, load } from "./lib";',
+            "const app = express();",
+            'app.get("/items", (req, res) => {',
+            "  res.json(wrap(load(req.query.id)));",
+            "});",
+          ].join("\n"),
+          "src/lib.ts": [
+            "export function load(id: string) {",
+            "  const row = db.query(id);",
+            "  return row;",
+            "}",
+            "export function wrap(data: unknown) {",
+            "  const out = { data };",
+            "  return out;",
+            "}",
+          ].join("\n"),
+        },
+        ["express"]
+      );
+      expect(order(buildSlice(entries[0], ctx)).slice(1)).toEqual(["load", "wrap"]);
+    });
+
+    it("hai lệnh liền nhau giữ nguyên thứ tự dòng", async () => {
+      const { ctx, entries } = await createTestContext(
+        {
+          "src/app.ts": [
+            'import express from "express";',
+            'import { first, second } from "./lib";',
+            "const app = express();",
+            'app.get("/items", (req, res) => {',
+            "  const a = first();",
+            "  const b = second(a);",
+            "  res.json(b);",
+            "});",
+          ].join("\n"),
+          "src/lib.ts": [
+            "export function second(x: unknown) {",
+            "  return db.query(x);",
+            "}",
+            "export function first() {",
+            "  return db.query(1);",
+            "}",
+          ].join("\n"),
+        },
+        ["express"]
+      );
+      expect(order(buildSlice(entries[0], ctx)).slice(1)).toEqual(["first", "second"]);
+    });
+  });
 });

@@ -204,6 +204,8 @@ function resolvedSitesOf(callerKey: string, ctx: EngineContext): CallSite[] {
   }
 
   return resolved.sort((a, b) => {
+    // ENG-80: `wrap(load())` chạy load trước, nên xếp theo chỗ kết thúc, không theo chỗ bắt đầu.
+    if (a.end_index !== b.end_index) return a.end_index - b.end_index;
     if (a.line !== b.line) return a.line - b.line;
     if (a.column !== b.column) return a.column - b.column;
     return a.callee < b.callee ? -1 : a.callee > b.callee ? 1 : 0;

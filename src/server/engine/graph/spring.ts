@@ -295,6 +295,7 @@ export function buildJavaCallGraph(files: ParsedFile[], idx: SymbolIndex): CallG
       callee,
       line: node.startPosition.row + 1,
       column: node.startPosition.column + 1,
+      end_index: node.endIndex,
       confidence,
       ambiguous,
     };
