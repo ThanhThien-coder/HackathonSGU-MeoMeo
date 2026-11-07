@@ -396,7 +396,7 @@ describe("analyze.ts", () => {
         ok: true,
         value: raw,
         tokens_in: 500,
-        tokens_out: 300,
+        tokens_out: 300, model: "gemini-3.8-flash", fell_back: false,
       });
 
       const usage: AnalyzeUsage = { tokens_in: 0, tokens_out: 0, retries: 0 };
@@ -429,13 +429,13 @@ describe("analyze.ts", () => {
           ok: true,
           value: faultyRaw,
           tokens_in: 400,
-          tokens_out: 200,
+          tokens_out: 200, model: "gemini-3.8-flash", fell_back: false,
         })
         .mockResolvedValueOnce({
           ok: true,
           value: cleanRaw,
           tokens_in: 450,
-          tokens_out: 250,
+          tokens_out: 250, model: "gemini-3.8-flash", fell_back: false,
         });
 
       const usage: AnalyzeUsage = { tokens_in: 0, tokens_out: 0, retries: 0 };
@@ -470,13 +470,13 @@ describe("analyze.ts", () => {
           ok: true,
           value: faultyRaw,
           tokens_in: 400,
-          tokens_out: 200,
+          tokens_out: 200, model: "gemini-3.8-flash", fell_back: false,
         })
         .mockResolvedValueOnce({
           ok: true,
           value: faultyRaw,
           tokens_in: 400,
-          tokens_out: 200,
+          tokens_out: 200, model: "gemini-3.8-flash", fell_back: false,
         });
 
       const usage: AnalyzeUsage = { tokens_in: 0, tokens_out: 0, retries: 0 };

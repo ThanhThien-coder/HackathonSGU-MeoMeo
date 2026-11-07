@@ -81,6 +81,12 @@ export interface LlmRequest<T> {
   parse: (json: unknown) => T | null;
 }
 
+declare module "@/server/log" {
+  interface AiCallLogEntry {
+    fell_back?: boolean;
+  }
+}
+
 export type LlmOutcome<T> = (
   | { ok: true; value: T }
   | {
@@ -88,13 +94,28 @@ export type LlmOutcome<T> = (
       kind: "TRANSIENT" | "INVALID_JSON" | "FATAL";
       retry_after_ms?: number;
     }
-) & { tokens_in: number; tokens_out: number };
+) & {
+  tokens_in: number;
+  tokens_out: number;
+  model: string;
+  fell_back: boolean;
+  cost_usd?: number;
+};
 
-export function aiCostUsd(tokensIn: number, tokensOut: number): number {
-  return (
-    (tokensIn * CONFIG.LLM_PRICE_INPUT_USD_PER_M) / 1_000_000 +
-    (tokensOut * CONFIG.LLM_PRICE_OUTPUT_USD_PER_M) / 1_000_000
-  );
+export function aiCostUsd(
+  tokensIn: number,
+  tokensOut: number,
+  model: string = CONFIG.LLM_MODEL
+): number {
+  const prices = (
+    CONFIG.LLM_PRICES_USD_PER_M as Record<
+      string,
+      { readonly INPUT: number; readonly OUTPUT: number } | undefined
+    >
+  )[model];
+  const priceIn = prices?.INPUT ?? CONFIG.LLM_PRICE_INPUT_USD_PER_M;
+  const priceOut = prices?.OUTPUT ?? CONFIG.LLM_PRICE_OUTPUT_USD_PER_M;
+  return (tokensIn * priceIn) / 1_000_000 + (tokensOut * priceOut) / 1_000_000;
 }
 
 function cleanJsonString(raw: string): string {
@@ -223,21 +244,26 @@ function classifyError(error: unknown): {
   return { kind: "FATAL", status, retry_after_ms };
 }
 
-export async function callLLMOnce<T>(
+type SingleModelResult<T> =
+  | { ok: true; value: T; tokens_in: number; tokens_out: number }
+  | {
+      ok: false;
+      kind: "TRANSIENT" | "INVALID_JSON" | "FATAL";
+      retry_after_ms?: number;
+      tokens_in: number;
+      tokens_out: number;
+    };
+
+async function executeSingleModelCall<T>(
   req: LlmRequest<T>,
-  client?: GoogleGenAI,
-  env: Record<string, string | undefined> = process.env
-): Promise<LlmOutcome<T>> {
-  if (isAiDisabled(env)) {
-    throw new ApiHttpError("ERR_AI_UNAVAILABLE", "AI hiện đang tạm ngắt (AI_DISABLED=true)");
-  }
-
-  const ai = client ?? createGeminiClient(env);
-
+  ai: GoogleGenAI,
+  model: string,
+  timeoutMs: number
+): Promise<SingleModelResult<T>> {
   let response: Awaited<ReturnType<typeof ai.models.generateContent>>;
   try {
     response = await ai.models.generateContent({
-      model: CONFIG.LLM_MODEL,
+      model,
       contents: [{ role: "user", parts: [{ text: req.user }] }],
       config: {
         systemInstruction: req.system,
@@ -256,7 +282,7 @@ export async function callLLMOnce<T>(
         thinkingConfig: { thinkingBudget: CONFIG.LLM_THINKING_BUDGET },
         responseMimeType: "application/json",
         responseSchema: req.schema,
-        abortSignal: AbortSignal.timeout(CONFIG.LLM_TIMEOUT_MS),
+        abortSignal: AbortSignal.timeout(timeoutMs),
       },
     });
   } catch (err: unknown) {
@@ -266,6 +292,7 @@ export async function callLLMOnce<T>(
       kind,
       status,
       retry_after_ms,
+      model,
     });
     return {
       ok: false,
@@ -295,6 +322,7 @@ export async function callLLMOnce<T>(
       call_kind: req.kind,
       kind: "INVALID_JSON",
       status: candidate.finishReason,
+      model,
     });
     return {
       ok: false,
@@ -315,6 +343,7 @@ export async function callLLMOnce<T>(
     logger.warn({
       call_kind: req.kind,
       kind: "INVALID_JSON",
+      model,
     });
     return {
       ok: false,
@@ -329,6 +358,7 @@ export async function callLLMOnce<T>(
     logger.warn({
       call_kind: req.kind,
       kind: "INVALID_JSON",
+      model,
     });
     return {
       ok: false,
@@ -343,6 +373,80 @@ export async function callLLMOnce<T>(
     value: parsedValue,
     tokens_in,
     tokens_out,
+  };
+}
+
+export async function callLLMOnce<T>(
+  req: LlmRequest<T>,
+  client?: GoogleGenAI,
+  env: Record<string, string | undefined> = process.env
+): Promise<LlmOutcome<T>> {
+  if (isAiDisabled(env)) {
+    throw new ApiHttpError("ERR_AI_UNAVAILABLE", "AI hiện đang tạm ngắt (AI_DISABLED=true)");
+  }
+
+  const ai = client ?? createGeminiClient(env);
+
+  const primaryResult = await executeSingleModelCall(
+    req,
+    ai,
+    CONFIG.LLM_MODEL,
+    CONFIG.LLM_PRIMARY_TIMEOUT_MS
+  );
+
+  if (primaryResult.ok) {
+    const cost_usd = aiCostUsd(
+      primaryResult.tokens_in,
+      primaryResult.tokens_out,
+      CONFIG.LLM_MODEL
+    );
+    return {
+      ok: true,
+      value: primaryResult.value,
+      tokens_in: primaryResult.tokens_in,
+      tokens_out: primaryResult.tokens_out,
+      model: CONFIG.LLM_MODEL,
+      fell_back: false,
+      cost_usd,
+    };
+  }
+
+  // Model chính không ok (TRANSIENT, INVALID_JSON, FATAL, hoặc timeout)
+  // ⇒ gọi CONFIG.LLM_MODEL_FALLBACK 1 lần với timeout LLM_TIMEOUT_MS, không chờ delay
+  const fallbackResult = await executeSingleModelCall(
+    req,
+    ai,
+    CONFIG.LLM_MODEL_FALLBACK,
+    CONFIG.LLM_TIMEOUT_MS
+  );
+
+  const totalTokensIn = primaryResult.tokens_in + fallbackResult.tokens_in;
+  const totalTokensOut = primaryResult.tokens_out + fallbackResult.tokens_out;
+  const totalCostUsd =
+    aiCostUsd(primaryResult.tokens_in, primaryResult.tokens_out, CONFIG.LLM_MODEL) +
+    aiCostUsd(fallbackResult.tokens_in, fallbackResult.tokens_out, CONFIG.LLM_MODEL_FALLBACK);
+
+  if (fallbackResult.ok) {
+    return {
+      ok: true,
+      value: fallbackResult.value,
+      tokens_in: totalTokensIn,
+      tokens_out: totalTokensOut,
+      model: CONFIG.LLM_MODEL_FALLBACK,
+      fell_back: true,
+      cost_usd: totalCostUsd,
+    };
+  }
+
+  return {
+    ok: false,
+    kind: fallbackResult.kind,
+    retry_after_ms: fallbackResult.retry_after_ms,
+    tokens_in: totalTokensIn,
+    tokens_out: totalTokensOut,
+    model: CONFIG.LLM_MODEL_FALLBACK,
+    fell_back: true,
+    cost_usd: totalCostUsd,
   };
 }
 
@@ -362,6 +466,7 @@ export async function callLLMWithRetry<T>(
 
   let totalTokensIn = 0;
   let totalTokensOut = 0;
+  let totalCostUsd = 0;
   let lastOutcome: LlmOutcome<T> | null = null;
   let retries = 0;
 
@@ -369,6 +474,9 @@ export async function callLLMWithRetry<T>(
     const outcome = await callLLMOnce(req, client, env);
     totalTokensIn += outcome.tokens_in;
     totalTokensOut += outcome.tokens_out;
+    totalCostUsd +=
+      outcome.cost_usd ??
+      aiCostUsd(outcome.tokens_in, outcome.tokens_out, outcome.model);
     lastOutcome = outcome;
     retries = attempt;
 
@@ -402,15 +510,18 @@ export async function callLLMWithRetry<T>(
     }
   }
 
-  const cost = aiCostUsd(totalTokensIn, totalTokensOut);
+  const finalModel = lastOutcome?.model ?? CONFIG.LLM_MODEL;
+  const finalFellBack = lastOutcome?.fell_back ?? false;
+
   logAiCall({
     call_kind: req.kind,
     backend,
-    model: CONFIG.LLM_MODEL,
+    model: finalModel,
     tokens_in: totalTokensIn,
     tokens_out: totalTokensOut,
     retries,
-    cost_usd: cost,
+    cost_usd: totalCostUsd,
+    fell_back: finalFellBack,
   });
 
   if (!lastOutcome) {
@@ -419,6 +530,9 @@ export async function callLLMWithRetry<T>(
       kind: "FATAL",
       tokens_in: 0,
       tokens_out: 0,
+      model: CONFIG.LLM_MODEL,
+      fell_back: false,
+      cost_usd: 0,
     };
   }
 
@@ -426,5 +540,6 @@ export async function callLLMWithRetry<T>(
     ...lastOutcome,
     tokens_in: totalTokensIn,
     tokens_out: totalTokensOut,
+    cost_usd: totalCostUsd,
   };
 }
