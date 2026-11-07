@@ -47,19 +47,20 @@ describe("errors", () => {
       "ERR_GITHUB_RATE_LIMIT_CDN",
       "ERR_SERVER_BUSY",
       "ERR_AI_UNAVAILABLE",
+      "ERR_AI_REJECTED",
       "ERR_PERSISTENCE_UNAVAILABLE",
       "ERR_ATTEMPT_OUT_OF_SYNC",
     ] as const;
 
-    it("trả về true cho đúng 7 mã retryable", () => {
+    it("trả về true cho đúng 8 mã retryable", () => {
       for (const code of retryableCodes) {
         expect(isRetryable(code)).toBe(true);
       }
     });
 
-    it("trả về false cho ERR_ANSWER_TOO_SHORT và ERR_AI_REJECTED", () => {
+    it("trả về false cho ERR_ANSWER_TOO_SHORT và ERR_SESSION_NOT_FOUND", () => {
       expect(isRetryable("ERR_ANSWER_TOO_SHORT")).toBe(false);
-      expect(isRetryable("ERR_AI_REJECTED")).toBe(false);
+      expect(isRetryable("ERR_SESSION_NOT_FOUND")).toBe(false);
     });
   });
 
