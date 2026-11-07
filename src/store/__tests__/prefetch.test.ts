@@ -6,7 +6,13 @@ import type {
   IngestResponse,
   NodeStateView,
 } from "@/contracts";
-import { analyzeNodeSafe, enrichNodeSafe, ingestRepoSafe } from "@/lib/api";
+import {
+  analyzeNodeSafe,
+  enrichNodeSafe,
+  evaluateFeynmanSafe,
+  getSessionProgressSafe,
+  ingestRepoSafe,
+} from "@/lib/api";
 import { useWorkbenchStore } from "../workbench";
 
 vi.mock("@/lib/api", async (orig) => ({
@@ -14,11 +20,15 @@ vi.mock("@/lib/api", async (orig) => ({
   analyzeNodeSafe: vi.fn(),
   enrichNodeSafe: vi.fn(),
   ingestRepoSafe: vi.fn(),
+  evaluateFeynmanSafe: vi.fn(),
+  getSessionProgressSafe: vi.fn(),
 }));
 
 const analyze = vi.mocked(analyzeNodeSafe);
 const enrich = vi.mocked(enrichNodeSafe);
 const ingestApi = vi.mocked(ingestRepoSafe);
+const evaluate = vi.mocked(evaluateFeynmanSafe);
+const progressApi = vi.mocked(getSessionProgressSafe);
 
 // n1, n2, n4, n5 mở khóa; n3 bị khóa (cần n1). Thứ tự tô-pô: n1, n2, n3, n4, n5.
 const SPEC: Array<{ id: string; prerequisites: string[]; status: NodeStateView["status"] }> = [
@@ -41,7 +51,12 @@ function ingestResponse(sessionId: string, statuses?: Record<string, NodeStateVi
   return {
     session_id: sessionId,
     result: {
-      nodes: SPEC.map((n) => ({ id: n.id, prerequisites: n.prerequisites })),
+      nodes: SPEC.map((n) => ({
+        id: n.id,
+        title: `Bài ${n.id}`,
+        title_source: "README",
+        prerequisites: n.prerequisites,
+      })),
       edges: [],
       groups: [],
       ingestion_report: { ingest_ms: 1, engine_ms: 1 },
@@ -92,6 +107,10 @@ beforeEach(() => {
   analyze.mockReset();
   enrich.mockReset();
   ingestApi.mockReset();
+  evaluate.mockReset();
+  progressApi.mockReset();
+  // Mặc định tải lại tiến độ lỗi ⇒ store giữ bản đang có; test cần thì tự đặt lại.
+  progressApi.mockResolvedValue({ ok: false, code: "ERR_AI_UNAVAILABLE", message: "lỗi", retryable: true });
   analyze.mockImplementation(
     (_sessionId, nodeId) =>
       new Promise((resolve) => {
@@ -212,6 +231,124 @@ describe("tính trước câu hỏi sau khi phân tích xong", () => {
     useWorkbenchStore.setState({ session_id: "phien-khac" });
     calls.find((c) => c.nodeId === "n1")?.resolve();
     await tick();
+    expect(enrich).not.toHaveBeenCalled();
+  });
+});
+
+describe("bài vừa mở khóa vào hàng tính trước", () => {
+  /** Đang học n1 (có run chưa xong), n3 đang khóa; sau khi nộp, server báo n3 mở khóa. */
+  function seedLearning(unlocked: string[], n3AfterRefresh: NodeStateView["status"]) {
+    const sessionId = nextSession();
+    const ing = ingestResponse(sessionId);
+    useWorkbenchStore.setState({
+      session_id: sessionId,
+      result: ing.result,
+      progress: ing.progress,
+      analyses: { n1: { node_id: "n1" } as never },
+      runs: { n1: enrichResponse("n1").data },
+      active_node_id: "n1",
+    });
+    evaluate.mockResolvedValue({
+      ok: true,
+      data: {
+        is_passed: true,
+        question: { finished: true, ended_by: "PASSED", attempts_used: 1 },
+        skill_change: null,
+        node_state: stateOf("n1", "COMPLETED"),
+        unlocked_node_ids: unlocked,
+        tokens_used: 3,
+      },
+    } as never);
+    progressApi.mockResolvedValue({
+      ok: true,
+      data: {
+        progress: {
+          ...ing.progress,
+          nodes: { ...ing.progress.nodes, n1: stateOf("n1", "COMPLETED"), n3: stateOf("n3", n3AfterRefresh) },
+        },
+      },
+    });
+    return sessionId;
+  }
+
+  const submit = async () => {
+    await useWorkbenchStore.getState().submitAnswer("n1", 1, "câu trả lời");
+    await tick();
+  };
+
+  it("học xong X, unlocked_node_ids = [Y] ⇒ Y vào hàng tính trước (analyze rồi enrich)", async () => {
+    const sessionId = seedLearning(["n3"], "AVAILABLE");
+    await submit();
+
+    expect(analyze).toHaveBeenCalledWith(sessionId, "n3");
+    expect(useWorkbenchStore.getState().analyses.n3).toBe("PENDING");
+    calls.find((c) => c.nodeId === "n3")?.resolve();
+    await tick();
+    expect(enrichedIds()).toEqual(["n3"]);
+  });
+
+  it("unlocked_node_ids rỗng ⇒ không có việc mới", async () => {
+    seedLearning([], "LOCKED");
+    await submit();
+    expect(analyze).not.toHaveBeenCalled();
+    expect(enrich).not.toHaveBeenCalled();
+  });
+
+  it("bài chưa AVAILABLE sau khi tải lại tiến độ ⇒ không đẩy vào hàng", async () => {
+    seedLearning(["n3"], "LOCKED");
+    await submit();
+    expect(analyze).not.toHaveBeenCalled();
+  });
+
+  it("hết hạn mức (quota_stopped) ⇒ không đẩy thêm việc", async () => {
+    seedLearning(["n3"], "AVAILABLE");
+    useWorkbenchStore.setState((s) => ({ ui: { ...s.ui, quota_stopped: true } }));
+    await submit();
+    expect(analyze).not.toHaveBeenCalled();
+  });
+
+  it("bài đã có phân tích sẵn ⇒ chỉ tính trước câu hỏi, không phân tích lại", async () => {
+    seedLearning(["n3"], "AVAILABLE");
+    useWorkbenchStore.setState((s) => ({ analyses: { ...s.analyses, n3: { node_id: "n3" } as never } }));
+    await submit();
+    expect(analyze).not.toHaveBeenCalled();
+    expect(enrichedIds()).toEqual(["n3"]);
+  });
+
+  it("người học bấm bài khác ⇒ requestAnalysis vẫn ưu tiên bài đó (không bị khóa)", async () => {
+    seedLearning(["n3"], "AVAILABLE");
+    await submit();
+    void useWorkbenchStore.getState().requestAnalysis("n5");
+    await tick();
+    expect(useWorkbenchStore.getState().analyses.n5).toBe("PENDING");
+  });
+});
+
+describe("Offline và fixture: 0 request", () => {
+  it("?fixture=1: ingest xong không gọi analyze-node, enrich-node hay API nào", async () => {
+    vi.useFakeTimers();
+    try {
+      useWorkbenchStore.setState((s) => ({ ui: { ...s.ui, fixture: true } }));
+      const p = useWorkbenchStore.getState().ingest({ repo_url: "https://github.com/a/b" });
+      await vi.advanceTimersByTimeAsync(2000);
+      await p;
+      expect(useWorkbenchStore.getState().session_id).not.toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+    await tick();
+    expect(ingestApi).not.toHaveBeenCalled();
+    expect(analyze).not.toHaveBeenCalled();
+    expect(enrich).not.toHaveBeenCalled();
+  });
+
+  it("Offline: bài mở khóa mới không đẩy vào hàng tính trước", async () => {
+    const sessionId = nextSession();
+    const ing = ingestResponse(sessionId);
+    useWorkbenchStore.setState({ is_offline_mode: true, session_id: sessionId, result: ing.result, progress: ing.progress });
+    useWorkbenchStore.getState().applyNodeState(stateOf("n1", "COMPLETED"), ["n3"]);
+    await tick();
+    expect(analyze).not.toHaveBeenCalled();
     expect(enrich).not.toHaveBeenCalled();
   });
 });

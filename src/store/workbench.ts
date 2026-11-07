@@ -434,6 +434,8 @@ export const useWorkbenchStore = create<WorkbenchStore>()((set, get) => {
       else void get().loadMe({ force: true });
     }
     await settleNodeState(sessionId, r.node_state, r.unlocked_node_ids, statusBefore);
+    // PH-16: bài vừa mở khóa (tiến độ đã tải lại ở trên) vào hàng tính trước; bài chưa `AVAILABLE` bị lọc.
+    if (r.unlocked_node_ids.length > 0) prefetchNodes(sessionId, r.unlocked_node_ids);
   };
 
   // ---- Hàng phân tích (Mục 7.3): hàng chờ + các lời gọi đang chạy, theo phiên ----
