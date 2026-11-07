@@ -22,8 +22,8 @@ import {
   finalizeRunIfDone,
   insertAttempt,
   loadNodeState,
+  loadProgressContext,
   lockRun,
-  readSkeleton,
   saveRunQuestions,
   toQuestionState,
   withDbRetry,
@@ -243,7 +243,7 @@ export async function evaluateFeynman(
   const { q2, skillChange, unlocked, nodeState } = await withDbRetry(() =>
     db.tx(async (tx) => {
       const run2 = await lockRun(tx, run.id);
-      const skeleton = await readSkeleton(tx, run2.session_id);
+      const ctx = await loadProgressContext(tx, run2.session_id);
       const q2 = findQuestion(run2, req.question_index);
       if (q2.finished || q2.attempts_used !== req.attempt_number - 1) {
         throw new ApiHttpError("ERR_ATTEMPT_OUT_OF_SYNC");
@@ -275,8 +275,8 @@ export async function evaluateFeynman(
       }
 
       await saveRunQuestions(tx, run2);
-      const unlocked = await finalizeRunIfDone(tx, run2, now, skeleton);
-      const nodeState = await loadNodeState(tx, run2, skeleton);
+      const unlocked = await finalizeRunIfDone(tx, run2, now, ctx);
+      const nodeState = await loadNodeState(tx, run2, ctx);
 
       return { q2, skillChange, unlocked, nodeState };
     }),

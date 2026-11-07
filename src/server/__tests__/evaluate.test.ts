@@ -730,6 +730,50 @@ describe("TASK_11: evaluate-feynman", () => {
       expect(upsertProgress).toBeDefined();
     });
 
+    it("TH-20: lần chấm kết thúc bài chạy 9 câu SQL trong transaction, lockRun đứng đầu", async () => {
+      mockRun.questions = [createMockQuestion(1, 0, false)];
+      mockCallLLMWithRetry.mockResolvedValueOnce({
+        ok: true,
+        value: {
+          core_accuracy: 95,
+          simplicity: 80,
+          intent: "ANSWER",
+          points: [
+            { index: 1, covered: true, quote: "" },
+            { index: 2, covered: true, quote: "" },
+          ],
+          misconception: "",
+          follow_up_question: null,
+          follow_up_type: null,
+          follow_up_step_index: null,
+          feedback: "Xuất sắc",
+          detected_jargons: [],
+        },
+        tokens_in: 100,
+        tokens_out: 40,
+      });
+
+      const res = await evaluateFeynman(
+        {
+          session_id: mockSession.id,
+          run_id: mockRun.id,
+          question_index: 1,
+          attempt_number: 1,
+          student_answer: "Câu trả lời đúng hoàn toàn và đạt điểm tuyệt đối.",
+        },
+        mockSession.user_id,
+      );
+
+      console.info(`TH-20 số câu SQL trong transaction: ${recordedTxQueries.length}`);
+      expect(recordedTxQueries[0].query).toContain("for update");
+      expect(recordedTxQueries).toHaveLength(9);
+      expect(
+        recordedTxQueries.filter((x) => x.query.includes("from node_progress")),
+      ).toHaveLength(1);
+      expect(res.node_state.status).toBe("COMPLETED");
+      expect(res.unlocked_node_ids).toEqual(["N5"]);
+    });
+
     it("K3: core_accuracy >= 70 thì ý vẫn được tính dù trích dẫn lệch dấu", async () => {
       mockCallLLMWithRetry.mockResolvedValueOnce({
         ok: true,

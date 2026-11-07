@@ -217,6 +217,38 @@ export async function readSkeleton(
   return parseJsonb<GraphSkeletonNode[]>(rows[0].graph_skeleton);
 }
 
+export interface ProgressContext {
+  skeleton: GraphSkeletonNode[];
+  progress: NodeProgressRow[];
+}
+
+// Đọc một lần ngay sau lockRun rồi truyền xuống. finalizeRunIfDone cập nhật
+// ctx.progress tại chỗ nên loadNodeState gọi sau đó vẫn thấy trạng thái mới.
+export async function loadProgressContext(
+  tx: TransactionSql,
+  sessionId: string,
+): Promise<ProgressContext> {
+  const skeleton = await readSkeleton(tx, sessionId);
+  const progress = await tx<NodeProgressRow[]>`
+    select node_id, status, analysis_failed
+    from node_progress
+    where session_id = ${sessionId}
+  `;
+  return { skeleton, progress: [...progress] };
+}
+
+// Khớp câu upsert trong finalizeRunIfDone: chỉ đổi status, giữ analysis_failed
+function withNodeStatus(
+  rows: NodeProgressRow[],
+  nodeId: string,
+  status: "COMPLETED" | "FAILED",
+): NodeProgressRow[] {
+  if (rows.some((r) => r.node_id === nodeId)) {
+    return rows.map((r) => (r.node_id === nodeId ? { ...r, status } : r));
+  }
+  return [...rows, { node_id: nodeId, status, analysis_failed: false }];
+}
+
 export function toQuestionState(q: RunQuestion): QuestionState {
   const reveal =
     q.finished && q.ended_by !== "DROPPED"
@@ -374,7 +406,7 @@ export async function finalizeRunIfDone(
   tx: TransactionSql,
   run: RunRecord,
   now: number,
-  skeleton?: GraphSkeletonNode[],
+  ctx?: ProgressContext,
 ): Promise<string[]> {
   if (!run.questions.every((q) => q.finished)) {
     return [];
@@ -389,14 +421,8 @@ export async function finalizeRunIfDone(
     ? "FAILED"
     : "COMPLETED";
 
-  const sk = skeleton ?? (await readSkeleton(tx, run.session_id));
-
-  const beforeProgress = await tx<NodeProgressRow[]>`
-    select node_id, status, analysis_failed
-    from node_progress
-    where session_id = ${run.session_id}
-  `;
-  const beforeStates = deriveNodeStates(sk, beforeProgress);
+  const c = ctx ?? (await loadProgressContext(tx, run.session_id));
+  const beforeStates = deriveNodeStates(c.skeleton, c.progress);
 
   await tx`
     update node_runs
@@ -413,12 +439,8 @@ export async function finalizeRunIfDone(
       updated_at = now()
   `;
 
-  const afterProgress = await tx<NodeProgressRow[]>`
-    select node_id, status, analysis_failed
-    from node_progress
-    where session_id = ${run.session_id}
-  `;
-  const afterStates = deriveNodeStates(sk, afterProgress);
+  c.progress = withNodeStatus(c.progress, run.node_id, nodeStatus);
+  const afterStates = deriveNodeStates(c.skeleton, c.progress);
 
   const unlocked: string[] = [];
   for (const [nodeId, afterState] of Object.entries(afterStates)) {
@@ -434,15 +456,10 @@ export async function finalizeRunIfDone(
 export async function loadNodeState(
   tx: TransactionSql,
   run: RunRecord,
-  skeleton?: GraphSkeletonNode[],
+  ctx?: ProgressContext,
 ): Promise<NodeStateView> {
-  const sk = skeleton ?? (await readSkeleton(tx, run.session_id));
-  const progressRows = await tx<NodeProgressRow[]>`
-    select node_id, status, analysis_failed
-    from node_progress
-    where session_id = ${run.session_id}
-  `;
-  const derived = deriveNodeStates(sk, progressRows);
+  const c = ctx ?? (await loadProgressContext(tx, run.session_id));
+  const derived = deriveNodeStates(c.skeleton, c.progress);
   const st = derived[run.node_id];
   if (!st) {
     throw new ApiHttpError("ERR_NODE_NOT_AVAILABLE");
