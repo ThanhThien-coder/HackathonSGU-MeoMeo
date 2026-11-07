@@ -229,10 +229,19 @@ export function staticHint(
   }
 
   const step = (t.steps ?? []).find((x) => x.step_index === s);
-  const fn = step?.function_name ? `\`${step.function_name}\`` : "";
-  const question = fn
-    ? `Hãy xem hàm ${fn} ở bước ${s}: điều gì xảy ra ở đây khi xử lý yêu cầu?`
-    : `Hãy xem lại bước ${s}: điều gì xảy ra ở đây khi xử lý yêu cầu?`;
+  const where = step?.function_name
+    ? `hàm \`${step.function_name}\` ở bước ${s}`
+    : `bước ${s}`;
+  // Câu hỏi mồi: tình huống nhỏ cụ thể + 1 việc đếm/lần theo được. Số ví dụ tránh số có trong đáp án (leaksNumbers).
+  const secret = `${t.reference_answer ?? ""} ${(t.must_have_points ?? []).join(" ")}`;
+  const n = ["3", "2", "4", "5"].find((x) => !new RegExp(`(^|\\D)${x}(\\D|$)`).test(secret)) ?? "vài";
+  const QUESTIONS: Record<GradeContext["focus"], string> = {
+    WEAKNESS: `Giả sử chỉ có ${n} phần tử đi qua ${where}. Mỗi phần tử khiến code gọi ra ngoài (cơ sở dữ liệu, hàm khác) mấy lần, và tổng cộng là bao nhiêu lần?`,
+    FLOW: `Giả sử chỉ có ${n} phần tử. Hãy lần theo ${where}: dữ liệu vào từ đâu, và kết quả được trả cho bước nào?`,
+    ARCHITECTURE: `Hãy xem ${where}: phần việc nào nó tự làm, và phần nào nó gọi hàm khác làm thay?`,
+    CHANGE: `Hãy xem ${where}: nếu yêu cầu trong câu hỏi thay đổi, dòng nào ở đây phải sửa, và dòng nào giữ nguyên?`,
+  };
+  const question = QUESTIONS[t.focus] ?? QUESTIONS.WEAKNESS;
 
   return {
     type: "CODE_POINTER",

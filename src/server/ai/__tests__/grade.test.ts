@@ -1,3 +1,4 @@
+import { leaksNumbers } from "../guard/followup";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { CONFIG } from "@/contracts/config";
 import type {
@@ -658,6 +659,27 @@ describe("server/ai/grade", () => {
 
       t.focus = "CHANGE";
       expect(staticHint("CONCEPT", t).question).toContain("ảnh hưởng");
+    });
+
+    it("[AI-32] staticHint CODE_POINTER là câu hỏi mồi theo focus: tình huống nhỏ + việc đếm/lần theo", () => {
+      const base = createMockGradeContext();
+      const w = staticHint("CODE_POINTER", { ...base, focus: "WEAKNESS" }, 2);
+      expect(w.type).toBe("CODE_POINTER");
+      expect(w.step_index).toBe(2);
+      expect(w.question).toContain("bước 2");
+      expect(w.question).toContain("mấy lần");
+      expect(w.question).not.toContain("điều gì xảy ra ở đây");
+      expect(staticHint("CODE_POINTER", { ...base, focus: "FLOW" }, 2).question).toContain("lần theo");
+      expect(staticHint("CODE_POINTER", { ...base, focus: "ARCHITECTURE" }, 2).question).toContain("gọi hàm khác");
+      expect(staticHint("CODE_POINTER", { ...base, focus: "CHANGE" }, 2).question).toContain("phải sửa");
+    });
+
+    it("[AI-32] staticHint CODE_POINTER chọn số ví dụ không có trong đáp án (không lộ số)", () => {
+      const base = createMockGradeContext();
+      const t = { ...base, focus: "WEAKNESS" as const, reference_answer: "Có 3 truy vấn cho 3 sản phẩm.", must_have_points: ["ý một", "ý hai"] };
+      const q = staticHint("CODE_POINTER", t, 2).question;
+      expect(q).toContain("chỉ có 2 phần tử");
+      expect(leaksNumbers(q, t, "")).toBe(false);
     });
 
     it("[AI-32] staticFeedback cho các trạng thái", () => {
