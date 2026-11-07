@@ -268,11 +268,9 @@ export function staticHint(
   const where = step?.function_name
     ? `hàm \`${step.function_name}\` ở bước ${s}`
     : `bước ${s}`;
-  // Câu hỏi mồi: tình huống nhỏ cụ thể + 1 việc đếm/lần theo được. Số ví dụ tránh số có trong đáp án (leaksNumbers).
-  const secret = `${t.reference_answer ?? ""} ${(t.must_have_points ?? []).join(" ")}`;
-  const n = ["3", "2", "4", "5"].find((x) => !new RegExp(`(^|\\D)${x}(\\D|$)`).test(secret)) ?? "vài";
+  // Câu hỏi mồi tĩnh: chỉ vào 1 bước + 1 việc lần theo được; viết chung để hợp mọi kiểu điểm yếu, không dùng số.
   const QUESTIONS: Record<GradeContext["focus"], string> = {
-    WEAKNESS: `Giả sử chỉ có ${n} phần tử đi qua ${where}. Mỗi phần tử khiến code gọi ra ngoài (cơ sở dữ liệu, hàm khác) mấy lần, và tổng cộng là bao nhiêu lần?`,
+    WEAKNESS: `Hãy mở ${where} và tìm dòng gọi ra ngoài (cơ sở dữ liệu, hàm khác) hoặc dòng kiểm tra dữ liệu. Nếu dòng đó gặp lỗi, hoặc phải chạy rất nhiều lần, thì người dùng sẽ thấy gì?`,
     FLOW: `Thử với 1 đầu vào cụ thể, ví dụ dữ liệu gửi lên bị thiếu 1 trường. Lần theo ${where}: dòng nào nhận dữ liệu đó đầu tiên, và sau dòng đó code còn chạy tiếp không?`,
     ARCHITECTURE: `Hãy xem ${where}: phần việc nào nó tự làm, và phần nào nó gọi hàm khác làm thay?`,
     CHANGE: `Hãy xem ${where}: nếu yêu cầu trong câu hỏi thay đổi, dòng nào ở đây phải sửa, và dòng nào giữ nguyên?`,
@@ -306,7 +304,8 @@ export function staticTeachHint(
   const step = staticHint("CODE_POINTER", t, aiStep).step_index;
   return {
     type: "CODE_POINTER",
-    question: point.length > 0 ? `Gợi ý: ${point}. ${tail}` : tail,
+    // Giao diện đã có nhãn "Gợi ý:", không lặp lại ở đây
+    question: point.length > 0 ? `${point}. ${tail}` : tail,
     step_index: step,
   };
 }

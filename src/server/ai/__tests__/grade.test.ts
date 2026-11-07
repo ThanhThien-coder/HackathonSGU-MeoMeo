@@ -548,7 +548,8 @@ describe("server/ai/grade", () => {
       expect(l1?.type).toBe("CODE_POINTER");
       expect(l1?.question).not.toContain(t.must_have_points[0].replace(/\.$/, ""));
       expect(l2?.type).toBe("CODE_POINTER");
-      expect(l2?.question).toContain(`Gợi ý: ${t.must_have_points[0]}`);
+      expect(l2?.question).toContain(t.must_have_points[0]);
+      expect(l2?.question).not.toContain("Gợi ý:");
       expect(l2?.question).not.toBe(l1?.question);
     });
 
@@ -595,7 +596,7 @@ describe("server/ai/grade", () => {
       });
       const g = await gradeWithAI(t, "chưa biết luôn", 2, 3, createMockSession());
       const fu = decideFollowUp(g, 2, 3, false, t, "chưa biết luôn");
-      expect(fu?.question).toContain(`Gợi ý: ${t.must_have_points[0]}`);
+      expect(fu?.question).toContain(t.must_have_points[0]);
     });
 
     it("[K4] Prompt chấm có luật bí theo lượt: lượt 1 CÂU HỎI MỒI, lượt 2 GỢI Ý DẠY, lượt cuối không có", () => {
@@ -806,7 +807,7 @@ describe("server/ai/grade", () => {
       expect(w.type).toBe("CODE_POINTER");
       expect(w.step_index).toBe(2);
       expect(w.question).toContain("bước 2");
-      expect(w.question).toContain("mấy lần");
+      expect(w.question).toContain("người dùng sẽ thấy gì");
       expect(w.question).not.toContain("điều gì xảy ra ở đây");
       expect(staticHint("CODE_POINTER", { ...base, focus: "FLOW" }, 2).question).toContain("1 đầu vào cụ thể");
       expect(staticHint("CODE_POINTER", { ...base, focus: "FLOW" }, 2).question).not.toContain("phần tử");
@@ -814,11 +815,11 @@ describe("server/ai/grade", () => {
       expect(staticHint("CODE_POINTER", { ...base, focus: "CHANGE" }, 2).question).toContain("phải sửa");
     });
 
-    it("[AI-32] staticHint CODE_POINTER chọn số ví dụ không có trong đáp án (không lộ số)", () => {
+    it("[AI-32] staticHint CODE_POINTER không dùng số nên không lộ số của đáp án", () => {
       const base = createMockGradeContext();
       const t = { ...base, focus: "WEAKNESS" as const, reference_answer: "Có 3 truy vấn cho 3 sản phẩm.", must_have_points: ["ý một", "ý hai"] };
       const q = staticHint("CODE_POINTER", t, 2).question;
-      expect(q).toContain("chỉ có 2 phần tử");
+      expect(q).not.toMatch(/\d+ phần tử/u);
       expect(leaksNumbers(q, t, "")).toBe(false);
     });
 

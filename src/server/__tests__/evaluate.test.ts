@@ -522,7 +522,7 @@ describe("TASK_11: evaluate-feynman", () => {
         mockSession.user_id,
       );
       expect(mockCallLLMWithRetry).not.toHaveBeenCalled();
-      expect(r2.follow_up?.question).toContain(`Gợi ý: ${mockRun.questions[0].must_have_points[0]}`);
+      expect(r2.follow_up?.question).toContain(mockRun.questions[0].must_have_points[0]);
     });
 
     it("D10: Gõ 'chịu' (intent GIVE_UP) ở lượt 1 => có follow_up loại CODE_POINTER", async () => {
