@@ -2,14 +2,16 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { LessonCard, type CardAnalysis } from "@/components/learn/LessonCard";
-import { LessonGroup } from "@/components/learn/LessonGroup";
+import { LessonGroup, LessonSubfolder } from "@/components/learn/LessonGroup";
 import { StatusPill } from "@/components/ui/Page";
 import { Button } from "@/components/ui/common";
 import { displayTitle } from "@/lib/derive";
 import {
   blockedBy,
   cardAction,
+  crossGroupBlockers,
   firstOpenableBlocker,
+  groupTree,
   lessonGroups,
   nodeStatesOf,
   startNodeIds,
@@ -85,6 +87,30 @@ export function LessonGraphPanel() {
     openNode(nodeId);
   }
 
+  function renderCard(id: string) {
+    const node = byId.get(id);
+    const state = states[id];
+    if (!node || !state) return null;
+    return (
+      <LessonCard
+        key={id}
+        node={node}
+        title={titleOf(id)}
+        status={state.status}
+        hasWarning={state.has_warning}
+        weakNames={weakParents(node, states).map(titleOf)}
+        // Bài cần học trước cùng nhóm chỉ hiện ổ khóa; khác nhóm mới hiện "cần thêm: …"
+        blockedNames={crossGroupBlockers(node, states, groups).map(titleOf)}
+        isStart={starts.has(id)}
+        active={activeNodeId === id}
+        analysis={analysisOf(id)}
+        onOpen={openNode}
+        onBlocked={onBlocked}
+        onRetryAnalysis={(nodeId) => void requestAnalysis(nodeId, true)}
+      />
+    );
+  }
+
   function analysisOf(id: string): CardAnalysis {
     const a = analyses[id];
     if (a === "PENDING" || a === "FAILED") return a;
@@ -115,37 +141,30 @@ export function LessonGraphPanel() {
         </div>
       ) : null}
 
-      {groups.map((group) => (
-        <LessonGroup
-          key={group.group_id}
-          group={group}
-          open={openGroups.includes(group.group_id)}
-          onToggle={toggleGroup}
-        >
-          {group.node_ids.map((id) => {
-            const node = byId.get(id);
-            const state = states[id];
-            if (!node || !state) return null;
-            return (
-              <LessonCard
-                key={id}
-                node={node}
-                title={titleOf(id)}
-                status={state.status}
-                hasWarning={state.has_warning}
-                weakNames={weakParents(node, states).map(titleOf)}
-                blockedNames={blockedBy(node, states).map(titleOf)}
-                isStart={starts.has(id)}
-                active={activeNodeId === id}
-                analysis={analysisOf(id)}
-                onOpen={openNode}
-                onBlocked={onBlocked}
-                onRetryAnalysis={(nodeId) => void requestAnalysis(nodeId, true)}
-              />
-            );
-          })}
-        </LessonGroup>
-      ))}
+      {groups.map((group) => {
+        const tree = groupTree(group.node_ids, byId);
+        return (
+          <LessonGroup
+            key={group.group_id}
+            group={group}
+            open={openGroups.includes(group.group_id)}
+            onToggle={toggleGroup}
+            summary={group.node_ids.map(titleOf).join(" · ")}
+          >
+            {tree.direct.map(renderCard)}
+            {tree.subs.map((sub) => (
+              <LessonSubfolder
+                key={sub.key}
+                id={`${group.group_id}-${sub.key}`}
+                label={sub.label}
+                count={sub.node_ids.length}
+              >
+                {sub.node_ids.map(renderCard)}
+              </LessonSubfolder>
+            ))}
+          </LessonGroup>
+        );
+      })}
 
       <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-muted" aria-label="Chú giải">
         <StatusPill status="AVAILABLE" />
