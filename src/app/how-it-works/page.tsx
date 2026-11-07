@@ -13,7 +13,7 @@ export default function HowItWorksPage() {
           {[1, 2, 3, 4].map((step) => (
             <li
               key={step}
-              className="rounded-lg border border-neutral-300 p-4 text-sm font-medium dark:border-neutral-700"
+              className="rounded-lg border border-line bg-panel p-4 text-sm font-medium"
             >
               Bước {step}
             </li>
