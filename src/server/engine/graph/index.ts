@@ -472,7 +472,7 @@ export async function buildGraph(input: IngestOutput): Promise<StaticEngineResul
     n.entities = ld ? toNodeEntities(ld) : [];
   }
 
-  assignCapstone(keptNodes);
+  assignCapstone(keptNodes, dataById);
   dedupeTitles(keptNodes);
   const groups = buildGroups(keptNodes, edges, dataById);
   layoutGraph(keptNodes, edges);

@@ -19,6 +19,12 @@ export interface LessonData {
   primary_entity: string | null;
   // `POST /articles` tạo thẳng thực thể, khác `POST /articles/:slug/comments` tạo đồ con.
   creates_collection?: boolean;
+  // Nhánh con của thực thể: `/articles/:slug/comments/:id` ⇒ "comments"; route của chính thực thể ⇒ "".
+  sub?: string;
+  // Xem 1 bản ghi của chính thực thể: `GET /articles/:slug`.
+  reads_one?: boolean;
+  // Số đoạn tĩnh của route: `POST /projects/:id/phases` = 2, `.../phases/connect` = 3.
+  depth?: number;
 }
 
 export type DataEdge = {
@@ -114,13 +120,16 @@ export function readLessonData(
     entities: [{ name: entityName, ops: [op] }],
     primary_entity: entityName,
     creates_collection: op === "CREATE" && S.length === 1,
+    sub: S.slice(1).find((s) => !ACTION_SEGMENTS.has(s.toLowerCase()))?.toLowerCase() ?? "",
+    depth: S.length,
+    reads_one: op === "READ" && S.length === 1 && /[{:]/.test(path),
   };
 }
 
 /**
  * ENG-118: Dựng cạnh dữ liệu G0 (bước 1, 2).
  * - source(E) = bài dễ nhất có CREATE từ route; không có ⇒ bài dễ nhất có E
- * - source(E) → mọi bài khác có E
+ * - Vòng đời: source(E) ⇒ bài Xem ⇒ bài Sửa/Xóa; nhánh con nối sau bài Xem 1 bản ghi
  * - Bài có CREATE E, E → P, source(P) khác bài đó ⇒ source(P) → bài đó
  * - Khóa Map là `${source}->${target}`, gộp via_entities đã sort
  */
@@ -192,13 +201,59 @@ export function buildDataEdges(
     }
   };
 
-  // source(E) → mọi bài khác có E
+  // Vòng đời của E thay cho "source(E) → mọi bài": Tạo ⇒ Xem ⇒ Sửa/Xóa; mỗi nhánh con
+  // (comments, favorite…) bắt đầu sau bài Xem 1 bản ghi của E rồi lặp lại cùng thứ tự.
+  const easiest = (list: LessonData[]): LessonData | undefined =>
+    list.reduce<LessonData | undefined>(
+      (best, l) => (best === undefined || isEasier(l.node_id, best.node_id) ? l : best),
+      undefined
+    );
+  const opOn = (l: LessonData, entityName: string): EntityOp =>
+    l.entities.find((ent) => ent.name === entityName)?.ops[0] ?? "READ";
+  const isChange = (op: EntityOp): boolean => op === "UPDATE" || op === "DELETE";
+
   for (const [entityName, touchingLessons] of entityMap.entries()) {
     const srcId = sourceOfEntity.get(entityName);
     if (!srcId) continue;
+
+    const bySub = new Map<string, LessonData[]>();
     for (const l of touchingLessons) {
-      if (l.node_id !== srcId) {
-        addEdge(srcId, l.node_id, entityName);
+      const key = l.sub ?? "";
+      bySub.set(key, [...(bySub.get(key) ?? []), l]);
+    }
+
+    const readsOf = (list: LessonData[], except: string): LessonData[] =>
+      list.filter((l) => l.node_id !== except && opOn(l, entityName) === "READ");
+    const pickGate = (list: LessonData[], except: string): LessonData | undefined => {
+      const reads = readsOf(list, except);
+      return easiest(reads.filter((l) => l.reads_one)) ?? easiest(reads);
+    };
+    // Bài Tạo đúng nhánh (`POST /projects/:id/phases`) trước bài thao tác sâu hơn (`.../phases/connect`).
+    const pickHead = (list: LessonData[]): LessonData => {
+      const creators = list.filter((l) => opOn(l, entityName) === "CREATE");
+      const pool = creators.length > 0 ? creators : list;
+      const minDepth = Math.min(...pool.map((l) => l.depth ?? 0));
+      return easiest(pool.filter((l) => (l.depth ?? 0) === minDepth))!;
+    };
+
+    // Nhánh chính: E không có route tạo thẳng (chỉ có nhánh con như `follow`) ⇒ bắt đầu từ bài Xem E.
+    const main = bySub.get("") ?? [];
+    const srcInMain = main.some((l) => l.node_id === srcId);
+    const rootId =
+      srcInMain || main.length === 0 ? srcId : (pickGate(main, "") ?? easiest(main))!.node_id;
+    const gateId = main.length === 0 ? srcId : (pickGate(main, rootId)?.node_id ?? rootId);
+
+    for (const [sub, list] of bySub) {
+      const headId =
+        sub === "" ? rootId : list.some((l) => l.node_id === srcId) ? srcId : pickHead(list).node_id;
+      if (sub !== "") {
+        addEdge(gateId, headId, entityName);
+      }
+      const changeFrom = sub === "" ? gateId : (easiest(readsOf(list, headId))?.node_id ?? headId);
+
+      for (const l of list) {
+        if (l.node_id === headId) continue;
+        addEdge(isChange(opOn(l, entityName)) ? changeFrom : headId, l.node_id, entityName);
       }
     }
   }

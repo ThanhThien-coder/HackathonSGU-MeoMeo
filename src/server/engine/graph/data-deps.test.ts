@@ -286,6 +286,69 @@ describe("Data Dependencies & Groups (ENG-116, ENG-118, ENG-119)", () => {
     expect(groups[groups.length - 1].group_id).toBe("group-standalone");
   });
 
+  it("vòng đời: Tạo ⇒ Xem ⇒ Sửa/Xóa, nhánh con nối sau bài Xem 1 bản ghi", () => {
+    const routes: Array<[string, string, string]> = [
+      ["create", "POST", "/articles"],
+      ["list", "GET", "/articles"],
+      ["get", "GET", "/articles/:slug"],
+      ["update", "PUT", "/articles/:slug"],
+      ["delete", "DELETE", "/articles/:slug"],
+      ["c-create", "POST", "/articles/:slug/comments"],
+      ["c-list", "GET", "/articles/:slug/comments"],
+      ["c-delete", "DELETE", "/articles/:slug/comments/:id"],
+      ["c-like", "POST", "/articles/:slug/comments/:id/like"],
+    ];
+    const lessons = routes.map(([id, method, path]) =>
+      readLessonData(createDummyCandidate({ id, method, path }))
+    );
+    expect(lessons.find((l) => l.node_id === "c-like")?.sub).toBe("comments");
+
+    // Hòa ⇒ id nhỏ hơn dễ hơn, như isEasier khi số bước và rank bằng nhau.
+    const edges = [...buildDataEdges(lessons, new Map(), (a, b) => a < b).keys()].sort();
+    expect(edges).toEqual(
+      [
+        "create->list",
+        "create->get",
+        "get->update",
+        "get->delete",
+        "get->c-create",
+        "c-create->c-list",
+        "c-create->c-like",
+        "c-list->c-delete",
+      ].sort()
+    );
+  });
+
+  it("vòng đời: không có route tạo thẳng ⇒ bắt đầu từ bài Xem, nhánh con theo sau", () => {
+    const routes: Array<[string, string, string]> = [
+      ["get", "GET", "/profiles/:username"],
+      ["follow", "POST", "/profiles/:username/follow"],
+      ["unfollow", "DELETE", "/profiles/:username/follow"],
+    ];
+    const lessons = routes.map(([id, method, path]) =>
+      readLessonData(createDummyCandidate({ id, method, path }))
+    );
+    // follow dễ hơn get vẫn không được làm gốc
+    const easier = (a: string, b: string) => a === "follow" || (a < b && b !== "follow");
+    const edges = [...buildDataEdges(lessons, new Map(), easier).keys()].sort();
+    expect(edges).toEqual(["follow->unfollow", "get->follow"]);
+  });
+
+  it("vòng đời: nhánh con bắt đầu từ bài Tạo đúng nhánh, không phải bài thao tác sâu hơn", () => {
+    const routes: Array<[string, string, string]> = [
+      ["create", "POST", "/projects"],
+      ["get", "GET", "/projects/:id"],
+      ["a-connect", "POST", "/projects/:id/phases/connect"],
+      ["phase", "POST", "/projects/:id/phases"],
+      ["phase-put", "PUT", "/projects/:id/phases/:phaseId"],
+    ];
+    const lessons = routes.map(([id, method, path]) =>
+      readLessonData(createDummyCandidate({ id, method, path }))
+    );
+    const edges = [...buildDataEdges(lessons, new Map(), (a, b) => a < b).keys()].sort();
+    expect(edges).toEqual(["create->get", "get->phase", "phase->a-connect", "phase->phase-put"]);
+  });
+
   it("POST /articles làm gốc, không phải POST /articles/:slug/comments dù dễ hơn", () => {
     const lesson = (node_id: string, op: "CREATE" | "READ", creates_collection: boolean) => ({
       node_id,
