@@ -6,6 +6,7 @@ import { useState, type CSSProperties, type ReactNode } from "react";
 import { CONFIG } from "@/contracts/config";
 import { LoginScreen } from "@/components/home/LoginScreen";
 import { CockpitHeader } from "@/components/learn/CockpitHeader";
+import { CodeSnippetViewer } from "@/components/learn/CodeSnippetViewer";
 import { LearnSidePanel } from "@/components/learn/LearnSidePanel";
 import { LessonGraphPanel } from "@/components/learn/LessonGraphPanel";
 import { Button } from "@/components/ui/common";
@@ -96,7 +97,6 @@ function NoSession({ sessionId }: { sessionId: string | null }) {
 export function LearnShell() {
   const sessionParam = useSearchParams().get("session");
   const result = useWorkbenchStore((s) => s.result);
-  const activeNodeId = useWorkbenchStore((s) => s.active_node_id);
   const [leftOpen, setLeftOpen] = useState(true);
   const [rightOpen, setRightOpen] = useState(true);
 
@@ -107,7 +107,6 @@ export function LearnShell() {
     .filter((w) => w !== null)
     .map((w) => `minmax(0,${w}fr)`)
     .join(" ");
-  const activeTitle = result.nodes.find((n) => n.id === activeNodeId)?.title;
 
   return (
     <div className="flex min-h-dvh flex-col lg:h-dvh lg:overflow-hidden">
@@ -128,11 +127,7 @@ export function LearnShell() {
           aria-label="Khung code"
           className="min-w-0 overflow-hidden rounded-xl border border-line bg-panel max-lg:sticky max-lg:top-0 max-lg:z-[5] max-lg:h-[min(430px,52vh)] lg:min-h-0"
         >
-          <p className="p-4 text-sm text-muted">
-            {activeTitle
-              ? `Đang mở bài “${activeTitle}”. Khung code sẽ hiện ở bước sau.`
-              : "Chọn một bài ở bản đồ bên trái để bắt đầu."}
-          </p>
+          <CodeSnippetViewer />
         </section>
         <aside hidden={!rightOpen} aria-label="X-Ray và Feynman" className={COLUMN}>
           <LearnSidePanel />
