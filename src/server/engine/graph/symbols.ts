@@ -21,7 +21,8 @@ function findEnclosingClass(node: Node): { className: string; isAbstract: boolea
       curr.type === "abstract_class_declaration" ||
       curr.type === "class" ||
       curr.type === "enum_declaration" ||
-      curr.type === "record_declaration"
+      curr.type === "record_declaration" ||
+      curr.type === "interface_declaration"
     ) {
       const nameNode =
         curr.childForFieldName("name") ??
@@ -85,6 +86,14 @@ function getLineStart(node: Node, isMethod: boolean): number {
   return minRow + 1;
 }
 
+function isFunctionValue(node: Node): boolean {
+  return (
+    node.type === "arrow_function" ||
+    node.type === "function_expression" ||
+    node.type === "function"
+  );
+}
+
 function collectFileExportedNames(root: Node): Set<string> {
   const exported = new Set<string>();
 
@@ -129,16 +138,26 @@ function collectFileExportedNames(root: Node): Set<string> {
                 prop.type === "identifier"
               ) {
                 exported.add(prop.text);
+              } else if (prop.type === "method_definition") {
+                const methodName = prop.childForFieldName("name");
+                if (methodName) {
+                  exported.add(methodName.text);
+                }
               } else if (prop.type === "pair") {
                 const val = prop.childForFieldName("value") ?? prop.namedChild(1);
                 if (val && val.type === "identifier") {
                   exported.add(val.text);
+                } else if (val && isFunctionValue(val)) {
+                  const keyNode = prop.childForFieldName("key");
+                  if (keyNode) {
+                    exported.add(keyNode.text);
+                  }
                 }
               }
             }
           }
-        } else if (leftText.startsWith("exports.")) {
-          const propName = leftText.slice("exports.".length);
+        } else if (leftText.startsWith("exports.") || leftText.startsWith("module.exports.")) {
+          const propName = leftText.slice(leftText.indexOf("exports.") + "exports.".length);
           if (propName) {
             exported.add(propName);
             if (right.type === "identifier") {
@@ -165,8 +184,15 @@ function extractBoundNames(node: Node): string[] {
   const names: string[] = [];
 
   function walk(n: Node): void {
-    if (n.type === "identifier") {
+    if (n.type === "identifier" || n.type === "shorthand_property_identifier_pattern") {
       names.push(n.text);
+      return;
+    }
+    if (n.type === "object_assignment_pattern") {
+      const left = n.childForFieldName("left") ?? n.namedChild(0);
+      if (left) {
+        walk(left);
+      }
       return;
     }
     if (n.type === "required_parameter" || n.type === "optional_parameter") {
@@ -214,7 +240,11 @@ function extractBoundNames(node: Node): string[] {
       }
       return;
     }
-    if (n.type === "formal_parameter" || n.type === "spread_parameter") {
+    if (
+      n.type === "formal_parameter" ||
+      n.type === "spread_parameter" ||
+      n.type === "catch_formal_parameter"
+    ) {
       const nameNode =
         n.childForFieldName("name") ??
         n.children.find((c) => c.type === "identifier");
@@ -229,10 +259,24 @@ function extractBoundNames(node: Node): string[] {
   return names;
 }
 
+// `const f = () => {}` và `{ f: () => {} }`: định nghĩa là declarator hoặc pair, hàm nằm ở value.
+function functionNodeOf(defNode: Node): Node {
+  if (defNode.type === "variable_declarator" || defNode.type === "pair") {
+    return defNode.childForFieldName("value") ?? defNode;
+  }
+  return defNode;
+}
+
 function extractParams(defNode: Node): string[] {
+  const fnNode = functionNodeOf(defNode);
+  const singleParam = fnNode.childForFieldName("parameter");
+  if (singleParam) {
+    return [singleParam.text];
+  }
+
   const paramsNode =
-    defNode.childForFieldName("parameters") ??
-    defNode.children.find(
+    fnNode.childForFieldName("parameters") ??
+    fnNode.children.find(
       (c) => c.type === "formal_parameters" || c.type === "parameters"
     );
 
@@ -249,9 +293,10 @@ function extractParams(defNode: Node): string[] {
 }
 
 function extractLocals(defNode: Node): string[] {
+  const fnNode = functionNodeOf(defNode);
   const bodyNode =
-    defNode.childForFieldName("body") ??
-    defNode.children.find(
+    fnNode.childForFieldName("body") ??
+    fnNode.children.find(
       (c) =>
         c.type === "statement_block" ||
         c.type === "block" ||
@@ -266,7 +311,7 @@ function extractLocals(defNode: Node): string[] {
 
   function walk(n: Node): void {
     if (
-      n !== defNode &&
+      n !== fnNode &&
       (n.type === "function_declaration" ||
         n.type === "generator_function_declaration" ||
         n.type === "function_expression" ||
@@ -280,6 +325,16 @@ function extractLocals(defNode: Node): string[] {
       const nameNode = n.childForFieldName("name") ?? n.namedChild(0);
       if (nameNode) {
         locals.push(...extractBoundNames(nameNode));
+      }
+    } else if (n.type === "for_in_statement") {
+      const left = n.childForFieldName("left");
+      if (left) {
+        locals.push(...extractBoundNames(left));
+      }
+    } else if (n.type === "enhanced_for_statement") {
+      const loopVar = n.childForFieldName("name");
+      if (loopVar) {
+        locals.push(loopVar.text);
       }
     } else if (n.type === "catch_clause") {
       const paramNode =
@@ -313,10 +368,11 @@ function extractLocals(defNode: Node): string[] {
   return locals;
 }
 
+// Lấy tên kiểu đầu tiên: `: Repo<User>`, `Repo | null`, `Item[]` ⇒ Repo, Repo, Item.
 function cleanTypeName(raw: string): string {
-  let cleaned = raw.replace(/^:\s*/, "").trim();
-  cleaned = cleaned.split("<")[0].trim();
-  return cleaned;
+  const cleaned = raw.replace(/^:\s*/, "").trim();
+  const match = /^[A-Za-z_$][\w$.]*/.exec(cleaned);
+  return match ? match[0] : "";
 }
 
 interface SymbolCandidate {
@@ -326,6 +382,575 @@ interface SymbolCandidate {
   isDirectDefaultExport: boolean;
 }
 
+// Hàm không có tên riêng trong cây nên query không bắt được (ENG-21):
+// `module.exports = { a: fn }`, `export default { a: fn }`, `exports.a = fn`, `module.exports = fn`.
+function moduleExportCandidates(root: Node): SymbolCandidate[] {
+  const out: SymbolCandidate[] = [];
+
+  const fromObject = (obj: Node): void => {
+    for (const prop of obj.namedChildren) {
+      if (prop.type !== "pair") {
+        continue;
+      }
+      const keyNode = prop.childForFieldName("key");
+      const valueNode = prop.childForFieldName("value");
+      if (keyNode && valueNode && isFunctionValue(valueNode)) {
+        out.push({ defNode: prop, name: keyNode.text, kind: "FUNCTION", isDirectDefaultExport: false });
+      }
+    }
+  };
+
+  for (const top of root.namedChildren) {
+    if (top.type === "export_statement") {
+      const valueNode = top.childForFieldName("value");
+      if (valueNode && top.children.some((c) => c.text === "default")) {
+        if (valueNode.type === "object") {
+          fromObject(valueNode);
+        } else if (isFunctionValue(valueNode)) {
+          out.push({ defNode: valueNode, name: "default", kind: "FUNCTION", isDirectDefaultExport: true });
+        }
+      }
+      continue;
+    }
+
+    const assign = top.type === "expression_statement" ? top.namedChild(0) : null;
+    if (assign?.type !== "assignment_expression") {
+      continue;
+    }
+    const left = assign.childForFieldName("left");
+    const right = assign.childForFieldName("right");
+    if (!left || !right) {
+      continue;
+    }
+
+    if (left.text === "module.exports") {
+      if (right.type === "object") {
+        fromObject(right);
+      } else if (isFunctionValue(right)) {
+        out.push({ defNode: right, name: "default", kind: "FUNCTION", isDirectDefaultExport: true });
+      }
+    } else if (
+      (left.text.startsWith("exports.") || left.text.startsWith("module.exports.")) &&
+      isFunctionValue(right)
+    ) {
+      const name = left.text.slice(left.text.indexOf("exports.") + "exports.".length);
+      out.push({ defNode: right, name, kind: "FUNCTION", isDirectDefaultExport: false });
+    }
+  }
+
+  return out;
+}
+
+function collectFileSymbols(
+  file: ParsedFile,
+  idx: SymbolIndex,
+  keyCounts: Map<string, number>,
+  abstractClasses: Set<string>
+): void {
+  const isJava = file.language === "JAVA";
+  const isTsJs =
+    file.language === "TYPESCRIPT" ||
+    file.language === "TSX" ||
+    file.language === "JAVASCRIPT";
+
+  const fileExportedNames = isTsJs ? collectFileExportedNames(file.tree.rootNode) : new Set<string>();
+
+  const query = getQuery(file.language);
+  const matches = query.matches(file.tree.rootNode);
+
+  const candidates: SymbolCandidate[] = [];
+
+  for (const match of matches) {
+    const defCapture = match.captures.find((c) => c.name.startsWith("def."));
+    const nameCapture = match.captures.find((c) => c.name === "name");
+
+    if (!defCapture || !nameCapture) {
+      continue;
+    }
+
+    let kind: SymbolCandidate["kind"] = "VARIABLE";
+    switch (defCapture.name) {
+      case "def.function":
+        kind = "FUNCTION";
+        break;
+      case "def.method":
+        kind = "METHOD";
+        break;
+      case "def.class":
+        kind = "CLASS";
+        break;
+      case "def.interface":
+        kind = "INTERFACE";
+        break;
+      case "def.type":
+        kind = "TYPE";
+        break;
+      case "def.var":
+        kind = "VARIABLE";
+        break;
+      default:
+        continue;
+    }
+
+    const isDirectDefaultExport =
+      defCapture.node.parent?.type === "export_statement" &&
+      defCapture.node.parent.children.some((c) => c.text === "default");
+
+    candidates.push({
+      defNode: defCapture.node,
+      name: nameCapture.node.text,
+      kind,
+      isDirectDefaultExport,
+    });
+
+    if (kind === "CLASS") {
+      if (
+        defCapture.node.type === "abstract_class_declaration" ||
+        defCapture.node.children.some((c) => c.text === "abstract")
+      ) {
+        abstractClasses.add(nameCapture.node.text);
+      }
+    }
+  }
+
+  // ENG-21: Thêm biến cấp module của TS/JS
+  if (isTsJs) {
+    for (const topNode of file.tree.rootNode.children) {
+      let declNode: Node | null = null;
+      let isExportedTop = false;
+
+      if (
+        topNode.type === "lexical_declaration" ||
+        topNode.type === "variable_declaration"
+      ) {
+        declNode = topNode;
+      } else if (topNode.type === "export_statement") {
+        const childDecl = topNode.children.find(
+          (c) =>
+            c.type === "lexical_declaration" ||
+            c.type === "variable_declaration"
+        );
+        if (childDecl) {
+          declNode = childDecl;
+          isExportedTop = true;
+        }
+      }
+
+      if (declNode) {
+        for (const declarator of declNode.namedChildren) {
+          if (declarator.type === "variable_declarator") {
+            const nameNode =
+              declarator.childForFieldName("name") ?? declarator.namedChild(0);
+            const valNode =
+              declarator.childForFieldName("value") ?? declarator.namedChild(1);
+
+            if (nameNode && nameNode.type === "identifier") {
+              const isFunctionVal =
+                valNode &&
+                (valNode.type === "arrow_function" ||
+                  valNode.type === "function_expression");
+
+              if (!isFunctionVal) {
+                const alreadyCaptured = candidates.some(
+                  (c) =>
+                    c.defNode.startIndex === declarator.startIndex &&
+                    c.name === nameNode.text
+                );
+
+                if (!alreadyCaptured) {
+                  candidates.push({
+                    defNode: declarator,
+                    name: nameNode.text,
+                    kind: "VARIABLE",
+                    isDirectDefaultExport:
+                      isExportedTop &&
+                      topNode.children.some((c) => c.text === "default"),
+                  });
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  if (isTsJs) {
+    candidates.push(...moduleExportCandidates(file.tree.rootNode));
+  }
+
+  // Sort match theo vị trí bắt đầu trước khi tạo khóa
+  candidates.sort((a, b) => {
+    if (a.defNode.startIndex !== b.defNode.startIndex) {
+      return a.defNode.startIndex - b.defNode.startIndex;
+    }
+    return a.defNode.endIndex - b.defNode.endIndex;
+  });
+
+  const fileDefinitions: SymbolDefinition[] = [];
+
+  for (const cand of candidates) {
+    let baseKey = `${file.path}#${cand.name}`;
+    let enclosingClassInfo: { className: string; isAbstract: boolean } | null = null;
+
+    if (cand.kind === "METHOD") {
+      enclosingClassInfo = findEnclosingClass(cand.defNode);
+      if (enclosingClassInfo) {
+        baseKey = `${file.path}#${enclosingClassInfo.className}.${cand.name}`;
+      }
+    }
+
+    const key = uniqueKey(baseKey, keyCounts);
+    const isMethod = cand.kind === "METHOD";
+    const line_start = getLineStart(cand.defNode, isMethod);
+    const line_end = cand.defNode.endPosition.row + 1;
+
+    let is_exported = false;
+    if (isJava) {
+      const modNode = cand.defNode.children.find((c) => c.type === "modifiers");
+      if (modNode) {
+        const hasPrivateOrProtected = modNode.children.some(
+          (c) => c.text === "private" || c.text === "protected"
+        );
+        is_exported = !hasPrivateOrProtected;
+      } else {
+        is_exported = true;
+      }
+    } else if (isTsJs) {
+      if (isMethod && enclosingClassInfo) {
+        // Method theo lớp chứa nó
+        const enclosingDef = fileDefinitions.find(
+          (d) => d.name === enclosingClassInfo!.className && d.kind === "CLASS"
+        );
+        if (enclosingDef) {
+          is_exported = enclosingDef.is_exported;
+        } else {
+          is_exported = fileExportedNames.has(enclosingClassInfo.className);
+        }
+      } else {
+        let hasExportAncestor = false;
+        let p = cand.defNode.parent;
+        while (p) {
+          if (p.type === "export_statement" || p.type === "export_declaration") {
+            hasExportAncestor = true;
+            break;
+          }
+          if (p.type === "statement_block" || p.type === "class_body") {
+            break;
+          }
+          p = p.parent;
+        }
+        is_exported = hasExportAncestor || fileExportedNames.has(cand.name);
+      }
+    }
+
+    const def: SymbolDefinition = {
+      key,
+      kind: cand.kind,
+      name: cand.name,
+      file_path: file.path,
+      line_start,
+      line_end,
+      is_exported,
+    };
+
+    idx.symbols.set(key, def);
+    fileDefinitions.push(def);
+
+    if (cand.isDirectDefaultExport) {
+      const defaultDef: SymbolDefinition = {
+        ...def,
+        key: `${file.path}#default`,
+        is_exported: true,
+      };
+      idx.symbols.set(defaultDef.key, defaultDef);
+    }
+
+    if (cand.kind === "FUNCTION" || cand.kind === "METHOD") {
+      const params = extractParams(cand.defNode);
+      const locals = extractLocals(cand.defNode);
+      const info: FunctionInfo = {
+        ...def,
+        params,
+        locals,
+        complexity: 0,
+      };
+      idx.functions.set(def.key, info);
+      idx.locals.set(def.key, new Set([...params, ...locals]));
+
+      if (cand.isDirectDefaultExport) {
+        const defaultInfo: FunctionInfo = {
+          ...info,
+          key: `${file.path}#default`,
+          is_exported: true,
+        };
+        idx.functions.set(defaultInfo.key, defaultInfo);
+        idx.locals.set(defaultInfo.key, new Set([...params, ...locals]));
+      }
+    }
+  }
+
+  // Xử lý export default X cấp file (export default X;)
+  if (isTsJs) {
+    for (const topNode of file.tree.rootNode.children) {
+      const assign = topNode.type === "expression_statement" ? topNode.namedChild(0) : null;
+      const moduleExportsValue =
+        assign?.type === "assignment_expression" &&
+        assign.childForFieldName("left")?.text === "module.exports"
+          ? assign.childForFieldName("right")
+          : null;
+      if (topNode.type === "export_statement" || moduleExportsValue) {
+        const hasDefault =
+          moduleExportsValue !== null || topNode.children.some((c) => c.text === "default");
+        if (hasDefault) {
+          const idNode = moduleExportsValue ?? topNode.childForFieldName("value");
+          if (idNode?.type === "identifier") {
+            const targetName = idNode.text;
+            const matchingDef = fileDefinitions.find((d) => d.name === targetName);
+            if (matchingDef) {
+              const defaultDef: SymbolDefinition = {
+                ...matchingDef,
+                key: `${file.path}#default`,
+                is_exported: true,
+              };
+              idx.symbols.set(defaultDef.key, defaultDef);
+
+              if (matchingDef.kind === "FUNCTION" || matchingDef.kind === "METHOD") {
+                const existingFunc = idx.functions.get(matchingDef.key);
+                if (existingFunc) {
+                  const defaultFunc: FunctionInfo = {
+                    ...existingFunc,
+                    key: `${file.path}#default`,
+                    is_exported: true,
+                  };
+                  idx.functions.set(defaultFunc.key, defaultFunc);
+                  const existingLocals = idx.locals.get(matchingDef.key);
+                  if (existingLocals) {
+                    idx.locals.set(defaultFunc.key, new Set(existingLocals));
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+}
+
+// ENG-22, ENG-23. Chạy sau khi đã đọc mọi file: lớp cha abstract có thể nằm ở file sort sau.
+function collectClassInfo(
+  file: ParsedFile,
+  idx: SymbolIndex,
+  abstractClasses: Set<string>
+): void {
+  const setFieldType = (key: string, rawType: string): void => {
+    const typeName = cleanTypeName(rawType);
+    if (typeName) {
+      idx.field_types.set(key, typeName);
+    }
+  };
+
+  const collectThisNew = (node: Node, className: string): void => {
+    if (node.type === "assignment_expression") {
+      const left = node.childForFieldName("left");
+      const right = node.childForFieldName("right");
+      if (
+        left?.type === "member_expression" &&
+        left.childForFieldName("object")?.text === "this" &&
+        right?.type === "new_expression"
+      ) {
+        const prop = left.childForFieldName("property");
+        const ctor = right.childForFieldName("constructor");
+        if (prop && ctor) {
+          setFieldType(`${file.path}#${className}.${prop.text}`, ctor.text);
+        }
+      }
+    }
+    for (const child of node.namedChildren) {
+      collectThisNew(child, className);
+    }
+  };
+
+  function analyzeClassTypesAndImpls(node: Node): void {
+    if (
+      node.type === "class_declaration" ||
+      node.type === "abstract_class_declaration" ||
+      node.type === "class"
+    ) {
+      const nameNode =
+        node.childForFieldName("name") ??
+        node.children.find((c) => c.type === "type_identifier" || c.type === "identifier");
+      if (nameNode) {
+        const className = nameNode.text;
+
+        // Heritage: implements & extends
+        const heritageNode =
+          node.childForFieldName("heritage") ??
+          node.children.find((c) => c.type === "class_heritage");
+
+        if (heritageNode) {
+          for (const hChild of heritageNode.namedChildren) {
+            if (hChild.type === "implements_clause") {
+              for (const iface of hChild.namedChildren) {
+                const ifaceName = cleanTypeName(iface.text);
+                if (ifaceName) {
+                  let list = idx.interface_impls.get(ifaceName);
+                  if (!list) {
+                    list = [];
+                    idx.interface_impls.set(ifaceName, list);
+                  }
+                  list.push(`${file.path}#${className}`);
+                }
+              }
+            } else if (hChild.type === "identifier" || hChild.type === "member_expression") {
+              // JS: class_heritage chứa thẳng biểu thức lớp cha
+              idx.class_parents.set(`${file.path}#${className}`, cleanTypeName(hChild.text));
+            } else if (hChild.type === "extends_clause") {
+              const parentValue = hChild.childForFieldName("value") ?? hChild.namedChild(0);
+              if (parentValue) {
+                idx.class_parents.set(`${file.path}#${className}`, cleanTypeName(parentValue.text));
+              }
+              for (const parentClause of hChild.namedChildren) {
+                const parentName = cleanTypeName(parentClause.text);
+                if (parentName && abstractClasses.has(parentName)) {
+                  let list = idx.interface_impls.get(parentName);
+                  if (!list) {
+                    list = [];
+                    idx.interface_impls.set(parentName, list);
+                  }
+                  list.push(`${file.path}#${className}`);
+                }
+              }
+            }
+          }
+        }
+
+        // Fields & constructor param properties
+        const bodyNode =
+          node.childForFieldName("body") ??
+          node.children.find((c) => c.type === "class_body");
+
+        if (bodyNode) {
+          for (const member of bodyNode.namedChildren) {
+            // Constructor params with modifier and type
+            if (member.type === "method_definition") {
+              const methodName =
+                member.childForFieldName("name") ??
+                member.children.find((c) => c.type === "property_identifier");
+              if (methodName && methodName.text === "constructor") {
+                const ctorBody = member.childForFieldName("body");
+                if (ctorBody) {
+                  collectThisNew(ctorBody, className);
+                }
+                const paramsNode =
+                  member.childForFieldName("parameters") ??
+                  member.children.find((c) => c.type === "formal_parameters");
+                if (paramsNode) {
+                  for (const param of paramsNode.namedChildren) {
+                    const hasModifier = param.children.some(
+                      (c) =>
+                        c.type === "accessibility_modifier" ||
+                        c.text === "readonly" ||
+                        c.text === "private" ||
+                        c.text === "protected" ||
+                        c.text === "public"
+                    );
+                    const typeNode =
+                      param.childForFieldName("type") ??
+                      param.children.find((c) => c.type === "type_annotation");
+                    const nameNodeInParam =
+                      param.childForFieldName("pattern") ??
+                      param.children.find((c) => c.type === "identifier");
+
+                    if (hasModifier && typeNode && nameNodeInParam) {
+                      setFieldType(
+                        `${file.path}#${className}.${nameNodeInParam.text}`,
+                        typeNode.text
+                      );
+                    }
+                  }
+                }
+              }
+            }
+
+            // Field with type or new T()
+            if (
+              member.type === "field_definition" ||
+              member.type === "public_field_definition" ||
+              member.type === "property_definition"
+            ) {
+              const fieldNameNode =
+                member.childForFieldName("name") ??
+                member.children.find(
+                  (c) => c.type === "property_identifier" || c.type === "identifier"
+                );
+              const typeNode =
+                member.childForFieldName("type") ??
+                member.children.find((c) => c.type === "type_annotation");
+              const valNode =
+                member.childForFieldName("value") ??
+                member.children.find((c) => c.type === "new_expression");
+
+              if (fieldNameNode) {
+                if (typeNode) {
+                  setFieldType(
+                    `${file.path}#${className}.${fieldNameNode.text}`,
+                    typeNode.text
+                  );
+                } else if (valNode && valNode.type === "new_expression") {
+                  const ctor =
+                    valNode.childForFieldName("constructor") ??
+                    valNode.namedChild(0);
+                  if (ctor) {
+                    setFieldType(
+                      `${file.path}#${className}.${fieldNameNode.text}`,
+                      ctor.text
+                    );
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // File-level or module variable x = new T()
+    if (
+      (node.type === "lexical_declaration" || node.type === "variable_declaration") &&
+      (node.parent?.type === "program" || node.parent?.type === "export_statement")
+    ) {
+      for (const declarator of node.namedChildren) {
+        if (declarator.type === "variable_declarator") {
+          const nameNode =
+            declarator.childForFieldName("name") ?? declarator.namedChild(0);
+          const valNode =
+            declarator.childForFieldName("value") ?? declarator.namedChild(1);
+
+          if (nameNode && nameNode.type === "identifier" && valNode && valNode.type === "new_expression") {
+            const ctor =
+              valNode.childForFieldName("constructor") ?? valNode.namedChild(0);
+            if (ctor) {
+              setFieldType(`${file.path}#${nameNode.text}`, ctor.text);
+            }
+          }
+        }
+      }
+    }
+
+    for (let i = 0; i < node.childCount; i++) {
+      const child = node.child(i);
+      if (child) {
+        analyzeClassTypesAndImpls(child);
+      }
+    }
+  }
+
+  analyzeClassTypesAndImpls(file.tree.rootNode);
+}
+
 export function collectSymbols(files: ParsedFile[]): SymbolIndex {
   const idx: SymbolIndex = {
     symbols: new Map(),
@@ -333,463 +958,30 @@ export function collectSymbols(files: ParsedFile[]): SymbolIndex {
     re_exports: new Map(),
     field_types: new Map(),
     interface_impls: new Map(),
+    class_parents: new Map(),
     locals: new Map(),
     functions: new Map(),
   };
 
   const keyCounts = new Map<string, number>();
   const abstractClasses = new Set<string>();
+  const sortedFiles = [...files].sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
 
-  const sortedFiles = [...files].sort((a, b) => a.path.localeCompare(b.path));
+  // Một file lỗi (ví dụ cây quá sâu) không được làm hỏng cả lần quét.
+  for (const file of sortedFiles) {
+    try {
+      collectFileSymbols(file, idx, keyCounts, abstractClasses);
+    } catch {
+      continue;
+    }
+  }
 
   for (const file of sortedFiles) {
-    const isJava = file.language === "JAVA";
-    const isTsJs =
-      file.language === "TYPESCRIPT" ||
-      file.language === "TSX" ||
-      file.language === "JAVASCRIPT";
-
-    const fileExportedNames = isTsJs ? collectFileExportedNames(file.tree.rootNode) : new Set<string>();
-
-    const query = getQuery(file.language);
-    const matches = query.matches(file.tree.rootNode);
-
-    const candidates: SymbolCandidate[] = [];
-
-    for (const match of matches) {
-      const defCapture = match.captures.find((c) => c.name.startsWith("def."));
-      const nameCapture = match.captures.find((c) => c.name === "name");
-
-      if (!defCapture || !nameCapture) {
-        continue;
-      }
-
-      let kind: SymbolCandidate["kind"] = "VARIABLE";
-      switch (defCapture.name) {
-        case "def.function":
-          kind = "FUNCTION";
-          break;
-        case "def.method":
-          kind = "METHOD";
-          break;
-        case "def.class":
-          kind = "CLASS";
-          break;
-        case "def.interface":
-          kind = "INTERFACE";
-          break;
-        case "def.type":
-          kind = "TYPE";
-          break;
-        case "def.var":
-          kind = "VARIABLE";
-          break;
-        default:
-          continue;
-      }
-
-      const isDirectDefaultExport =
-        defCapture.node.parent?.type === "export_statement" &&
-        defCapture.node.parent.children.some((c) => c.text === "default");
-
-      candidates.push({
-        defNode: defCapture.node,
-        name: nameCapture.node.text,
-        kind,
-        isDirectDefaultExport,
-      });
-
-      if (kind === "CLASS") {
-        if (
-          defCapture.node.type === "abstract_class_declaration" ||
-          defCapture.node.children.some((c) => c.text === "abstract")
-        ) {
-          abstractClasses.add(nameCapture.node.text);
-        }
-      }
+    try {
+      collectClassInfo(file, idx, abstractClasses);
+    } catch {
+      continue;
     }
-
-    // ENG-21: Thêm biến cấp module của TS/JS
-    if (isTsJs) {
-      for (const topNode of file.tree.rootNode.children) {
-        let declNode: Node | null = null;
-        let isExportedTop = false;
-
-        if (
-          topNode.type === "lexical_declaration" ||
-          topNode.type === "variable_declaration"
-        ) {
-          declNode = topNode;
-        } else if (topNode.type === "export_statement") {
-          const childDecl = topNode.children.find(
-            (c) =>
-              c.type === "lexical_declaration" ||
-              c.type === "variable_declaration"
-          );
-          if (childDecl) {
-            declNode = childDecl;
-            isExportedTop = true;
-          }
-        }
-
-        if (declNode) {
-          for (const declarator of declNode.namedChildren) {
-            if (declarator.type === "variable_declarator") {
-              const nameNode =
-                declarator.childForFieldName("name") ?? declarator.namedChild(0);
-              const valNode =
-                declarator.childForFieldName("value") ?? declarator.namedChild(1);
-
-              if (nameNode && nameNode.type === "identifier") {
-                const isFunctionVal =
-                  valNode &&
-                  (valNode.type === "arrow_function" ||
-                    valNode.type === "function_expression");
-
-                if (!isFunctionVal) {
-                  const alreadyCaptured = candidates.some(
-                    (c) =>
-                      c.defNode.startIndex === declarator.startIndex &&
-                      c.name === nameNode.text
-                  );
-
-                  if (!alreadyCaptured) {
-                    candidates.push({
-                      defNode: declarator,
-                      name: nameNode.text,
-                      kind: "VARIABLE",
-                      isDirectDefaultExport:
-                        isExportedTop &&
-                        topNode.children.some((c) => c.text === "default"),
-                    });
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-
-    // Sort match theo vị trí bắt đầu trước khi tạo khóa
-    candidates.sort((a, b) => {
-      if (a.defNode.startIndex !== b.defNode.startIndex) {
-        return a.defNode.startIndex - b.defNode.startIndex;
-      }
-      return a.defNode.endIndex - b.defNode.endIndex;
-    });
-
-    const fileDefinitions: SymbolDefinition[] = [];
-
-    for (const cand of candidates) {
-      let baseKey = `${file.path}#${cand.name}`;
-      let enclosingClassInfo: { className: string; isAbstract: boolean } | null = null;
-
-      if (cand.kind === "METHOD") {
-        enclosingClassInfo = findEnclosingClass(cand.defNode);
-        if (enclosingClassInfo) {
-          baseKey = `${file.path}#${enclosingClassInfo.className}.${cand.name}`;
-        }
-      }
-
-      const key = uniqueKey(baseKey, keyCounts);
-      const isMethod = cand.kind === "METHOD";
-      const line_start = getLineStart(cand.defNode, isMethod);
-      const line_end = cand.defNode.endPosition.row + 1;
-
-      let is_exported = false;
-      if (isJava) {
-        const modNode = cand.defNode.children.find((c) => c.type === "modifiers");
-        if (modNode) {
-          const hasPrivateOrProtected = modNode.children.some(
-            (c) => c.text === "private" || c.text === "protected"
-          );
-          is_exported = !hasPrivateOrProtected;
-        } else {
-          is_exported = true;
-        }
-      } else if (isTsJs) {
-        if (isMethod && enclosingClassInfo) {
-          // Method theo lớp chứa nó
-          const enclosingDef = fileDefinitions.find(
-            (d) => d.name === enclosingClassInfo!.className && d.kind === "CLASS"
-          );
-          if (enclosingDef) {
-            is_exported = enclosingDef.is_exported;
-          } else {
-            is_exported = fileExportedNames.has(enclosingClassInfo.className);
-          }
-        } else {
-          let hasExportAncestor = false;
-          let p = cand.defNode.parent;
-          while (p) {
-            if (p.type === "export_statement" || p.type === "export_declaration") {
-              hasExportAncestor = true;
-              break;
-            }
-            p = p.parent;
-          }
-          is_exported = hasExportAncestor || fileExportedNames.has(cand.name);
-        }
-      }
-
-      const def: SymbolDefinition = {
-        key,
-        kind: cand.kind,
-        name: cand.name,
-        file_path: file.path,
-        line_start,
-        line_end,
-        is_exported,
-      };
-
-      idx.symbols.set(key, def);
-      fileDefinitions.push(def);
-
-      if (cand.isDirectDefaultExport) {
-        const defaultDef: SymbolDefinition = {
-          ...def,
-          key: `${file.path}#default`,
-          is_exported: true,
-        };
-        idx.symbols.set(defaultDef.key, defaultDef);
-      }
-
-      if (cand.kind === "FUNCTION" || cand.kind === "METHOD") {
-        const params = extractParams(cand.defNode);
-        const locals = extractLocals(cand.defNode);
-        const info: FunctionInfo = {
-          ...def,
-          params,
-          locals,
-          complexity: 0,
-        };
-        idx.functions.set(def.key, info);
-        idx.locals.set(def.key, new Set([...params, ...locals]));
-
-        if (cand.isDirectDefaultExport) {
-          const defaultInfo: FunctionInfo = {
-            ...info,
-            key: `${file.path}#default`,
-            is_exported: true,
-          };
-          idx.functions.set(defaultInfo.key, defaultInfo);
-          idx.locals.set(defaultInfo.key, new Set([...params, ...locals]));
-        }
-      }
-    }
-
-    // Xử lý export default X cấp file (export default X;)
-    if (isTsJs) {
-      for (const topNode of file.tree.rootNode.children) {
-        if (topNode.type === "export_statement") {
-          const hasDefault = topNode.children.some((c) => c.text === "default");
-          if (hasDefault) {
-            const idNode = topNode.children.find((c) => c.type === "identifier");
-            if (idNode) {
-              const targetName = idNode.text;
-              const matchingDef = fileDefinitions.find((d) => d.name === targetName);
-              if (matchingDef) {
-                const defaultDef: SymbolDefinition = {
-                  ...matchingDef,
-                  key: `${file.path}#default`,
-                  is_exported: true,
-                };
-                idx.symbols.set(defaultDef.key, defaultDef);
-
-                if (matchingDef.kind === "FUNCTION" || matchingDef.kind === "METHOD") {
-                  const existingFunc = idx.functions.get(matchingDef.key);
-                  if (existingFunc) {
-                    const defaultFunc: FunctionInfo = {
-                      ...existingFunc,
-                      key: `${file.path}#default`,
-                      is_exported: true,
-                    };
-                    idx.functions.set(defaultFunc.key, defaultFunc);
-                    const existingLocals = idx.locals.get(matchingDef.key);
-                    if (existingLocals) {
-                      idx.locals.set(defaultFunc.key, new Set(existingLocals));
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-
-    // ENG-22: idx.field_types
-    // ENG-23: idx.interface_impls
-    function analyzeClassTypesAndImpls(node: Node): void {
-      if (
-        node.type === "class_declaration" ||
-        node.type === "abstract_class_declaration" ||
-        node.type === "class"
-      ) {
-        const nameNode =
-          node.childForFieldName("name") ??
-          node.children.find((c) => c.type === "type_identifier" || c.type === "identifier");
-        if (nameNode) {
-          const className = nameNode.text;
-
-          // Heritage: implements & extends
-          const heritageNode =
-            node.childForFieldName("heritage") ??
-            node.children.find((c) => c.type === "class_heritage");
-
-          if (heritageNode) {
-            for (const hChild of heritageNode.namedChildren) {
-              if (hChild.type === "implements_clause") {
-                for (const iface of hChild.namedChildren) {
-                  const ifaceName = cleanTypeName(iface.text);
-                  if (ifaceName) {
-                    let list = idx.interface_impls.get(ifaceName);
-                    if (!list) {
-                      list = [];
-                      idx.interface_impls.set(ifaceName, list);
-                    }
-                    list.push(`${file.path}#${className}`);
-                  }
-                }
-              } else if (hChild.type === "extends_clause") {
-                for (const parentClause of hChild.namedChildren) {
-                  const parentName = cleanTypeName(parentClause.text);
-                  if (parentName && abstractClasses.has(parentName)) {
-                    let list = idx.interface_impls.get(parentName);
-                    if (!list) {
-                      list = [];
-                      idx.interface_impls.set(parentName, list);
-                    }
-                    list.push(`${file.path}#${className}`);
-                  }
-                }
-              }
-            }
-          }
-
-          // Fields & constructor param properties
-          const bodyNode =
-            node.childForFieldName("body") ??
-            node.children.find((c) => c.type === "class_body");
-
-          if (bodyNode) {
-            for (const member of bodyNode.namedChildren) {
-              // Constructor params with modifier and type
-              if (member.type === "method_definition") {
-                const methodName =
-                  member.childForFieldName("name") ??
-                  member.children.find((c) => c.type === "property_identifier");
-                if (methodName && methodName.text === "constructor") {
-                  const paramsNode =
-                    member.childForFieldName("parameters") ??
-                    member.children.find((c) => c.type === "formal_parameters");
-                  if (paramsNode) {
-                    for (const param of paramsNode.namedChildren) {
-                      const hasModifier = param.children.some(
-                        (c) =>
-                          c.type === "accessibility_modifier" ||
-                          c.text === "readonly" ||
-                          c.text === "private" ||
-                          c.text === "protected" ||
-                          c.text === "public"
-                      );
-                      const typeNode =
-                        param.childForFieldName("type") ??
-                        param.children.find((c) => c.type === "type_annotation");
-                      const nameNodeInParam =
-                        param.childForFieldName("pattern") ??
-                        param.children.find((c) => c.type === "identifier");
-
-                      if (hasModifier && typeNode && nameNodeInParam) {
-                        const typeName = cleanTypeName(typeNode.text);
-                        idx.field_types.set(
-                          `${file.path}#${className}.${nameNodeInParam.text}`,
-                          typeName
-                        );
-                      }
-                    }
-                  }
-                }
-              }
-
-              // Field with type or new T()
-              if (
-                member.type === "field_definition" ||
-                member.type === "public_field_definition" ||
-                member.type === "property_definition"
-              ) {
-                const fieldNameNode =
-                  member.childForFieldName("name") ??
-                  member.children.find(
-                    (c) => c.type === "property_identifier" || c.type === "identifier"
-                  );
-                const typeNode =
-                  member.childForFieldName("type") ??
-                  member.children.find((c) => c.type === "type_annotation");
-                const valNode =
-                  member.childForFieldName("value") ??
-                  member.children.find((c) => c.type === "new_expression");
-
-                if (fieldNameNode) {
-                  if (typeNode) {
-                    const typeName = cleanTypeName(typeNode.text);
-                    idx.field_types.set(
-                      `${file.path}#${className}.${fieldNameNode.text}`,
-                      typeName
-                    );
-                  } else if (valNode && valNode.type === "new_expression") {
-                    const ctor =
-                      valNode.childForFieldName("constructor") ??
-                      valNode.namedChild(0);
-                    if (ctor) {
-                      const typeName = cleanTypeName(ctor.text);
-                      idx.field_types.set(
-                        `${file.path}#${className}.${fieldNameNode.text}`,
-                        typeName
-                      );
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-
-      // File-level or module variable x = new T()
-      if (
-        node.type === "lexical_declaration" ||
-        node.type === "variable_declaration"
-      ) {
-        for (const declarator of node.namedChildren) {
-          if (declarator.type === "variable_declarator") {
-            const nameNode =
-              declarator.childForFieldName("name") ?? declarator.namedChild(0);
-            const valNode =
-              declarator.childForFieldName("value") ?? declarator.namedChild(1);
-
-            if (nameNode && nameNode.type === "identifier" && valNode && valNode.type === "new_expression") {
-              const ctor =
-                valNode.childForFieldName("constructor") ?? valNode.namedChild(0);
-              if (ctor) {
-                const typeName = cleanTypeName(ctor.text);
-                idx.field_types.set(`${file.path}#${nameNode.text}`, typeName);
-              }
-            }
-          }
-        }
-      }
-
-      for (let i = 0; i < node.childCount; i++) {
-        const child = node.child(i);
-        if (child) {
-          analyzeClassTypesAndImpls(child);
-        }
-      }
-    }
-
-    analyzeClassTypesAndImpls(file.tree.rootNode);
   }
 
   return idx;
@@ -810,7 +1002,11 @@ export function resolveImports(
       file.language === "TSX" ||
       file.language === "JAVASCRIPT"
     ) {
-      collectTsJsImports(file, allFiles, manifests, rootDirOffset, idx);
+      try {
+        collectTsJsImports(file, allFiles, manifests, rootDirOffset, idx);
+      } catch {
+        continue;
+      }
     }
   }
 
