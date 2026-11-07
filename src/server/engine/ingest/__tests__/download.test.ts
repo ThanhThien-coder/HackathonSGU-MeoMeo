@@ -136,11 +136,9 @@ describe("download.ts - downloadArchive & receiveUpload", () => {
       vi.stubGlobal("fetch", mockFetch);
 
       const promise = downloadArchive("https://github.com/owner/repo/archive/HEAD.zip");
+      const assertion = expect(promise).rejects.toMatchObject({ code: "ERR_STREAM_CORRUPTED" });
       await vi.advanceTimersByTimeAsync(CONFIG.STREAM_RETRY_DELAY_MS + 20);
-
-      await expect(promise).rejects.toMatchObject({
-        code: "ERR_STREAM_CORRUPTED",
-      });
+      await assertion;
       expect(mockFetch).toHaveBeenCalledTimes(2);
     });
 
