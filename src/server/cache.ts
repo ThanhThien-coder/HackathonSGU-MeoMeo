@@ -105,3 +105,8 @@ export function makeAnalysisCacheKey(
 ): string {
   return `na|${snapshot.source}|${snapshot.snapshot_id}|${snapshot.subdir}|${engineVersion}|${nodeId}|${CONFIG.PROMPT_VERSION}|${CONFIG.LLM_MODEL}`;
 }
+
+/** Tổng quan repo (AI): 1 bản / snapshot + engine + prompt + model, dùng chung mọi phiên. */
+export function makeOverviewCacheKey(snapshot: RepoSnapshotKey, engineVersion: string): string {
+  return `ov|${snapshot.source}|${snapshot.snapshot_id}|${snapshot.subdir}|${engineVersion}|${CONFIG.PROMPT_VERSION}|${CONFIG.LLM_MODEL_BY_KIND.OVERVIEW}`;
+}

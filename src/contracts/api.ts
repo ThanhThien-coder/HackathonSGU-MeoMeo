@@ -5,6 +5,7 @@ import type {
   FollowUpType,
   NodeAnalysisView,
   QuestionFocus,
+  RepoOverviewView,
   RunMode,
 } from "./ai";
 import type {
@@ -51,6 +52,12 @@ export interface AnalyzeNodeResponse {
   node_state: NodeStateView;
   unlocked_node_ids: string[];           // Node con mở nhờ analysis_failed (D-03)
   tokens_used: number;
+}
+
+// POST /api/analyze-overview — chạy nền sau ingest; 1 lời gọi AI / repo, có cache
+export interface AnalyzeOverviewRequest { session_id: string }
+export interface AnalyzeOverviewResponse {
+  overview: RepoOverviewView;            // overview.ai = null ⇒ AI tắt/lỗi, UI giữ câu dự phòng
 }
 
 // POST /api/explain-selection — server cắt lại vùng chọn từ snapshot phiên (03 Mục 6.9)

@@ -79,8 +79,15 @@ export interface RepoOverviewView {
     root_node_ids: string[];
     main_path_node_ids: string[];
   };
-  // Bản thi cắt phần AI tổng quan (B06) ⇒ luôn null, chỉ hiện phần facts (D-83)
-  ai: null;
+  // Phần AI (nhịp 2): null khi AI tắt/lỗi ⇒ UI dùng câu dự phòng + tên tất định
+  ai: RepoOverviewAI | null;
+}
+
+// Do AI viết, đã qua kiểm ở server; id lạ bị bỏ, tên rỗng/quá dài bị bỏ
+export interface RepoOverviewAI {
+  summary: string;                      // 2–4 câu: repo làm gì, học theo thứ tự nào
+  node_titles: Record<string, string>;  // node_id ⇒ tên bài tiếng Việt (≤ CONFIG.TITLE_MAX_CHARS)
+  group_names: Record<string, string>;  // group_id ⇒ tên nhóm tiếng Việt
 }
 
 // ---------- 5.3 enrich-node (đặt câu hỏi) ----------
