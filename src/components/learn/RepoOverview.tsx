@@ -4,7 +4,7 @@ import { useMemo } from "react";
 import { Button } from "@/components/ui/common";
 import {
   buildOverviewFacts,
-  overviewFallback,
+  overviewLead,
   overviewGroups,
   overviewNodeTitle,
   startNodeId,
@@ -20,7 +20,7 @@ export interface OverviewContentProps {
 
 /**
  * Nhịp 1 của Tổng quan (docs/spec/30_UI.md Mục 6.3), dùng chung cho cột giữa và cửa sổ.
- * Chỉ đọc store: không gọi API nào, không gọi `analyze-overview` (bản thi cắt nhịp 2, B06).
+ * Chỉ đọc store: `analyze-overview` do store gọi nền sau ingest; chưa xong ⇒ hiện câu dự phòng.
  */
 export function OverviewContent({ titleId, onStarted }: OverviewContentProps) {
   const result = useWorkbenchStore((s) => s.result);
@@ -33,7 +33,7 @@ export function OverviewContent({ titleId, onStarted }: OverviewContentProps) {
     const facts = buildOverviewFacts(result);
     const startId = startNodeId(result, progress);
     return {
-      lead: overviewFallback(result, facts),
+      lead: overviewLead(result, overview, facts),
       groups: overviewGroups(result, overview),
       startId,
       startTitle: startId ? overviewNodeTitle(result, overview, startId) : null,
@@ -50,6 +50,11 @@ export function OverviewContent({ titleId, onStarted }: OverviewContentProps) {
         </h2>
       ) : null}
       <p className="mb-4 text-text">{view.lead}</p>
+      {overview === "PENDING" ? (
+        <p className="-mt-2 mb-4 text-[13px] text-muted" role="status">
+          AI đang đọc cả repo để viết tổng quan và đặt tên bài…
+        </p>
+      ) : null}
       <div className="mb-[18px] grid grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-2.5">
         {view.groups.map((g) => (
           <div key={g.group_id} className="rounded-[10px] border border-line bg-panel-2 px-3 py-2.5">

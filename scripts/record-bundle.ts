@@ -33,6 +33,8 @@ import * as path from "node:path";
 import { CONFIG } from "../src/contracts/config";
 import type {
   AnalyzeNodeRequest,
+  AnalyzeOverviewRequest,
+  AnalyzeOverviewResponse,
   AnalyzeNodeResponse,
   ClientStaticEngineResult,
   EnrichNodeRequest,
@@ -692,7 +694,21 @@ async function main(): Promise<void> {
     }
   }
 
-  const overview = buildMinimalOverview(ingest.result);
+  // AI tổng quan (tên bài, tên nhóm, tóm tắt tiếng Việt); lỗi ⇒ bản tối thiểu, ai = null
+  let overview = buildMinimalOverview(ingest.result);
+  try {
+    const ov = await call<AnalyzeOverviewResponse>(options.baseUrl, token, "/api/analyze-overview", {
+      session_id: sessionId,
+    } satisfies AnalyzeOverviewRequest);
+    if (ov.overview.ai !== null) {
+      overview = ov.overview;
+      console.log("AI tổng quan: có.");
+    } else {
+      console.warn("AI tổng quan trả về null ⇒ dùng bản tối thiểu.");
+    }
+  } catch (err) {
+    console.warn("Lỗi khi gọi /api/analyze-overview:", err instanceof Error ? err.message : String(err));
+  }
 
   const recordedFrom = {
     repo: options.repoUrl,

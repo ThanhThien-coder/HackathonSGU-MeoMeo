@@ -3,7 +3,7 @@ import { displayTitle } from "@/lib/derive";
 import { lessonGroups, mainPathOf, nodeStatesOf } from "@/lib/lesson-map";
 
 // Tổng quan nhịp 1 (docs/spec/30_UI.md Mục 6.3, D-71, D-83): mọi thứ dựng từ `result` ở client, 0 API, 0 token.
-// Bản thi cắt nhịp 2 AI (B06): `overview.ai` luôn null nên ở đây không đọc tới.
+// Nhịp 2 (AI tổng quan) chạy nền sau ingest: có `overview.ai` ⇒ dùng đoạn tóm tắt AI, chưa có ⇒ câu dự phòng.
 
 /** Phần của `result` mà Tổng quan cần; `ClientStaticEngineResult` đầy đủ truyền vào đều được. */
 export type OverviewResult = Pick<
@@ -63,6 +63,12 @@ export function overviewGroups(result: OverviewResult, overview: OverviewSlot): 
 export function overviewFallback(result: OverviewResult, facts: OverviewFacts = buildOverviewFacts(result)): string {
   const framework = facts.framework ? ` dùng ${facts.framework}` : "";
   return `${result.repo_name}${framework} có ${result.nodes.length} bài, chia thành ${result.groups.length} nhóm.`;
+}
+
+/** Đoạn mở đầu của Tổng quan: tóm tắt AI nếu đã có, không thì câu dự phòng. */
+export function overviewLead(result: OverviewResult, overview: OverviewSlot, facts?: OverviewFacts): string {
+  const summary = overview && overview !== "PENDING" ? overview.ai?.summary : undefined;
+  return summary ? summary : overviewFallback(result, facts);
 }
 
 /**

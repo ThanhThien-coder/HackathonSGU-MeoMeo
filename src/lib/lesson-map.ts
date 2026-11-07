@@ -90,11 +90,13 @@ export function lessonGroups(
   result: Pick<ClientStaticEngineResult, "groups" | "nodes" | "edges">,
   overview: RepoOverviewView | "PENDING" | null,
 ): LessonGroupView[] {
-  const fromFacts = overview && overview !== "PENDING" ? overview.facts.main_path_node_ids[0] : undefined;
+  const ov = overview && overview !== "PENDING" ? overview : null;
+  const fromFacts = ov?.facts.main_path_node_ids[0];
   const firstId = fromFacts ?? mainPathOf(result.nodes, result.edges)[0];
   return result.groups.map((g) => ({
     group_id: g.group_id,
-    name: g.key,
+    // Tên nhóm AI đặt; chưa có ⇒ nhãn tất định của engine
+    name: ov?.ai?.group_names[g.group_id] ?? g.key,
     key_kind: g.key_kind,
     node_ids: g.node_ids,
     recommended: firstId !== undefined && g.node_ids.includes(firstId),
