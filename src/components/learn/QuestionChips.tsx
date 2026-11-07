@@ -58,7 +58,11 @@ export function QuestionChips({ questions, activeIndex, onSelect }: QuestionChip
               onClick={() => onSelect(q.question_index)}
               style={{ fontFamily: "var(--font-jakarta), 'Plus Jakarta Sans', system-ui, sans-serif" }}
               className={`qchip min-w-[40px] h-[36px] rounded-full px-3.5 inline-flex items-center justify-center text-[15px] font-bold transition-all border-none ${toneClass} ${
-                locked ? "opacity-40 cursor-not-allowed" : "hover:-translate-y-0.5 hover:bg-[var(--panel3)]"
+                locked
+                  ? "opacity-40 cursor-not-allowed"
+                  : current || q.finished
+                    ? "hover:-translate-y-0.5 hover:brightness-110"
+                    : "hover:-translate-y-0.5 hover:bg-[var(--panel3)]"
               }`}
             >
               {k}
