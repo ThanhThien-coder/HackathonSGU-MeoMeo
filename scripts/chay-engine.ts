@@ -5,6 +5,10 @@ import { parseAll } from "../src/server/engine/graph/parser";
 import { LANGUAGE_REGISTRY } from "../src/server/engine/graph/registry";
 import { collectSymbols, resolveImports } from "../src/server/engine/graph/symbols";
 import { buildCallGraph, findEntries } from "../src/server/engine/graph/callgraph";
+import { fillComplexity } from "../src/server/engine/graph/complexity";
+import { assembleGraph } from "../src/server/engine/graph/nodes";
+import { buildSlice, findSharedHelpers } from "../src/server/engine/graph/slicing";
+import type { Candidate, EngineContext } from "../src/server/engine/graph/types";
 
 const IGNORED_DIRS = new Set([
   "node_modules",
@@ -166,6 +170,74 @@ async function main(): Promise<void> {
   console.log("10 route đầu:");
   for (const b of graph.bindings.slice(0, 10)) {
     console.log(`${b.method ?? "ANY"} ${b.path ?? ""} -> ${b.handler}`);
+  }
+
+  const ctx: EngineContext = {
+    input: {
+      repo_name: path.basename(resolvedBaseDir),
+      snapshot: { source: "ZIP", repo_key: "local", snapshot_id: "0", snapshot_id_kind: "ARCHIVE_HASH", subdir: "", ref_label: null, },
+      fingerprint: {
+        archetype: "WEB_BACKEND",
+        primary_language: "TYPESCRIPT",
+        language_breakdown: [],
+        graph_confidence: "HIGH",
+        detected_framework: null,
+        tech_stack: [],
+        is_monorepo: false,
+        root_dir_offset: "",
+      },
+      report,
+      code,
+      file_language: langs,
+      manifests,
+      source_map: new Map(),
+      module_info: {
+        go_module_path: null,
+        dart_package_name: null,
+        package_entry_files: [],
+      },
+      readme_excerpt: null,
+      manifest_description: null,
+    },
+    files: parsedFiles,
+    index: idx,
+    call_edges: graph.edges,
+    call_sites: graph.call_sites,
+    external_calls: graph.external_calls,
+    bindings: graph.bindings,
+    file_rank: new Map(),
+  };
+
+  fillComplexity(parsedFiles, idx.functions);
+  const helpers = findSharedHelpers(entries, ctx);
+
+  const candidates: Candidate[] = [];
+  for (const entry of entries) {
+    try {
+      const candidate = buildSlice(entry, ctx, helpers);
+      if (candidate.trace_steps.length > 0) {
+        candidates.push(candidate);
+      }
+    } catch {
+      // bỏ entry lỗi
+    }
+  }
+
+  const { nodes, edges } = assembleGraph(candidates, ctx, report);
+
+  console.log(`Số bài: ${nodes.length}`);
+  console.log(`Số cạnh: ${edges.length}`);
+  console.log("5 bài đầu:");
+  for (const node of nodes.slice(0, 5)) {
+    const stepCount = node.trace_steps.length;
+    const totalLines = node.trace_steps.reduce(
+      (sum, s) => sum + s.snippet.split("\n").length,
+      0
+    );
+    const layers = Array.from(new Set(node.trace_steps.map((s) => s.layer))).join(", ");
+    console.log(
+      `- ${node.title}: ${stepCount} bước, ${totalLines} dòng, layer: [${layers}]`
+    );
   }
 }
 
