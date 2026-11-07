@@ -4,6 +4,7 @@ import type { IngestionReport, LanguageAdapter, LanguageId } from "@/contracts";
 import { parseAll } from "../src/server/engine/graph/parser";
 import { LANGUAGE_REGISTRY } from "../src/server/engine/graph/registry";
 import { collectSymbols, resolveImports } from "../src/server/engine/graph/symbols";
+import { buildCallGraph, findEntries } from "../src/server/engine/graph/callgraph";
 
 const IGNORED_DIRS = new Set([
   "node_modules",
@@ -146,7 +147,26 @@ async function main(): Promise<void> {
   console.log(`Số hàm: ${idx.functions.size}`);
   console.log(`Import nội bộ nối được: ${a}/${b} (${percentage}%)`);
 
-  console.log("buildGraph: chưa có (MI-06)");
+  const graph = buildCallGraph(parsedFiles, idx);
+  const entries = findEntries(parsedFiles, idx, graph, "");
+
+  const resolvedEdges = graph.edges.filter((e) => e.confidence === "RESOLVED");
+  console.log(`Số cạnh hàm: ${graph.edges.length}`);
+  console.log(`Số cạnh RESOLVED: ${resolvedEdges.length}`);
+
+  const sourceCounts = new Map<string, number>();
+  for (const entry of entries) {
+    sourceCounts.set(entry.source, (sourceCounts.get(entry.source) ?? 0) + 1);
+  }
+  const sourceStr = Array.from(sourceCounts.entries())
+    .map(([src, count]) => `${src}: ${count}`)
+    .join(", ");
+  console.log(`Số entry theo source: ${sourceStr || "0"}`);
+
+  console.log("10 route đầu:");
+  for (const b of graph.bindings.slice(0, 10)) {
+    console.log(`${b.method ?? "ANY"} ${b.path ?? ""} -> ${b.handler}`);
+  }
 }
 
 main().catch((err) => {

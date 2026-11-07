@@ -107,6 +107,21 @@ export function findTsConfig(
   return null;
 }
 
+// ENG-25: không có tsconfig thì lấy thư mục có package.json gần nhất làm gốc cho `@/`.
+function findPackageRoot(
+  sourceFilePath: string,
+  manifests: Map<string, string>
+): TsConfigPaths | null {
+  let currentDir: string | null = getDir(sourceFilePath);
+  while (currentDir !== null) {
+    if (manifests.has(currentDir ? `${currentDir}/package.json` : "package.json")) {
+      return { config_dir: currentDir, base_url: null, paths: {} };
+    }
+    currentDir = getParentDir(currentDir);
+  }
+  return null;
+}
+
 function probeFile(basePath: string, allFiles: Set<string>): string | null {
   if (allFiles.has(basePath)) {
     return basePath;
@@ -381,7 +396,7 @@ export function collectTsJsImports(
   rootDirOffset: string,
   idx: SymbolIndex
 ): void {
-  const tsConfig = findTsConfig(file.path, manifests);
+  const tsConfig = findTsConfig(file.path, manifests) ?? findPackageRoot(file.path, manifests);
 
   let fileImports = idx.imports.get(file.path);
   if (!fileImports) {
