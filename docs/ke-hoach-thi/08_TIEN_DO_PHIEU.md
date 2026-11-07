@@ -1,7 +1,7 @@
 # 08 — Tiến độ từng phiếu
 
 > Bảng theo dõi trạng thái của **75 phiếu** (Thiện 21, Minh 13, Nhân 16, Phát 17, Quý 8; 7 phiếu tăng tốc NH-14, 15, 16, TH-20, 21, PH-16, 17 thêm ở #63, xem `09_PHIEU_TANG_TOC.md`). Mỗi người cập nhật dòng phiếu của mình ngay sau khi merge, rồi nhắn nhóm "đã merge <mã phiếu>" như `00_CAM_TAY_CHI_VIEC.md` Mục 3.
-> **Cập nhật lần cuối:** 07/11/2026, 18:50 (đối chiếu với `origin/main` tới PR #67 và danh sách PR trên GitHub, gồm PR đang mở #65, #66).
+> **Cập nhật lần cuối:** 07/11/2026, 19:35 (đối chiếu với `origin/main` tới PR #72 và danh sách PR trên GitHub, gồm PR đang mở #65, #69, #73).
 > Danh sách phiếu, giờ và cách làm gốc nằm ở `02_PHIEU_<TEN>.md`. File này chỉ ghi trạng thái, không đổi nội dung phiếu.
 
 ## Cách đọc
@@ -20,19 +20,20 @@
 
 | Người | Xong ✅ | Một phần ◐ | Đang làm 🔄 | Chưa làm ⬜ | Tổng | Phiếu tiếp theo |
 | :-: | :-: | :-: | :-: | :-: | :-: | :-- |
-| Thiện | 10 | 2 | 1 | 8 | 21 | Merge #66 (TH-09, Minh làm giúp); TH-10 (ghép engine thật, lát dọc 1); TH-19 (pipeline); nốt deploy Cloud Run của TH-04; TH-15 |
-| Minh | 7 | 2 | 0 | 4 | 13 | `src/server/engine/index.ts` của MI-06 (sau khi #66 merge); nốt MI-09 |
-| Nhân | 9 | 2 | 2 | 3 | 16 | Merge #65 (NH-14, NH-15; cần đo lại bài chấm N3); NH-08 phần ghép lát dọc 2; duyệt tay output AI (NH-11) |
-| Phát | 13 | 0 | 0 | 4 | 17 | **PH-16** (tính trước phân tích và câu hỏi), rồi PH-17; PH-14 chờ TH-17 và NH-12, PH-15 lúc 08:00 |
+| Thiện | 11 | 2 | 1 | 7 | 21 | **TH-10** (ghép engine thật, lát dọc 1, chưa có nhánh); TH-19 (pipeline, chưa có `Dockerfile`); nốt deploy Cloud Run của TH-04; merge #73 (TH-15) |
+| Minh | 8 | 1 | 0 | 4 | 13 | Nốt MI-09 (kiểm trên Cloud Run, chốt repo demo); cùng xem lát dọc 1 với Thiện |
+| Nhân | 9 | 1 | 3 | 3 | 16 | Merge #65 (NH-14, NH-15; cần đo lại bài chấm N3) và #69 (NH-08); duyệt tay output AI (NH-11) |
+| Phát | 15 | 0 | 0 | 2 | 17 | Hết phiếu của mình. PH-14 chờ TH-17 và NH-12, PH-15 lúc 08:00. Có thể đỡ TH-10 (phần code) và TH-19 |
 | Quý | 4 | 0 | 0 | 4 | 8 | QU-04 (làm tay, áp phích) |
-| **Cả đội** | **43** | **6** | **3** | **23** | **75** | |
+| **Cả đội** | **47** | **4** | **4** | **20** | **75** | |
 
-Ghi chú: các con số trên đếm theo PR đã merge trên `main` (tới PR #67). PR đang mở: #65 (NH-14, NH-15), #66 (TH-09). TH-11 và TH-13 do Phát làm hộ Thiện, TH-09 do Minh làm giúp. Phiếu làm tay (không có PR) tính là ⬜ hoặc ❓ cho tới khi người phụ trách xác nhận.
+Ghi chú: các con số trên đếm theo PR đã merge trên `main` (tới PR #72). PR đang mở: #65 (NH-14, NH-15), #69 (NH-08), #73 (TH-15). TH-11 và TH-13 do Phát làm hộ Thiện, TH-09 do Minh làm giúp. Phiếu làm tay (không có PR) tính là ⬜ hoặc ❓ cho tới khi người phụ trách xác nhận.
 
 **Điểm nghẽn hiện tại:**
-- **Đường găng tới cổng G4 (lát dọc 1):** chờ merge TH-09 (#66), rồi Minh gắn `src/server/engine/index.ts` (MI-06), rồi Thiện ghép engine thật và xóa `stub.ts` (TH-10). `/api/ingest` vẫn chạy bằng engine giả cho tới lúc đó. Mọi route AI và API phiên (`analyze-node`, `enrich-node`, `evaluate-feynman`, `reveal`, `explain-selection`, `sessions`, `sessions/[id]/progress`) đã có trên `main`.
-- **Chưa kiểm với dịch vụ thật:** TH-07, TH-11, TH-12 chỉ kiểm bằng test mock hoặc Postgres tạm; chưa phiếu nào chấm bài hay giải thích bằng Gemini thật (chỉ NH-05, NH-14 có số đo gọi model). Cần một lượt chạy thử đầu-cuối trên Cloud Run sau TH-10.
-- **Quyết định chờ cả nhóm (NH-15):** thời gian xấu nhất tính theo code là ≈ 20,5 s (chấm, giải thích) và ≈ 32,5 s (phân tích, câu hỏi), chưa khớp "~25 giây" của kế hoạch. NH-14 đổi model chấm bài nên không merge #65 trước khi Nhân chạy lại bài đo chấm trên N3.
+- **TH-10 chưa bắt đầu và đang chặn cổng G4 (lát dọc 1, 20:00)**, hạn 19:15 → 20:00 đã tới. Mọi phần phụ thuộc đã có trên `main` (TH-07, TH-09, MI-06, NH-05, PH-04, PH-07). Còn lại: đổi import trong `src/app/api/ingest/route.ts` từ `@/server/engine/stub` sang `@/server/engine`, sửa `ingest-route.test.ts` (đang dùng `stubModule`), xóa `stub.ts`, thêm `src/instrumentation.ts` (chưa có), rồi chạy lát dọc 1 trên máy. PR #70 của Minh đã ghi 3 việc này.
+- **Hạ tầng triển khai chưa có gì trong repo:** không có `Dockerfile`, `.dockerignore`, `.github/workflows/deploy.yml` (TH-19); `next.config.ts` chưa có `output: "standalone"`; TH-04 mới có `/api/health`, chưa thấy deploy Cloud Run. Cổng GP (pipeline 20:00) và G2, G3 (Vertex AI từ Cloud Run) vẫn mở. `runEngine` thật đọc `public/grammars` và `queries`, cần thử trên Cloud Run.
+- **Chưa kiểm với dịch vụ thật:** TH-07, 11, 12, 15 chỉ kiểm bằng test mock hoặc Postgres tạm; PH-16, PH-17 chưa chạy với API thật nên chưa có số đo thời gian chờ. Cần một lượt chạy đầu-cuối sau TH-10.
+- **Quyết định chờ cả nhóm (NH-15, PR #65):** thời gian xấu nhất tính theo code ≈ 20,5 s (chấm, giải thích) và ≈ 32,5 s (phân tích, câu hỏi), chưa khớp "~25 giây" của kế hoạch. NH-14 đổi model chấm bài nên không merge #65 trước khi Nhân chạy lại bài đo chấm trên N3. Số đo gọi Gemini lần gần nhất dao động (phân tích 5,7–15,3 s), chưa kết luận được.
 - `public/demo/mock_bundle.json` chưa có (NH-12, ghi trên bản đóng băng) nên chưa thử tay được X-06 của PH-12. `?fixture=1` chạy được kịch bản A (#58) bằng bundle riêng, không thay cho bundle thật.
 - TH-12 ghi `ai_usage` không chờ: trên Cloud Run bản ghi chạy sau khi trả kết quả có thể chậm hoặc mất (bảng thống kê tối giản B17).
 - Chưa chốt repo demo cuối (cổng G5): Minh đề xuất bài trên repo Spring (xem PR #57); NH-11 mới có công cụ duyệt, chưa duyệt tay. Không đổi tên bài hoặc route nữa vì `node_id` của bài `GET /user` đã đổi.
@@ -50,13 +51,13 @@ Ghi chú: các con số trên đếm theo PR đã merge trên `main` (tới PR #
 | TH-06 | Đăng nhập GitHub và `/api/me` gọi 1 lần | 15:30 → 16:15 | ✅ | #20 | Làm sớm hơn kế hoạch. Phát có thể bật nút đăng nhập thật ở PH-04 |
 | TH-07 | `/api/ingest`, phiên học, snapshot và cache RAM (engine giả) | 16:15 → 17:00 | ✅ | #38 | Làm sớm. Mở khóa route của Nhân. Engine giả `stub.ts` xóa ở TH-10. Kiểm trên Postgres tạm (PGlite), **chưa thử Supabase thật**; chưa thử 2 request song song cùng repo; `loadSessionProgress` là bản tạm |
 | TH-08 | Tầng 0 phần A: link, kiểm repo, tải zip | 17:00 → 18:00 | ✅ | #59 | Làm sớm. `url.ts`, `probe.ts`, `download.ts` và test; đã gọi GitHub thật trên repo Spring (tải 510 KB, ghim SHA). Thêm `probeErrorCode`, `EntryClass.NO_GRAMMAR` ngoài phiếu |
-| TH-09 | Tầng 0 phần B: giải nén, lọc, che secret, chọn file, vân tay tối giản | 18:00 → 19:15 | 🔄 | #66 (mở) | Minh làm giúp Thiện (nhánh `minh/th-09`). Đủ 7 file `snapshot`, `unzip`, `prune`, `priority`, `secrets`, `fingerprint`, `index`; 877 test xanh; đã chạy thật `runIngest` ⇒ `buildGraph` trên 3 repo (19, 19, 19 bài, 0 `parse_error`). **Thiếu** test T-ING-26 (che khối private key) vì bộ quét secret chặn commit; `archetype` vẫn được tính (khác phiếu). Chờ merge, mở đường cho `engine/index.ts` của MI-06 và TH-10 |
+| TH-09 | Tầng 0 phần B: giải nén, lọc, che secret, chọn file, vân tay tối giản | 18:00 → 19:15 | ✅ | #66 | Minh làm giúp Thiện (nhánh `minh/th-09`). Đủ 7 file Tầng 0 phần B; 877 test xanh; đã chạy thật `runIngest` ⇒ `buildGraph` trên 3 repo (19 bài mỗi repo, 0 `parse_error`). **Thiếu** test T-ING-26 (che khối private key) vì bộ quét secret chặn commit; `archetype` vẫn được tính (khác phiếu) |
 | TH-10 | Ghép engine thật, lát dọc 1, deploy và kiểm Vertex AI | 19:15 → 20:00 | ⬜ | — | Cổng G3, G4 |
 | TH-11 | Danh sách phiên, mở lại phiên, API tiến độ | 20:00 → 21:00 | ✅ | #61 | Phát commit hộ. `GET /api/sessions` (1 truy vấn, không đọc `session_snapshots`) và `GET /api/sessions/[id]/progress`; 771 test xanh. Chưa thử trên Supabase thật, chưa ghi thời gian đáp ứng vào sổ đo |
 | TH-12 | `progress.ts`: ghi BKT trong transaction, kết thúc run, mở khóa | 21:00 → 22:00 | ✅ | #64 | Làm sớm. `progress.ts` gom ghi tiến độ; chuyển khối tạm của NH-06, NH-07 sang đây (thống nhất với Nhân); thêm `ERR_AI_REJECTED` vào mã thử lại; `last_run` trong `node_state` đã có dữ liệu. Kịch bản A: `DB_OPTIMIZATION` 0.25 ⇒ 0.4202 đúng spec. Ghi `ai_usage` không chờ (trên Cloud Run có thể chậm hoặc mất). Chưa chạy với Postgres thật |
 | TH-13 | Trang chủ: "Tiếp tục học" và mở lại phiên | 22:00 → 23:00 | ✅ | #67 | Phát làm hộ. `SessionList.tsx` + gắn vào `page.tsx` khi đã đăng nhập; lỗi tải có "Thử lại"; "Học tiếp" gọi `ingest` của store. Chưa thử tay đủ vòng (đăng nhập, quét, học, tải lại) trên bản thật; không có test cho component |
 | TH-14 | Deploy lát dọc 2 và đo lần 1 trên Cloud Run | 23:00 → 23:45 | ⬜ | — | Làm tay |
-| TH-15 | API persona và API lịch sử (cho mảng độc lập) | 23:45 → 00:15 | ⬜ | — | |
+| TH-15 | API persona và API lịch sử (cho mảng độc lập) | 23:45 → 00:15 | 🔄 | #73 (mở) | Thiện đang làm: `POST /api/demo/persona` (cần `DEMO_MODE=true`, production đặt `false` nên chỉ dùng ở máy hoặc staging) và `GET /api/sessions/{id}/history`; 921 test xanh, chưa chạy Postgres thật. Persona không hợp lệ cũng trả `ERR_DEMO_MODE_DISABLED` |
 | TH-16 | Diễn tập đường lùi và giao agent trước khi ngủ | 00:15 → 00:30 | ⬜ | — | Làm tay |
 | TH-17 | Đóng băng tính năng, Definition of Done, deploy production | 03:30 → 05:00 | ⬜ | — | Làm tay |
 | TH-18 | Trực sửa lỗi chặn demo, nộp slide, commit cuối | 05:00 → 09:15 | ⬜ | — | |
@@ -72,7 +73,7 @@ Ghi chú: các con số trên đếm theo PR đã merge trên `main` (tới PR #
 | MI-03 | Danh bạ tên và resolver TS/JS | 14:00 → 15:30 | ✅ | #19 | |
 | MI-04 | Đồ thị gọi hàm và điểm entry | 15:30 → 17:00 | ✅ | #33 | Làm sớm. Còn sót ENG-23 phần NestJS `provide/useClass`; Java thuộc MI-08 |
 | MI-05 | Lát cắt, node và tên bài | 17:00 → 18:30 | ✅ | #42 | Làm sớm. Thêm `complexity.ts`, `slice-lines.ts`; sửa lỗi `<module>` trùng khoảng dòng của MI-04 |
-| MI-06 | Khử chu trình, xếp hạng, giữ tối đa 20 bài, nhóm và cạnh, điểm nhập engine | 18:30 → 19:30 | ◐ | #48 | Xong `buildGraph` (khử chu trình, xếp hạng, nhóm, vị trí theo tầng tô-pô). **Chưa có** `src/server/engine/index.ts` vì cần `runIngest` của TH-09. TH-10 cần kiểm `/api/ingest` nhận `ERR_NO_ARCHITECTURAL_SLICE` |
+| MI-06 | Khử chu trình, xếp hạng, giữ tối đa 20 bài, nhóm và cạnh, điểm nhập engine | 18:30 → 19:30 | ✅ | #48, #70 | `buildGraph` (#48) và `src/server/engine/index.ts` với `runEngine` nối Tầng 0 và `buildGraph` (#70, chữ ký trùng `stub.ts`). Đo trên máy: Spring `ingest_ms` 2890 + `engine_ms` 567; Express 1318 + 308 (chưa đo Cloud Run). **Chưa đổi import** trong `/api/ingest` và chưa xóa `stub.ts` (thuộc TH-10) |
 | MI-07 | Chạy repo TS dự phòng, sửa bài lỗi, test tất định | 19:30 → 20:30 | ✅ | #57 | Làm sớm, gộp với phần chạy máy của MI-09. Sửa bài 1 bước, bước rỗng, tầng sai, tên `GET /user`. **Đổi `node_id` của bài `GET /user`**. Còn chờ Nhân đọc 3 bài (tiêu chí MI-07) |
 | MI-08 | Java và Spring Boot cho repo demo Q-03 | 20:30 → 23:00 | ✅ | #52 | Làm sớm. Thử trên `spring-boot-realworld-example-app`: 116 file, 19 bài, 15 cạnh. MyBatis `@Mapper` tính là `DATA_SINK` (spec không nhắc) |
 | MI-09 | Sửa theo repo demo đã chốt và các dòng engine của DoD | 23:00 → 00:30 | ◐ | #57 | Xong phần chạy máy: DoD engine trên 3 repo (Spring 19 bài, Express 19, NestJS 20) đạt các dòng 1, 2, 3, 17. **Chưa làm:** đồng hồ `ingest_ms + engine_ms` (cần `/api/ingest` thật, TH-10), kiểm trên Cloud Run, sửa theo repo demo đã chốt |
@@ -92,7 +93,7 @@ Ghi chú: các con số trên đếm theo PR đã merge trên `main` (tới PR #
 | NH-05 | `analyze-node`: X-Ray có điểm dở thật | 16:45 → 18:30 | ✅ | #28, #46 | Lõi phân tích (#28), sửa gọi Vertex express, chuyển model 3.8-flash → flash-lite; route `analyze-node` (#46, đọc cache trước, gộp request cùng node). Cloud Run cần `GEMINI_BACKEND=vertex` + secret `GEMINI_API_KEY` |
 | NH-06 | `enrich-node`: câu hỏi dễ hiểu cho người mới | 18:30 → 20:30 | ✅ | #31, #46 | Lõi (#31) và route `enrich-node` (#46). `createRun` đã chuyển sang `progress.ts` ở #64; `ERR_AI_REJECTED` đã nằm trong mã thử lại |
 | NH-07 | `evaluate-feynman` và `reveal`: chấm bài không khóa gắt | 20:30 → 22:30 | ✅ | #34, #53 | Lõi chấm bài và luật Đạt nới (#34); `evaluate.ts`, `reveal.ts` và 2 route (#53); khối ghi DB tạm đã chuyển sang `progress.ts` ở #64. Chưa có `redactSecrets` (chỉ che PII). Chưa gọi Gemini thật |
-| NH-08 | Ghép lát dọc 2 và chạy bài thử "giám khảo" | 22:30 → 23:30 | ◐ | #39 | Đã merge phần chỉnh prompt làm sớm: gợi ý `CODE_POINTER` thành câu hỏi mồi, `PROMPT_VERSION` 1.2.0 → 1.3.0. **Chưa làm** ghép lát dọc 2 và thử như giám khảo. Nên có PH-16 trước để đo tốc độ thật |
+| NH-08 | Ghép lát dọc 2 và chạy bài thử "giám khảo" | 22:30 → 23:30 | 🔄 | #39, #69 (mở) | #39 đã merge (câu hỏi mồi, `PROMPT_VERSION` 1.3.0). #69 đang mở: rút gọn đề câu hỏi NOVICE theo duyệt tay (tối đa 25 từ, không hỏi "vì sao", không cần kiến thức ngoài code), `PROMPT_VERSION` 1.5.0. Đã chạy Gemini thật 5 bài shop-api: 13/14 câu dùng được, 7/7 bài thử "giám khảo" phía server. Còn lại: ghép lát dọc 2 trên giao diện |
 | NH-09 | Giải thích đoạn chọn phía server | 23:30 → 00:30 | ✅ | #32, #46 | Làm sớm. Lõi (#32) và route `explain-selection` có cắt lại vùng chọn từ snapshot (#46). #46 cũng sửa lỗi cộng token 2 lần. Chưa gọi Gemini thật |
 | NH-10 | Logic Offline và script ghi bundle; giữ quyền merge | 00:30 → 02:30 | ✅ | #37, #50, #62 | Làm sớm: `offline.ts` (#37), `scripts/record-bundle.ts` (#50), bản 2 bước (#62: `--chi-cau-hoi` ghi câu hỏi, `--answers` chấm tiếp). Script **chưa chạy thật** (cần server và tài khoản demo, làm ở NH-12). Còn quyền merge 00:30–03:30 |
 | NH-11 | Duyệt tay output AI trên repo demo đã chốt | 02:30 → 04:00 | ◐ | #62 | Mới có công cụ `scripts/xem-bundle.ts` (đổi bundle thành `duyet-ai.md` có ô duyệt). **Chưa duyệt tay** output AI trên repo demo |
@@ -121,8 +122,8 @@ Ghi chú: các con số trên đếm theo PR đã merge trên `main` (tới PR #
 | PH-13 | So ảnh với `prototype.html` và sửa lệch | 03:00 → 04:00 | ✅ | #56 | Làm sớm. 6/6 cặp ảnh khớp 4 điều (chụp 1366×768, chủ đề tối, bằng API giả vì lúc đó fixture chưa tới được Feynman). Sửa 1 lỗi CSS: quy tắc `button` ngoài `@layer` thắng class Tailwind, đưa vào `@layer base`. Nên chụp lại cặp 4–6 bằng `?fixture=1` mới (#58) |
 | PH-14 | Sửa lỗi giao diện sau DoD và quay video dự phòng | 04:00 → 05:00 | ⬜ | — | Mẫu sửa lỗi |
 | PH-15 | Tập bấm demo và commit cuối | 08:00 → 09:00 | ⬜ | — | Mẫu sửa lỗi |
-| PH-16 | Tính trước phân tích và câu hỏi (T3) | sau phiếu đang làm, xong trước 22:30 | ⬜ | — | **Phiếu tiếp theo của Phát.** Chỉ sửa `workbench.ts` và test mới `prefetch.test.ts`, không cần sửa server. Nên có trước NH-08 để đo tốc độ thật |
-| PH-17 | Báo từng bước khi chờ (T5) | sau PH-16, nếu còn giờ (trước 04:00) | ⬜ | — | Chỉ sửa giao diện (`XRayPanel`, `AnswerBox`, `waiting-label.ts` mới…), không đổi bố cục |
+| PH-16 | Tính trước phân tích và câu hỏi (T3) | sau phiếu đang làm, xong trước 22:30 | ✅ | #71 | Làm sớm. Sau `ingest` thật tính trước tối đa 3 bài `AVAILABLE` đầu (phân tích), phân tích xong thì tính ngầm câu hỏi, bài vừa mở khóa vào hàng tính trước. Offline và fixture 0 request. 19 test mới (`prefetch.test.ts`). **Chưa thử với API thật** (cần TH-10) nên chưa có số đo "chờ câu hỏi: ? → ?" |
+| PH-17 | Báo từng bước khi chờ (T5) | sau PH-16, nếu còn giờ (trước 04:00) | ✅ | #72 | Làm sớm. Tóm tắt hiện khung "Điểm hay/Điểm dở" khi chờ AI; nút nộp đổi chữ theo thời gian chờ (3 s, 6 s); "Thường mất khoảng 10 giây". Chỉ sửa giao diện. Mới kiểm `/learn?fixture=1` biên dịch được, chưa thử tay với AI thật |
 
 ## Quý — Mảng độc lập (dùng Codex)
 
@@ -145,7 +146,7 @@ Ghi chú: các con số trên đếm theo PR đã merge trên `main` (tới PR #
 | G2 | 14:00 | Cloud Run sống (TH-04) | ❓ Mới có `/api/health`. Thiện xác nhận deploy |
 | GP | 20:00, 00:00 | Pipeline deploy (TH-19) | ⬜ TH-19 chưa làm |
 | G3 | 20:15 | Vertex AI (TH-10) | ⬜ Nhân đã chạy thử Vertex express (số đo trong PR #28) |
-| G4 | 20:00 | Lát dọc 1 (TH-10) | ⬜ Đã có: mọi route AI, API phiên và tiến độ, toàn bộ giao diện học (PH-05 → PH-13). Còn thiếu: merge TH-09 (#66), `engine/index.ts` (MI-06), ghép engine thật (TH-10) |
+| G4 | 20:00 | Lát dọc 1 (TH-10) | ⬜ Mọi phụ thuộc đã có trên `main`: route AI, API phiên và tiến độ, `runEngine` (#70), Tầng 0 (#66), toàn bộ giao diện học và tính trước (PH-05 → PH-17). **Còn lại duy nhất: TH-10** (đổi import sang engine thật, xóa `stub.ts`, `instrumentation.ts`, chạy thử trên máy) |
 | G7 | 04:00 | Đóng băng tính năng | ⬜ |
 
 ## Nhật ký cập nhật
@@ -159,3 +160,4 @@ Ghi chú: các con số trên đếm theo PR đã merge trên `main` (tới PR #
 | 07/11 16:55 | Phát | Cập nhật tới PR #52: MI-08, NH-05, NH-06, NH-09, PH-11, PH-12 sang ✅; MI-06 sang ◐; NH-07 sang 🔄 (#53); NH-10 thêm #50; viết lại mục điểm nghẽn (thêm lỗi toast) |
 | 07/11 17:25 | Phát | Cập nhật tới PR #58: MI-07, PH-13 sang ✅; MI-09 sang ◐; TH-08 sang 🔄 (#59); PH-08 thêm #58; ghi #55 đã sửa lỗi toast; viết lại mục điểm nghẽn |
 | 07/11 18:50 | Phát | Cập nhật tới PR #67: thêm 7 phiếu tăng tốc (75 phiếu); TH-11, TH-12, TH-13, NH-07, NH-10 sang ✅; TH-20, NH-08, NH-11 sang ◐; TH-09, NH-14, NH-15 sang 🔄; viết lại mục điểm nghẽn |
+| 07/11 19:35 | Phát | Cập nhật tới PR #72: TH-09, MI-06, PH-16, PH-17 sang ✅; TH-15 sang 🔄 (#73); NH-08 sang 🔄 (#69); viết lại mục điểm nghẽn (TH-10 và hạ tầng deploy là việc còn lại của G4) |
