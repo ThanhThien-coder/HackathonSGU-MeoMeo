@@ -144,7 +144,7 @@ async function recordGradeUsage(
         'GRADE',
         ${usage.tokens_in},
         ${usage.tokens_out},
-        ${aiCostUsd(usage.tokens_in, usage.tokens_out)}
+        ${aiCostUsd(usage.tokens_in, usage.tokens_out, usage.model)}
       )
     `;
   } catch {

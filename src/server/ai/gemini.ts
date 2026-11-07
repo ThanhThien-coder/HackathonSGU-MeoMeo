@@ -376,54 +376,89 @@ async function executeSingleModelCall<T>(
   };
 }
 
+// NH-14: model chính theo loại lời gọi
+export function modelForKind(kind: LlmRequest<unknown>["kind"]): string {
+  return CONFIG.LLM_MODEL_BY_KIND[kind];
+}
+
+// NH-15: flash-lite chờ LLM_LITE_TIMEOUT_MS; model chậm (3.8-flash) chờ LLM_PRIMARY_TIMEOUT_MS
+export function timeoutForModel(model: string): number {
+  return model === CONFIG.LLM_MODEL_FALLBACK
+    ? CONFIG.LLM_LITE_TIMEOUT_MS
+    : CONFIG.LLM_PRIMARY_TIMEOUT_MS;
+}
+
+export interface CallOptions {
+  // NH-15: lần thử lại sau khi lời gọi trước lỗi/quá giờ ⇒ gọi thẳng flash-lite, không thử lại model chậm
+  liteOnly?: boolean;
+}
+
 export async function callLLMOnce<T>(
   req: LlmRequest<T>,
   client?: GoogleGenAI,
-  env: Record<string, string | undefined> = process.env
+  env: Record<string, string | undefined> = process.env,
+  opts?: CallOptions
 ): Promise<LlmOutcome<T>> {
   if (isAiDisabled(env)) {
     throw new ApiHttpError("ERR_AI_UNAVAILABLE", "AI hiện đang tạm ngắt (AI_DISABLED=true)");
   }
 
   const ai = client ?? createGeminiClient(env);
+  const kindModel = modelForKind(req.kind);
+  const primaryModel = opts?.liteOnly ? CONFIG.LLM_MODEL_FALLBACK : kindModel;
 
   const primaryResult = await executeSingleModelCall(
     req,
     ai,
-    CONFIG.LLM_MODEL,
-    CONFIG.LLM_PRIMARY_TIMEOUT_MS
+    primaryModel,
+    timeoutForModel(primaryModel)
+  );
+
+  const primaryCost = aiCostUsd(
+    primaryResult.tokens_in,
+    primaryResult.tokens_out,
+    primaryModel
   );
 
   if (primaryResult.ok) {
-    const cost_usd = aiCostUsd(
-      primaryResult.tokens_in,
-      primaryResult.tokens_out,
-      CONFIG.LLM_MODEL
-    );
     return {
       ok: true,
       value: primaryResult.value,
       tokens_in: primaryResult.tokens_in,
       tokens_out: primaryResult.tokens_out,
-      model: CONFIG.LLM_MODEL,
-      fell_back: false,
-      cost_usd,
+      model: primaryModel,
+      fell_back: primaryModel !== kindModel,
+      cost_usd: primaryCost,
+    };
+  }
+
+  // Model chính đã là flash-lite ⇒ không gọi fallback lần hai (cùng model, vô ích); trả lỗi cho vòng thử lại
+  if (primaryModel === CONFIG.LLM_MODEL_FALLBACK) {
+    return {
+      ok: false,
+      kind: primaryResult.kind,
+      retry_after_ms: primaryResult.retry_after_ms,
+      tokens_in: primaryResult.tokens_in,
+      tokens_out: primaryResult.tokens_out,
+      model: primaryModel,
+      fell_back: primaryModel !== kindModel,
+      cost_usd: primaryCost,
     };
   }
 
   // Model chính không ok (TRANSIENT, INVALID_JSON, FATAL, hoặc timeout)
-  // ⇒ gọi CONFIG.LLM_MODEL_FALLBACK 1 lần với timeout LLM_TIMEOUT_MS, không chờ delay
+  // ⇒ gọi CONFIG.LLM_MODEL_FALLBACK 1 lần với timeout LLM_LITE_TIMEOUT_MS, không chờ delay
   const fallbackResult = await executeSingleModelCall(
     req,
     ai,
     CONFIG.LLM_MODEL_FALLBACK,
-    CONFIG.LLM_TIMEOUT_MS
+    timeoutForModel(CONFIG.LLM_MODEL_FALLBACK)
   );
 
   const totalTokensIn = primaryResult.tokens_in + fallbackResult.tokens_in;
   const totalTokensOut = primaryResult.tokens_out + fallbackResult.tokens_out;
   const totalCostUsd =
-    aiCostUsd(primaryResult.tokens_in, primaryResult.tokens_out, CONFIG.LLM_MODEL) +
+    primaryCost +
     aiCostUsd(fallbackResult.tokens_in, fallbackResult.tokens_out, CONFIG.LLM_MODEL_FALLBACK);
 
   if (fallbackResult.ok) {
@@ -471,7 +506,8 @@ export async function callLLMWithRetry<T>(
   let retries = 0;
 
   for (let attempt = 0; attempt <= CONFIG.LLM_MAX_RETRIES; attempt++) {
-    const outcome = await callLLMOnce(req, client, env);
+    // NH-15: từ lần thử thứ hai gọi thẳng flash-lite (lần trước vừa lỗi hoặc quá giờ)
+    const outcome = await callLLMOnce(req, client, env, { liteOnly: attempt > 0 });
     totalTokensIn += outcome.tokens_in;
     totalTokensOut += outcome.tokens_out;
     totalCostUsd +=
@@ -510,7 +546,7 @@ export async function callLLMWithRetry<T>(
     }
   }
 
-  const finalModel = lastOutcome?.model ?? CONFIG.LLM_MODEL;
+  const finalModel = lastOutcome?.model ?? modelForKind(req.kind);
   const finalFellBack = lastOutcome?.fell_back ?? false;
 
   logAiCall({
@@ -530,7 +566,7 @@ export async function callLLMWithRetry<T>(
       kind: "FATAL",
       tokens_in: 0,
       tokens_out: 0,
-      model: CONFIG.LLM_MODEL,
+      model: modelForKind(req.kind),
       fell_back: false,
       cost_usd: 0,
     };

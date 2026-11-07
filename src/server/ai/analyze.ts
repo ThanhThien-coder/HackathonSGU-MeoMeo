@@ -4,12 +4,13 @@ import {
   type GuardIssue,
   type HybridArchitecturalNode,
   type NodeAnalysis,
+  type NodeAnalysisRaw,
   type NodeAnalysisView,
   type SessionRow,
   type StaticEngineResult,
 } from "@/contracts";
 import { logger } from "@/server/log";
-import { callLLMOnce } from "./gemini";
+import { callLLMOnce, type LlmOutcome } from "./gemini";
 import { withGuardFeedback } from "./prompts/common";
 import { analyzeRequest } from "./prompts/analyze";
 import { checkAnalysis, type WeakPointStats } from "./guard/analysis";
@@ -44,6 +45,7 @@ export async function analyzeNode(
   let totalTokensIn = 0;
   let totalTokensOut = 0;
   let retries = 0;
+  let lastFailed = false;
 
   for (let i = 0; i <= CONFIG.LLM_MAX_RETRIES; i++) {
     if (i > 0) {
@@ -55,7 +57,10 @@ export async function analyzeNode(
       issues.length > 0 ? withGuardFeedback(baseReq, issues) : baseReq;
     issues = [];
 
-    const r = await callLLMOnce(req);
+    // NH-15: lần trước lỗi/quá giờ ⇒ gọi thẳng flash-lite; bị cổng gác chặn thì giữ model chính
+    const liteOnly: boolean = lastFailed;
+    const r: LlmOutcome<NodeAnalysisRaw> = await callLLMOnce(req, undefined, undefined, { liteOnly });
+    lastFailed = !r.ok;
     totalTokensIn += r.tokens_in;
     totalTokensOut += r.tokens_out;
 

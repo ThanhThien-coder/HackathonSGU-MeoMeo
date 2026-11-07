@@ -39,6 +39,7 @@ export interface GradeUsage {
   tokens_in: number;
   tokens_out: number;
   retries?: number;
+  model?: string; // model thật đã chấm (NH-14) ⇒ tính đúng giá ai_usage
 }
 
 export const INJECTION_MARKER = "__INJECTION__";
@@ -371,6 +372,7 @@ export async function gradeWithAI(
   if (opts?.usage) {
     opts.usage.tokens_in = (opts.usage.tokens_in ?? 0) + outcome.tokens_in;
     opts.usage.tokens_out = (opts.usage.tokens_out ?? 0) + outcome.tokens_out;
+    opts.usage.model = outcome.model;
   }
 
   if (!outcome.ok) {

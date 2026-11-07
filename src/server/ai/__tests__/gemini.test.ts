@@ -7,6 +7,7 @@ import {
   callLLMWithRetry,
   createGeminiClient,
   isAiDisabled,
+  modelForKind,
   type LlmRequest,
 } from "../gemini";
 import { logAiCall } from "@/server/log";
@@ -408,11 +409,12 @@ describe("gemini.ts", () => {
       const sleepFn = vi.fn().mockResolvedValue(undefined);
       const res = await callLLMWithRetry(dummyReq, sleepFn, client, validEnv);
 
-      // Attempt 0: primary (429) -> fallback (429) = 2 calls
+      // Attempt 0: 3.8-flash (429) -> flash-lite (429) = 2 calls
       // sleep 1 lần
-      // Attempt 1: primary (429) -> fallback (429) = 2 calls
-      // Tổng cộng: 4 calls
-      expect(mockGenerate).toHaveBeenCalledTimes(4);
+      // Attempt 1 (NH-15): gọi thẳng flash-lite (429) = 1 call
+      // Tổng cộng: 3 calls, lần thử lại không gọi 3.8-flash
+      expect(mockGenerate).toHaveBeenCalledTimes(3);
+      expect(mockGenerate.mock.calls[2][0].model).toBe("gemini-3.5-flash-lite");
       expect(sleepFn).toHaveBeenCalledTimes(1);
       expect(res.ok).toBe(false);
       if (!res.ok) {
@@ -663,7 +665,7 @@ describe("gemini.ts", () => {
       expect(mockGenerate.mock.calls[1][0].model).toBe("gemini-3.5-flash-lite");
     });
 
-    it("gọi CONFIG.LLM_MODEL với LLM_PRIMARY_TIMEOUT_MS và CONFIG.LLM_MODEL_FALLBACK với LLM_TIMEOUT_MS", async () => {
+    it("gọi CONFIG.LLM_MODEL với LLM_PRIMARY_TIMEOUT_MS và CONFIG.LLM_MODEL_FALLBACK với LLM_LITE_TIMEOUT_MS (NH-15)", async () => {
       const timeoutSpy = vi.spyOn(AbortSignal, "timeout");
       const mockGenerate = vi
         .fn()
@@ -682,8 +684,60 @@ describe("gemini.ts", () => {
       await callLLMOnce(dummyReq, client, validEnv);
 
       expect(timeoutSpy).toHaveBeenNthCalledWith(1, CONFIG.LLM_PRIMARY_TIMEOUT_MS);
-      expect(timeoutSpy).toHaveBeenNthCalledWith(2, CONFIG.LLM_TIMEOUT_MS);
+      expect(timeoutSpy).toHaveBeenNthCalledWith(2, CONFIG.LLM_LITE_TIMEOUT_MS);
+      expect(CONFIG.LLM_LITE_TIMEOUT_MS).toBe(10000);
       timeoutSpy.mockRestore();
+    });
+
+    it("NH-14: GRADE và EXPLAIN gọi thẳng flash-lite (10 giây), lỗi thì không gọi fallback cùng model", async () => {
+      const timeoutSpy = vi.spyOn(AbortSignal, "timeout");
+      for (const kind of ["GRADE", "EXPLAIN"] as const) {
+        timeoutSpy.mockClear();
+        const mockGenerate = vi.fn().mockResolvedValueOnce({
+          text: "{ invalid json",
+          usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 10 },
+          candidates: [{ finishReason: "STOP" }],
+        });
+        const client = { models: { generateContent: mockGenerate } } as unknown as GoogleGenAI;
+        const res = await callLLMOnce({ ...dummyReq, kind }, client, validEnv);
+        expect(mockGenerate).toHaveBeenCalledTimes(1);
+        expect(mockGenerate.mock.calls[0][0].model).toBe("gemini-3.5-flash-lite");
+        expect(timeoutSpy).toHaveBeenNthCalledWith(1, CONFIG.LLM_LITE_TIMEOUT_MS);
+        expect(res.ok).toBe(false);
+        expect(res.model).toBe("gemini-3.5-flash-lite");
+        expect(res.fell_back).toBe(false);
+      }
+      timeoutSpy.mockRestore();
+    });
+
+    it("NH-14: ANALYZE, QUESTIONS, OVERVIEW vẫn gọi 3.8-flash trước; modelForKind đúng bảng", async () => {
+      expect(modelForKind("GRADE")).toBe("gemini-3.5-flash-lite");
+      expect(modelForKind("EXPLAIN")).toBe("gemini-3.5-flash-lite");
+      for (const kind of ["ANALYZE", "QUESTIONS", "OVERVIEW"] as const) {
+        expect(modelForKind(kind)).toBe("gemini-3.8-flash");
+        const mockGenerate = vi.fn().mockResolvedValueOnce({
+          text: '{"value": 1}',
+          usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 10 },
+          candidates: [{ finishReason: "STOP" }],
+        });
+        const client = { models: { generateContent: mockGenerate } } as unknown as GoogleGenAI;
+        const res = await callLLMOnce({ ...dummyReq, kind }, client, validEnv);
+        expect(mockGenerate.mock.calls[0][0].model).toBe("gemini-3.8-flash");
+        expect(res.model).toBe("gemini-3.8-flash");
+      }
+    });
+
+    it("NH-15: liteOnly ⇒ gọi thẳng flash-lite 1 lần, không bao giờ gọi 3.8-flash, đánh dấu fell_back", async () => {
+      const mockGenerate = vi.fn().mockResolvedValueOnce({
+        text: '{"value": 2}',
+        usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 10 },
+        candidates: [{ finishReason: "STOP" }],
+      });
+      const client = { models: { generateContent: mockGenerate } } as unknown as GoogleGenAI;
+      const res = await callLLMOnce({ ...dummyReq, kind: "ANALYZE" }, client, validEnv, { liteOnly: true });
+      expect(mockGenerate).toHaveBeenCalledTimes(1);
+      expect(mockGenerate.mock.calls[0][0].model).toBe("gemini-3.5-flash-lite");
+      expect(res.fell_back).toBe(true);
     });
 
     it("callLLMWithRetry logAiCall ghi model thật đã trả lời, fell_back và cost_usd theo từng model", async () => {
