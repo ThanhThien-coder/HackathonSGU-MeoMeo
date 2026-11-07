@@ -276,6 +276,18 @@ body {
   transition: background .2s var(--ease-snap), color .2s var(--ease-snap);
 }
 
+.brand-mark {
+  background-color: var(--accent);
+  mask: url("/simplifey.svg") center / contain no-repeat;
+}
+
+@media (forced-colors: active) {
+  .brand-mark {
+    forced-color-adjust: none;
+    background-color: CanvasText;
+  }
+}
+
 /* ==================== SELECTION TOKENS ==================== */
 ::selection {
   background: #38bdf8 !important;
@@ -335,6 +347,14 @@ body {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
   border-radius: 6px;
+}
+
+[tabindex="-1"]:focus,
+[tabindex="-1"]:focus-visible,
+#rp-title:focus,
+#rp-title:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
 }
 
 [hidden] {

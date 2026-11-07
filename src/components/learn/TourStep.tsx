@@ -43,8 +43,10 @@ export function TourStep({
   }
 
   return (
-    <div className="grid gap-3 min-w-0">
-      {/* Mini-diagram 3 tầng kiến trúc theo prototype.html */}
+    <div className="flex flex-col min-h-[480px] lg:h-full min-w-0 justify-between">
+      {/* Vùng nội dung các bước phía trên */}
+      <div className="flex-1 flex flex-col gap-3 min-w-0 min-h-[220px]">
+        {/* Mini-diagram 3 tầng kiến trúc theo prototype.html */}
       <div className="arch-diagram min-w-0 overflow-x-auto" role="navigation" aria-label="Sơ đồ 3 tầng kiến trúc">
         <button
           type="button"
@@ -72,8 +74,12 @@ export function TourStep({
       </div>
 
       <div className="stephead flex items-center justify-between gap-2.5 min-w-0">
-        <h2 id="rp-title" tabIndex={-1} className="m-0 flex items-baseline gap-1.5 text-[15px] font-bold outline-none text-[var(--text)] min-w-0 break-words">
-
+        <h2
+          id="rp-title"
+          tabIndex={-1}
+          style={{ outline: "none", boxShadow: "none" }}
+          className="m-0 flex items-baseline gap-1.5 text-[15px] font-bold !outline-none text-[var(--text)] min-w-0 break-words focus:outline-none focus-visible:outline-none"
+        >
           <span className="min-w-0 break-words">
             Bước {step.step}/{step.total} · {step.layer_label}
           </span>
@@ -111,15 +117,19 @@ export function TourStep({
         </div>
       )}
 
-      <div className="min-w-0">{chips}</div>
-
-      <div className="navrow flex justify-between gap-2.5 pt-1 min-w-0 flex-wrap">
-        <Button onClick={onPrev}>{first ? "← Thẻ vai trò" : "← Bước trước"}</Button>
-        <Button variant="primary" onClick={onNext}>
-          {last ? "Xem tóm tắt →" : "Bước sau →"}
-        </Button>
+        <div className="min-w-0">{chips}</div>
       </div>
-      <p className="keyhint m-0 text-xs text-[var(--faint)]">Mẹo: bấm phím ← → để chuyển bước.</p>
+
+      {/* Cố định 2 nút điều hướng và note Mẹo ở một vị trí, nâng lên thêm 100px theo yêu cầu */}
+      <div className="sticky bottom-0 z-10 mt-auto pt-3 pb-[144px] bg-[var(--panel)] border-t border-[var(--panel2)]">
+        <div className="navrow flex justify-between gap-2.5 min-w-0 flex-wrap">
+          <Button onClick={onPrev}>{first ? "← Thẻ vai trò" : "← Bước trước"}</Button>
+          <Button variant="primary" onClick={onNext}>
+            {last ? "Xem tóm tắt →" : "Bước sau →"}
+          </Button>
+        </div>
+        <p className="keyhint mt-2 mb-0 text-xs text-[var(--faint)]">Mẹo: bấm phím ← → để chuyển bước.</p>
+      </div>
     </div>
   );
 }

@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { CONFIG } from "@/contracts/config";
 import { AccountMenu } from "@/components/layout/AccountMenu";
+import { BrandMark } from "@/components/layout/BrandMark";
 import { ThemeToggle } from "@/components/layout/Navbar";
 import { PersonaSelect } from "@/components/layout/PersonaSelect";
 import { RepoOverviewModal, setOverviewOpen } from "@/components/learn/RepoOverviewModal";
@@ -40,17 +41,13 @@ export function CockpitHeader({
   const result = useWorkbenchStore((s) => s.result);
   const progress = useWorkbenchStore((s) => s.progress);
   const tokensUsed = useWorkbenchStore((s) => s.progress?.tokens_used ?? 0);
-  const metrics = useWorkbenchStore((s) => s.ui.metrics);
   const resetSession = useWorkbenchStore((s) => s.resetSession);
 
   const snapshot = result?.snapshot;
-  const sha7 = snapshot?.snapshot_id.slice(0, 7) ?? "";
-  const zip = snapshot?.snapshot_id_kind === "ARCHIVE_HASH" ? " zip" : "";
   const repoName = result?.repo_name ?? "shop-api";
   const repoLabel = result
-    ? `${repoName}${snapshot?.ref_label ? ` · ${snapshot.ref_label}` : ""}${sha7 ? ` @ ${sha7}${zip}` : ""}`
+    ? `${repoName}${snapshot?.ref_label ? ` · ${snapshot.ref_label}` : ""}`
     : "shop-api";
-  const mapMs = (metrics.ingest_ms ?? 0) + (metrics.engine_ms ?? 0);
   const overQuota = tokensUsed >= CONFIG.SESSION_TOKEN_QUOTA;
   const isResumed = Boolean(
     progress && Object.values(progress.nodes).some((n) => n.status === "COMPLETED" || n.last_run !== null)
@@ -80,11 +77,9 @@ export function CockpitHeader({
         <PaneIcon side="left" />
       </button>
 
-      <div className="brand-wrap inline-flex items-center gap-2 font-bold text-[14.5px] tracking-tight">
-        <span className="brand-icon inline-flex h-[22px] w-[22px] items-center justify-center rounded-[6px] bg-gradient-to-br from-[var(--accent)] to-[#6366f1] text-[11px] font-extrabold text-white">
-          S
-        </span>
-        <span className="max-lg:hidden">SimpliFey</span>
+      <div className="inline-flex items-center gap-2 text-[14.5px] font-bold tracking-tight">
+        <BrandMark className="size-[22px]" />
+        <span className="max-lg:sr-only">SimpliFey</span>
       </div>
 
       <div
@@ -124,15 +119,13 @@ export function CockpitHeader({
 
       <span className="spacer flex-1" />
 
-      <div className="metric-chip inline-flex items-center gap-1.5 rounded-md bg-[var(--panel2)] px-2 py-1 text-xs text-[var(--faint)] max-lg:hidden">
-        <span className="live-dot h-1.5 w-1.5 rounded-full bg-[var(--done)] shadow-[0_0_6px_var(--done)]" />
-        <span>Bản đồ {mapMs} ms</span>
-        {isResumed ? (
+      {isResumed ? (
+        <div className="metric-chip inline-flex items-center gap-1.5 rounded-md bg-[var(--panel2)] px-2 py-1 text-xs text-[var(--faint)] max-lg:hidden">
           <span className="rounded bg-[var(--panel3)] px-1.5 py-0.5 text-[10.5px] text-[var(--accent)] font-medium">
             kết quả đã lưu
           </span>
-        ) : null}
-      </div>
+        </div>
+      ) : null}
 
       <span
         className={overQuota ? "text-xs font-semibold text-[var(--fail)]" : "text-xs text-[var(--muted)] max-lg:hidden"}

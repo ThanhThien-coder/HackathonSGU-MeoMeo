@@ -40,7 +40,6 @@ export function LearnSidePanel() {
 
   const feynmanReady = analysisOf(analyses[activeNodeId]) !== null;
   const tab = activeTab === "FEYNMAN" && feynmanReady ? "FEYNMAN" : "XRAY";
-  const left = run?.questions.filter((q) => !q.state.finished && q.state.ended_by !== "DROPPED").length;
 
   const onTabKey = (e: KeyboardEvent<HTMLDivElement>) => {
     if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
@@ -52,13 +51,13 @@ export function LearnSidePanel() {
   };
 
   return (
-    <div className="min-w-0">
+    <div className="min-w-0 h-full flex flex-col">
       {/* Thanh tab X-Ray / Feynman dính cố định đỉnh cột (.rtabs) */}
       <div
         role="tablist"
         aria-label="X-Ray và Feynman"
         onKeyDown={onTabKey}
-        className="rtabs sticky top-0 z-10 flex bg-[var(--panel)] px-3 border-none min-w-0 overflow-x-auto"
+        className="rtabs sticky top-0 z-10 flex bg-[var(--panel)] px-3 border-none min-w-0 overflow-x-auto flex-none"
       >
         <button
           id="rtab-XRAY"
@@ -72,7 +71,7 @@ export function LearnSidePanel() {
               : "text-[var(--muted)] hover:text-[var(--text)] border-b-2 border-transparent"
           }`}
         >
-          Luồng code (X-Ray)
+          Học luồng xử lý
         </button>
         <button
           id="rtab-FEYNMAN"
@@ -90,8 +89,7 @@ export function LearnSidePanel() {
               : "text-[var(--muted)] hover:text-[var(--text)] border-b-2 border-transparent"
           } ${!feynmanReady ? "opacity-50 cursor-not-allowed" : ""}`}
         >
-          Vũ đài phản biện (Feynman)
-          {left !== undefined ? ` (${left})` : ""}
+          Hỏi đáp Feynman
           {preparing ? (
             <span
               role="status"
@@ -103,7 +101,7 @@ export function LearnSidePanel() {
         </button>
       </div>
 
-      <div role="tabpanel" aria-labelledby={`rtab-${tab}`} className="min-w-0">
+      <div role="tabpanel" aria-labelledby={`rtab-${tab}`} className="min-w-0 flex-1 flex flex-col min-h-0">
         {tab === "XRAY" ? <XRayPanel /> : <FeynmanQuestionSection />}
       </div>
     </div>

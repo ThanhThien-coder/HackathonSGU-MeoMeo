@@ -148,11 +148,9 @@ export function LessonGraphPanel() {
       ))}
 
       <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-muted" aria-label="Chú giải">
-        <StatusPill status="LOCKED" />
         <StatusPill status="AVAILABLE" />
         <StatusPill status="COMPLETED" />
         <StatusPill status="FAILED" />
-        <span>Node trước chưa vững</span>
       </div>
     </div>
   );

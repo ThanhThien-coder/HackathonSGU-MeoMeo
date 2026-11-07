@@ -4,6 +4,7 @@ import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { EmptyState } from "@/components/ui/Page";
 import { Button } from "@/components/ui/common";
+import { LoadingAnimation } from "@/components/ui/LoadingAnimation";
 import type { AttemptHistoryItem } from "@/contracts/storage";
 import { fetchHistory, type HistoryResult } from "./fetch-history";
 import { HistoryItem } from "./HistoryItem";
@@ -41,12 +42,8 @@ function SessionHistory({
 
   if (!result) {
     return (
-      <div role="status" className="rounded-lg border border-line bg-panel p-4">
-        <p className="text-sm text-muted">Đang tải lịch sử…</p>
-        <div aria-hidden="true" className="mt-3 space-y-2 motion-safe:animate-pulse">
-          <div className="h-3 w-2/5 rounded bg-line" />
-          <div className="h-3 w-4/5 rounded bg-line" />
-        </div>
+      <div role="status" className="rounded-xl border border-line bg-panel p-8 flex flex-col items-center justify-center">
+        <LoadingAnimation size={150} text="Đang tải lịch sử phiên học…" />
       </div>
     );
   }
