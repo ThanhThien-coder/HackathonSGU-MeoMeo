@@ -193,7 +193,7 @@ describe("Data Dependencies & Groups (ENG-116, ENG-118, ENG-119)", () => {
     expect(edgesMap.has("node-A->node-B")).toBe(true);
   });
 
-  it("buildGroups: bài không có cạnh được xếp vào group-standalone ('Học riêng')", () => {
+  it("buildGroups: bài không có cạnh được xếp vào group-standalone ('Bài độc lập')", () => {
     const node1: HybridArchitecturalNode = {
       id: "node-1",
       title: "Get Order",
@@ -278,7 +278,7 @@ describe("Data Dependencies & Groups (ENG-116, ENG-118, ENG-119)", () => {
 
     const standaloneGroup = groups.find((g) => g.group_id === "group-standalone");
     expect(standaloneGroup).toBeDefined();
-    expect(standaloneGroup?.key).toBe("Học riêng");
+    expect(standaloneGroup?.key).toBe("Bài độc lập");
     expect(standaloneGroup?.key_kind).toBe("STANDALONE");
     expect(standaloneGroup?.node_ids).toContain("node-standalone");
 
