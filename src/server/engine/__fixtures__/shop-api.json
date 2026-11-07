@@ -1,0 +1,202 @@
+{
+  "engine_version": "1.7.0",
+  "repo_name": "shop-api",
+  "snapshot": {
+    "source": "GITHUB",
+    "repo_key": "demo/shop-api",
+    "snapshot_id": "3f9a1c7e5b2d4a8f6c0e1d9b7a5c3e2f4b6d8a0c",
+    "snapshot_id_kind": "COMMIT_SHA",
+    "subdir": "",
+    "ref_label": "main"
+  },
+  "fingerprint": {
+    "archetype": "WEB_BACKEND",
+    "primary_language": "TYPESCRIPT",
+    "language_breakdown": [
+      {
+        "language": "TYPESCRIPT",
+        "tier": "RESOLVED",
+        "code_bytes": 18432
+      }
+    ],
+    "graph_confidence": "HIGH",
+    "detected_framework": "Express",
+    "tech_stack": [
+      "express",
+      "typeorm",
+      "pg",
+      "zod",
+      "jsonwebtoken"
+    ],
+    "is_monorepo": false,
+    "root_dir_offset": ""
+  },
+  "total_files": 4,
+  "nodes": [
+    {
+      "id": "slice-register",
+      "title": "Register User",
+      "title_source": "ROUTE",
+      "title_evidence": "POST /register",
+      "node_type": "ARCHITECTURAL_DATA_FLOW",
+      "entry_symbol": "src/routes/auth.routes.ts#POST /register",
+      "prerequisites": [],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "files": [
+        "src/routes/auth.routes.ts",
+        "src/services/auth.service.ts",
+        "src/repos/user.repo.ts"
+      ],
+      "languages": [
+        "TYPESCRIPT"
+      ],
+      "support_tier": "RESOLVED",
+      "cognitive_complexity": 3,
+      "rank_score": 0.1204,
+      "is_vip_algorithm": false,
+      "is_capstone": false,
+      "uncle_bob": {
+        "instability": 0.6,
+        "abstractness": 0.4,
+        "distance": 0,
+        "diagnosis": "BALANCED",
+        "is_exempt": false
+      },
+      "trace_steps": [
+        {
+          "step_number": 1,
+          "layer": "ENTRY_POINT",
+          "file_path": "src/routes/auth.routes.ts",
+          "function_name": "POST /register",
+          "line_start": 6,
+          "line_end": 10,
+          "snippet": "router.post('/register', async (req, res) => {\n  const dto = registerSchema.parse(req.body);\n  const user = await authService.register(dto);\n  res.status(201).json(user);\n});",
+          "snippet_line_map": [
+            6,
+            7,
+            8,
+            9,
+            10
+          ]
+        },
+        {
+          "step_number": 2,
+          "layer": "BUSINESS_LOGIC",
+          "file_path": "src/services/auth.service.ts",
+          "function_name": "AuthService.register",
+          "line_start": 12,
+          "line_end": 17,
+          "snippet": "async register(dto) {\n  const exists = await userRepo.findByEmail(dto.email);\n  if (exists) throw new ConflictError('Email đã tồn tại');\n  const passwordHash = await hashPassword(dto.password);\n  return userRepo.create({ ...dto, password: passwordHash });\n}",
+          "snippet_line_map": [
+            12,
+            13,
+            14,
+            15,
+            16,
+            17
+          ]
+        },
+        {
+          "step_number": 3,
+          "layer": "DATA_ACCESS",
+          "file_path": "src/repos/user.repo.ts",
+          "function_name": "UserRepo.findByEmail",
+          "line_start": 9,
+          "line_end": 11,
+          "snippet": "findByEmail(email) {\n  return this.repo.findOne({ where: { email } });\n}",
+          "snippet_line_map": [
+            9,
+            10,
+            11
+          ]
+        }
+      ],
+      "dto_snippet": "const registerSchema = z.object({\n  email: z.string().email(),\n  name: z.string().min(1),\n  password: z.string().min(8),\n});",
+      "group_id": "grp-acc",
+      "entities": [
+        {
+          "name": "User",
+          "ops": [
+            "CREATE",
+            "READ"
+          ]
+        }
+      ]
+    }
+  ],
+  "edges": [],
+  "groups": [
+    {
+      "group_id": "grp-acc",
+      "key": "Tài khoản",
+      "key_kind": "ENTITY",
+      "node_ids": [
+        "slice-register"
+      ]
+    }
+  ],
+  "symbol_whitelist": [
+    "GET /products",
+    "GET /profile",
+    "GET /reports/revenue",
+    "OrderPlaced",
+    "POST /cart/items",
+    "POST /checkout",
+    "POST /register",
+    "addItem",
+    "addItemSchema",
+    "authMiddleware",
+    "authService",
+    "cartService",
+    "categoryRepo",
+    "checkout",
+    "emailService",
+    "findByEmail",
+    "findById",
+    "getProfile",
+    "listProducts",
+    "orderRepo",
+    "orderService",
+    "productRepo",
+    "productService",
+    "register",
+    "registerSchema",
+    "reportService",
+    "revenueByMonth",
+    "sendConfirmation",
+    "sumByMonth",
+    "userRepo",
+    "userService"
+  ],
+  "file_index": [
+    "src/repos/user.repo.ts",
+    "src/routes/auth.routes.ts",
+    "src/services/auth.service.ts"
+  ],
+  "readme_excerpt": "shop-api: web bán hàng mẫu viết bằng Express, TypeORM và Postgres.",
+  "manifest_description": "Web bán hàng mẫu: đăng ký, giỏ hàng, thanh toán, báo cáo doanh thu.",
+  "ingestion_report": {
+    "truncated": false,
+    "selective_fetch": false,
+    "code_file_count": 3,
+    "manifest_count": 1,
+    "omitted_node_count": 0,
+    "skipped": {
+      "garbage": 0,
+      "binary": 0,
+      "oversized": 0,
+      "unsupported_lang": 0,
+      "quota": 0,
+      "parse_error": 0
+    },
+    "warnings": [],
+    "degraded_mode": null,
+    "redacted_secret_count": 1,
+    "engine_ms": 1840,
+    "ingest_ms": 920,
+    "suspicious_instruction_files": []
+  }
+}
