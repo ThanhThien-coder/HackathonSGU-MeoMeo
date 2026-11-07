@@ -47,6 +47,7 @@ import {
   setOfflineMode as setOfflineRuntime,
   setOfflinePersona as setOfflineRuntimePersona,
 } from "@/lib/offline";
+import { buildFixtureBundle } from "@/lib/fixture-bundle";
 import { explanationKey } from "@/lib/selection-explain";
 
 // ---------- Kiểu của slice `ui` (docs/spec/30_UI.md Mục 7.1) ----------
@@ -415,6 +416,9 @@ export const useWorkbenchStore = create<WorkbenchStore>()((set, get) => {
     await get().refreshProgress();
   };
 
+  /** Offline và `?fixture=1` cùng chạy trên `offline.ts` (0 request); chỉ Offline mới hiện nhãn và đổi persona. */
+  const isLocal = () => get().is_offline_mode || get().ui.fixture;
+
   /** Mục 7.5: có `skill_change` ⇒ làm mới hồ sơ bằng đúng 1 lần `GET /api/me`, rồi áp `node_state`. */
   const afterAnswer = async (
     sessionId: string,
@@ -423,7 +427,7 @@ export const useWorkbenchStore = create<WorkbenchStore>()((set, get) => {
   ) => {
     if (r.skill_change) {
       // Offline: hồ sơ tính lại ngay trên trình duyệt (`offline.ts`), không có `GET /api/me`.
-      if (get().is_offline_mode) set({ profile: structuredClone(getOfflineProfile()) });
+      if (isLocal()) set({ profile: structuredClone(getOfflineProfile()) });
       else void get().loadMe({ force: true });
     }
     await settleNodeState(sessionId, r.node_state, r.unlocked_node_ids, statusBefore);
@@ -500,7 +504,7 @@ export const useWorkbenchStore = create<WorkbenchStore>()((set, get) => {
   const fetchRun = async (nodeId: string, force: boolean) => {
     const { session_id: sessionId, ui, runs, analyses, progress } = get();
     const key = `enrich:${nodeId}`;
-    if (!sessionId || ui.fixture || ui.pending[key]) return;
+    if (!sessionId || ui.pending[key]) return;
     const analysis = analyses[nodeId];
     if (!analysis || analysis === "PENDING" || analysis === "FAILED") return;
     const state = progress?.nodes[nodeId];
@@ -510,7 +514,7 @@ export const useWorkbenchStore = create<WorkbenchStore>()((set, get) => {
 
     setPending(key, true);
     if (!force) set((s) => ({ ui: { ...s.ui, submit_error: null } }));
-    const res = get().is_offline_mode
+    const res = isLocal()
       ? cloneOk(offlineEnrichNode(nodeId, "LEARN", ui.offline_persona))
       : await enrichNodeSafe(sessionId, nodeId, "LEARN");
     setPending(key, false);
@@ -589,12 +593,18 @@ export const useWorkbenchStore = create<WorkbenchStore>()((set, get) => {
         // `?fixture=1`: không gọi API, trả bản đồ shop-api sau một khoảng ngắn để thấy đồng hồ quét.
         await new Promise((resolve) => setTimeout(resolve, FIXTURE_INGEST_DELAY_MS));
         res = { ok: true, data: await buildFixtureIngest() };
+        // Kịch bản A của bài N3 chạy trên `offline.ts`; bản đồ không có N3 thì chỉ có bản đồ (như trước).
+        if (res.ok) {
+          const bundle = buildFixtureBundle(res.data);
+          resetOfflineRuntime();
+          if (bundle) setOfflineRuntime(true, bundle);
+        }
       } else {
         res = await ingestRepoSafe(req);
       }
       if (res.ok) {
         get().applyIngest(res.data);
-        if (get().is_offline_mode) seedOfflineSession();
+        if (get().is_offline_mode || (get().ui.fixture && getOfflineBundle())) seedOfflineSession();
       } else set((s) => ({ ui: { ...s.ui, ingesting: false, ingest_error: toUiError(res) } }));
       return res;
     },
@@ -669,9 +679,11 @@ export const useWorkbenchStore = create<WorkbenchStore>()((set, get) => {
      */
     requestAnalysis: (nodeId, retry) => {
       const { session_id: sessionId, ui, analyses, result } = get();
-      if (sessionId && get().is_offline_mode) {
+      if (sessionId && isLocal()) {
         // Offline: bản phân tích đọc thẳng từ bundle, không có hàng chờ, 0 request.
         const found = offlineGetAnalysis(nodeId);
+        // `?fixture=1` chỉ có bản phân tích của N3: bài khác để nguyên (tour dựng từ `trace_steps`), không báo lỗi.
+        if (!found.ok && !get().is_offline_mode) return Promise.resolve();
         set((s) => ({ analyses: { ...s.analyses, [nodeId]: found.ok ? structuredClone(found.data) : "FAILED" } }));
         if (found.ok && get().active_node_id === nodeId) void get().loadRun(nodeId);
         return Promise.resolve();
@@ -729,7 +741,7 @@ export const useWorkbenchStore = create<WorkbenchStore>()((set, get) => {
     submitAnswer: async (nodeId, questionIndex, answer) => {
       const { session_id: sessionId, runs, ui } = get();
       const run = runs[nodeId];
-      if (!sessionId || !run || ui.fixture) return null;
+      if (!sessionId || !run) return null;
       const question = run.questions.find((q) => q.question_index === questionIndex);
       if (!question) return null;
 
@@ -739,7 +751,7 @@ export const useWorkbenchStore = create<WorkbenchStore>()((set, get) => {
       set((s) => ({ ui: { ...s.ui, submit_error: null } }));
       const before = get().progress?.nodes[nodeId]?.status;
       const attemptNumber = question.state.attempts_used + 1;
-      const res = get().is_offline_mode
+      const res = isLocal()
         ? cloneOk(offlineEvaluateFeynman(nodeId, run.mode, questionIndex, attemptNumber, answer, ui.offline_persona))
         : await evaluateFeynmanSafe({
             session_id: sessionId,
@@ -794,13 +806,13 @@ export const useWorkbenchStore = create<WorkbenchStore>()((set, get) => {
     skipQuestion: async (nodeId, questionIndex) => {
       const { session_id: sessionId, runs, ui } = get();
       const run = runs[nodeId];
-      if (!sessionId || !run || ui.fixture) return;
+      if (!sessionId || !run) return;
       const key = answerKey(run.run_id, questionIndex);
       if (ui.pending[`submit:${key}`]) return;
       const before = get().progress?.nodes[nodeId]?.status;
 
       setPending(`submit:${key}`, true);
-      const res = get().is_offline_mode
+      const res = isLocal()
         ? cloneOk(offlineRevealQuestion(nodeId, run.mode, questionIndex, ui.offline_persona))
         : await revealSafe({ session_id: sessionId, run_id: run.run_id, question_index: questionIndex });
       setPending(`submit:${key}`, false);
@@ -843,9 +855,9 @@ export const useWorkbenchStore = create<WorkbenchStore>()((set, get) => {
 
     /** `GET /api/sessions/{id}/progress` ⇒ thay nguyên `progress`; lỗi thì giữ bản đang có (UI-76). */
     refreshProgress: async () => {
-      const { session_id: sessionId, ui } = get();
-      if (!sessionId || ui.fixture) return;
-      if (get().is_offline_mode) {
+      const { session_id: sessionId } = get();
+      if (!sessionId) return;
+      if (isLocal()) {
         set({ progress: structuredClone(offlineProgress()) });
         return;
       }
@@ -942,12 +954,20 @@ export const useWorkbenchStore = create<WorkbenchStore>()((set, get) => {
       else deactivateOffline();
     },
 
-    setOfflinePersona: (p) =>
+    setOfflinePersona: (p) => {
+      // Đang Offline: `offline.ts` dựng lại hồ sơ và tiến độ theo persona mới (spec Mục 9), store lấy lại từ đó.
+      // Chưa Offline: chỉ nhớ lựa chọn, `runOfflineActivation` áp persona khi bật.
+      const offline = get().is_offline_mode;
+      if (offline) setOfflineRuntimePersona(p);
       set((s) => ({
         runs: {},
         active_node_id: null,
         ui: { ...s.ui, offline_persona: p },
-      })),
+        ...(offline
+          ? { profile: structuredClone(getOfflineProfile()), progress: structuredClone(offlineProgress()) }
+          : {}),
+      }));
+    },
 
     switchPersona: async (mode) => {
       if (get().is_offline_mode) {

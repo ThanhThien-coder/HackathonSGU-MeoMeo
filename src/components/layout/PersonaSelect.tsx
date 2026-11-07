@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { PERSONAS, type PersonaMode } from "@/contracts";
-import { getOfflineProfile, offlineProgress, setOfflinePersona as setOfflineRuntimePersona } from "@/lib/offline";
 import { useWorkbenchStore } from "@/store/workbench";
 
 const PERSONA_MODES = Object.keys(PERSONAS) as PersonaMode[];
@@ -25,13 +24,8 @@ export function PersonaSelect() {
 
   async function onChange(mode: PersonaMode) {
     if (offline) {
-      // Offline: dựng lại hồ sơ và tiến độ từ persona mới, bỏ run và bài đang mở; 0 request.
-      setOfflineRuntimePersona(mode);
+      // Offline: store dựng lại hồ sơ và tiến độ từ persona mới, bỏ run và bài đang mở; 0 request.
       setOfflinePersona(mode);
-      useWorkbenchStore.setState({
-        profile: structuredClone(getOfflineProfile()),
-        progress: structuredClone(offlineProgress()),
-      });
       return;
     }
     setPending(true);
