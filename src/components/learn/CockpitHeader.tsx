@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { CONFIG } from "@/contracts/config";
 import { AccountMenu } from "@/components/layout/AccountMenu";
+import { BrandMark } from "@/components/layout/BrandMark";
 import { ThemeToggle } from "@/components/layout/Navbar";
 import { PersonaSelect } from "@/components/layout/PersonaSelect";
 import { RepoOverviewModal, setOverviewOpen } from "@/components/learn/RepoOverviewModal";
@@ -80,11 +81,9 @@ export function CockpitHeader({
         <PaneIcon side="left" />
       </button>
 
-      <div className="brand-wrap inline-flex items-center gap-2 font-bold text-[14.5px] tracking-tight">
-        <span className="brand-icon inline-flex h-[22px] w-[22px] items-center justify-center rounded-[6px] bg-gradient-to-br from-[var(--accent)] to-[#6366f1] text-[11px] font-extrabold text-white">
-          S
-        </span>
-        <span className="max-lg:hidden">SimpliFey</span>
+      <div className="inline-flex items-center gap-2 text-[14.5px] font-bold tracking-tight">
+        <BrandMark className="size-[22px]" />
+        <span className="max-lg:sr-only">SimpliFey</span>
       </div>
 
       <div

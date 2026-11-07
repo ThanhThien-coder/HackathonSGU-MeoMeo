@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useSyncExternalStore } from "react";
+import { BrandMark } from "@/components/layout/BrandMark";
 import { NAV_EXTRA_LINKS } from "@/lib/nav";
 import { useWorkbenchStore } from "@/store/workbench";
 
@@ -67,7 +68,8 @@ export function Navbar() {
         aria-label="Menu chính"
         className="mx-auto flex max-w-6xl flex-wrap items-center gap-1 px-3 py-2 sm:px-4"
       >
-        <Link href="/" className="mr-2 font-bold text-text">
+        <Link href="/" className="mr-2 inline-flex items-center gap-2 font-bold tracking-tight text-text">
+          <BrandMark className="size-[22px]" />
           SimpliFey
         </Link>
         <Link href="/" className={LINK_CLASS}>

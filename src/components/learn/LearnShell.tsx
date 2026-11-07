@@ -11,6 +11,7 @@ import { LearnSidePanel } from "@/components/learn/LearnSidePanel";
 import { LessonGraphPanel } from "@/components/learn/LessonGraphPanel";
 import { Button } from "@/components/ui/common";
 import { EmptyState } from "@/components/ui/Page";
+import { LoadingAnimation } from "@/components/ui/LoadingAnimation";
 import { useWorkbenchStore } from "@/store/workbench";
 
 const COLUMN = "col min-w-0 rounded-xl bg-[var(--panel)] shadow-sm lg:min-h-0 lg:overflow-auto";
@@ -80,16 +81,20 @@ function NoSession({ sessionId }: { sessionId: string | null }) {
     );
   }
   return (
-    <Centered>
-      <p role="status" className="text-center text-[var(--muted)]">
-        {bootError && !ingesting ? bootError.message : "Đang mở phiên học…"}
-      </p>
-      <div className="text-center">
-        <Link href="/" className={HOME_LINK}>
-          Về trang chủ
-        </Link>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--bg)] p-4">
+      <div className="flex flex-col items-center gap-3">
+        <LoadingAnimation
+          size={180}
+          text="Đang tải bài học…"
+          subtext={bootError && !ingesting ? bootError.message : "Đang chuẩn bị buồng lái học tập"}
+        />
+        <div className="text-center mt-2">
+          <Link href="/" className={HOME_LINK}>
+            Về trang chủ
+          </Link>
+        </div>
       </div>
-    </Centered>
+    </div>
   );
 }
 
@@ -100,6 +105,16 @@ export function LearnShell() {
   const [leftOpen, setLeftOpen] = useState(true);
   const [rightOpen, setRightOpen] = useState(true);
   const [tourOpen, setTourOpen] = useState(false);
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    if (result) {
+      const timer = setTimeout(() => setReady(true), 350);
+      return () => clearTimeout(timer);
+    } else {
+      setReady(false);
+    }
+  }, [result]);
 
   // Phím tắt toàn cục: Ctrl+B (toggle cột trái), Ctrl+Alt+B (toggle cột phải)
   useEffect(() => {
@@ -148,6 +163,18 @@ export function LearnShell() {
   };
 
   if (!result) return <NoSession sessionId={sessionParam} />;
+
+  if (!ready) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--bg)]">
+        <LoadingAnimation
+          size={180}
+          text="Đang tải bài học…"
+          subtext="Đang chuẩn bị buồng lái học tập"
+        />
+      </div>
+    );
+  }
 
   // Tính tỷ lệ 3 cột linh hoạt theo prototype.html
   let cols = "minmax(0, 24fr) minmax(0, 45fr) minmax(0, 31fr)";

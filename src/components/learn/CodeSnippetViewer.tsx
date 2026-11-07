@@ -8,12 +8,17 @@ import { SelectionPopover } from "@/components/code/SelectionPopover";
 import { buildFileTabs, findStep, type CodeSelection } from "@/components/code/slice-model";
 import { RepoOverview } from "@/components/learn/RepoOverview";
 import { explanationKey } from "@/lib/selection-explain";
+import { LoadingAnimation } from "@/components/ui/LoadingAnimation";
 import { useWorkbenchStore } from "@/store/workbench";
 
 // Monaco chỉ tải khi vào /learn và mở một bài (chunk riêng, không SSR).
 const MonacoPane = dynamic(() => import("@/components/code/MonacoPane"), {
   ssr: false,
-  loading: () => <p className="p-4 text-sm text-[var(--muted)]">Đang tải khung code…</p>,
+  loading: () => (
+    <div className="flex h-full min-h-[300px] w-full items-center justify-center bg-[var(--code-bg)]">
+      <LoadingAnimation size={150} text="Đang tải khung code…" />
+    </div>
+  ),
 });
 
 const BASE_FONT_SIZE = 13;

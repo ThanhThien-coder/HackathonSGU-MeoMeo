@@ -19,6 +19,7 @@ import { RunSummary } from "@/components/learn/RunSummary";
 import { SkipConfirmDialog } from "@/components/learn/SkipConfirmDialog";
 import { PREPARE_QUESTIONS_HINT } from "@/components/learn/waiting-label";
 import { Button, PlainText } from "@/components/ui/common";
+import { LoadingAnimation } from "@/components/ui/LoadingAnimation";
 import { useWorkbenchStore } from "@/store/workbench";
 
 const NO_ENTRIES: AttemptEntry[] = [];
@@ -80,10 +81,13 @@ export function FeynmanQuestionSection() {
   if (!run) {
     if (preparing) {
       return (
-        <p role="status" className="m-0 p-4 text-sm text-[var(--muted)]">
-          Đang chuẩn bị câu hỏi…
-          <span className="mt-1 block text-xs text-[var(--faint)]">{PREPARE_QUESTIONS_HINT}</span>
-        </p>
+        <div className="flex flex-col items-center justify-center p-8">
+          <LoadingAnimation
+            size={160}
+            text="Đang chuẩn bị câu hỏi phản biện…"
+            subtext={PREPARE_QUESTIONS_HINT}
+          />
+        </div>
       );
     }
     if ((status === "COMPLETED" || status === "FAILED") && nodeState?.last_run) return <RunReadOnly nodeId={nodeId} />;
