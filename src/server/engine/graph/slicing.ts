@@ -561,6 +561,7 @@ function layerOf(
   fnKey: string,
   filePath: string,
   entry: EntryPoint,
+  keptKeys: Set<string>,
   ctx: EngineContext,
   techStack: string[]
 ): ArchitecturalLayer {
@@ -574,8 +575,9 @@ function layerOf(
     return "DATA_ACCESS";
   }
   const hasSink = (ctx.external_calls.get(fnKey) ?? []).some((c) => isDataSinkCall(c, techStack));
-  const callsDataAccess = (ctx.call_sites.get(fnKey) ?? []).some((site) =>
-    isDataAccessFile(site.callee.split("#")[0] ?? "")
+  // Chỉ xét hàm là bước của bài: `new HttpException()` ở thư mục models không làm đổi tầng.
+  const callsDataAccess = (ctx.call_sites.get(fnKey) ?? []).some(
+    (site) => keptKeys.has(site.callee) && isDataAccessFile(site.callee.split("#")[0] ?? "")
   );
   return hasSink && !callsDataAccess ? "DATA_ACCESS" : "BUSINESS_LOGIC";
 }
@@ -629,7 +631,7 @@ function draftStep(
 
   return {
     reached,
-    layer: layerOf(reached.key, filePath, entry, ctx, techStack),
+    layer: layerOf(reached.key, filePath, entry, keptKeys, ctx, techStack),
     filePath,
     functionName: isAnonymous && entry.binding ? entry.binding.display_name : keyName(reached.key),
     lines,
@@ -725,7 +727,12 @@ export function buildSlice(
     const drafts: DraftStep[] = [];
     for (const r of reached) {
       const draft = draftStep(r, keptKeys, entry, criterion, ctx, techStack);
-      if (draft) {
+      // Chỉ còn chữ ký và dòng đóng (constructor gán field) thì người học không thấy gì.
+      const isEmptyBody =
+        draft !== null &&
+        draft.lineMap.filter((row) => row > 0).length <= draft.signatureCount + 1 &&
+        draft.lineMap.includes(0);
+      if (draft && (!isEmptyBody || r.key === entry.key || middlewares.has(r.key))) {
         drafts.push(draft);
       }
     }
