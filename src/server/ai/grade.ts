@@ -237,7 +237,7 @@ export function staticHint(
   const n = ["3", "2", "4", "5"].find((x) => !new RegExp(`(^|\\D)${x}(\\D|$)`).test(secret)) ?? "vài";
   const QUESTIONS: Record<GradeContext["focus"], string> = {
     WEAKNESS: `Giả sử chỉ có ${n} phần tử đi qua ${where}. Mỗi phần tử khiến code gọi ra ngoài (cơ sở dữ liệu, hàm khác) mấy lần, và tổng cộng là bao nhiêu lần?`,
-    FLOW: `Giả sử chỉ có ${n} phần tử. Hãy lần theo ${where}: dữ liệu vào từ đâu, và kết quả được trả cho bước nào?`,
+    FLOW: `Thử với 1 đầu vào cụ thể, ví dụ dữ liệu gửi lên bị thiếu 1 trường. Lần theo ${where}: dòng nào nhận dữ liệu đó đầu tiên, và sau dòng đó code còn chạy tiếp không?`,
     ARCHITECTURE: `Hãy xem ${where}: phần việc nào nó tự làm, và phần nào nó gọi hàm khác làm thay?`,
     CHANGE: `Hãy xem ${where}: nếu yêu cầu trong câu hỏi thay đổi, dòng nào ở đây phải sửa, và dòng nào giữ nguyên?`,
   };
@@ -247,6 +247,31 @@ export function staticHint(
     type: "CODE_POINTER",
     question,
     step_index: s,
+  };
+}
+
+// Gợi ý DẠY dạng tĩnh (người học bí từ lượt 2, AI không cho gợi ý dạy hợp lệ): nói thẳng ý bắt buộc đầu tiên còn thiếu,
+// để người học tự nói tiếp phần còn lại. Cố ý mở 1 ý: đỡ hơn để người học bí tới hết lượt.
+export function staticTeachHint(
+  g: GradingRaw,
+  t: GradeContext,
+  answer: string,
+  aiStep?: number | null,
+): FollowUp {
+  const points = t.must_have_points ?? [];
+  const flags = coveredFlags(g, points, answer);
+  const missing = points.map((p, i) => ({ p, i })).filter(({ i }) => !flags[i]);
+  const first = missing[0]?.p ?? points[0] ?? "";
+  const point = first.trim().replace(/[.。]+$/u, "");
+  const tail =
+    missing.length > 1
+      ? "Từ điều đó, bạn thử giải thích phần còn lại của câu hỏi bằng lời của mình."
+      : "Bạn thử giải thích lại bằng lời của mình: vì sao lại như vậy, và nó ảnh hưởng gì tới các bước sau?";
+  const step = staticHint("CODE_POINTER", t, aiStep).step_index;
+  return {
+    type: "CODE_POINTER",
+    question: point.length > 0 ? `Gợi ý: ${point}. ${tail}` : tail,
+    step_index: step,
   };
 }
 
@@ -264,6 +289,9 @@ export function staticFeedback(
   return "Bạn đã dùng hết số lượt nộp. Hãy xem đáp án mẫu bên dưới để đối chiếu với câu trả lời của mình.";
 }
 
+const isGiveUp = (g: GradingRaw): boolean =>
+  (g.intent === "OFF_TOPIC" || g.intent === "GIVE_UP") && g.misconception !== INJECTION_MARKER;
+
 export function decideFollowUp(
   g: GradingRaw,
   attempt: number,
@@ -276,15 +304,19 @@ export function decideFollowUp(
   if (attempt >= maxAttempts) return null;
 
   // K4: OFF_TOPIC và GIVE_UP (không phải chèn lệnh) chưa phải lượt cuối ⇒ luôn có gợi ý CODE_POINTER.
-  // Câu mồi của AI qua cổng gác thì dùng (cụ thể hơn); không thì dùng mẫu tĩnh.
-  if (g.intent === "OFF_TOPIC" || g.intent === "GIVE_UP") {
+  // Thang gợi ý khi bí: lượt 1 câu mồi, từ lượt 2 gợi ý dạy (giveUpHintRule). Gợi ý của AI qua cổng gác thì dùng;
+  // không thì mẫu tĩnh: lượt 1 câu mồi, từ lượt 2 nói thẳng ý bắt buộc đầu tiên còn thiếu.
+  if (isGiveUp(g)) {
     const aiOk =
       g.follow_up_type === "CODE_POINTER" &&
       g.follow_up_question !== null &&
       verifyFollowUp(g, t, answer, isPassed).follow_up_ok;
-    return aiOk
-      ? { type: "CODE_POINTER", question: g.follow_up_question!, step_index: g.follow_up_step_index }
-      : staticHint("CODE_POINTER", t, g.follow_up_step_index);
+    if (aiOk) {
+      return { type: "CODE_POINTER", question: g.follow_up_question!, step_index: g.follow_up_step_index };
+    }
+    return attempt <= 1
+      ? staticHint("CODE_POINTER", t, g.follow_up_step_index)
+      : staticTeachHint(g, t, answer, g.follow_up_step_index);
   }
 
   const expected = expectedFollowUpType(attempt, maxAttempts, t.tier);
@@ -356,7 +388,11 @@ export async function gradeWithAI(
   if (!isPassed && attempt < maxAttempts && !check.follow_up_ok) {
     issues.push({ code: "G1" });
     const expected = expectedFollowUpType(attempt, maxAttempts, t.tier);
-    if (expected) {
+    if (isGiveUp(g)) {
+      // Để decideFollowUp chọn mẫu tĩnh theo lượt (câu mồi hoặc gợi ý dạy), không thay sẵn ở đây.
+      g.follow_up_type = null;
+      g.follow_up_question = null;
+    } else if (expected) {
       const hint = staticHint(expected, t, g.follow_up_step_index);
       g.follow_up_type = hint.type;
       g.follow_up_question = hint.question;

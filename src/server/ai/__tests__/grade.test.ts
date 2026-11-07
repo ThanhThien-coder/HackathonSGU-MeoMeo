@@ -17,10 +17,11 @@ import {
   normalizeGrading,
   staticFeedback,
   staticHint,
+  staticTeachHint,
   toEvaluateResponse,
   type EvaluateResponseExtra,
 } from "../grade";
-import { parseGradingRaw } from "../prompts/grade";
+import { giveUpHintRule, gradeRequest, parseGradingRaw } from "../prompts/grade";
 import { callLLMWithRetry } from "../gemini";
 import { logGuardBlocked } from "@/server/log";
 import fixtureGradingN3Q1 from "../__fixtures__/grading-n3-q1.json";
@@ -487,6 +488,78 @@ describe("server/ai/grade", () => {
       expect(leak?.question).not.toBe(leakQ);
     });
 
+    it("[K4] Thang gợi ý khi bí: lượt 1 câu mồi tĩnh, lượt 2 gợi ý dạy nói thẳng ý đầu tiên còn thiếu", () => {
+      const t = createMockGradeContext();
+      const g: GradingRaw = {
+        core_accuracy: 0, simplicity: 0, intent: "GIVE_UP",
+        points: [{ index: 1, covered: false, quote: "" }, { index: 2, covered: false, quote: "" }],
+        misconception: "", follow_up_question: null, follow_up_type: null, follow_up_step_index: null,
+        feedback: "Chưa đạt.", detected_jargons: [],
+      };
+      const l1 = decideFollowUp(g, 1, 3, false, t, "không biết luôn");
+      const l2 = decideFollowUp(g, 2, 3, false, t, "cũng chưa biết luôn");
+      expect(l1?.type).toBe("CODE_POINTER");
+      expect(l1?.question).not.toContain(t.must_have_points[0].replace(/\.$/, ""));
+      expect(l2?.type).toBe("CODE_POINTER");
+      expect(l2?.question).toContain(`Gợi ý: ${t.must_have_points[0]}`);
+      expect(l2?.question).not.toBe(l1?.question);
+    });
+
+    it("[K4] Gợi ý dạy tĩnh nói ý ĐẦU TIÊN CÒN THIẾU (bỏ qua ý đã trúng)", () => {
+      const t = createMockGradeContext();
+      const answer = "Mỗi sản phẩm tốn thêm 1 truy vấn để lấy loại hàng";
+      const g: GradingRaw = {
+        core_accuracy: 40, simplicity: 50, intent: "ANSWER",
+        points: [{ index: 1, covered: true, quote: answer }, { index: 2, covered: false, quote: "" }],
+        misconception: "", follow_up_question: null, follow_up_type: null, follow_up_step_index: null,
+        feedback: "Chưa đạt.", detected_jargons: [],
+      };
+      const h = staticTeachHint(g, t, answer, 2);
+      expect(h.question).toContain(t.must_have_points[1]);
+      expect(h.question).not.toContain(t.must_have_points[0]);
+      expect(h.step_index).toBe(2);
+    });
+
+    it("[K4] Lượt 2 bí, AI cho gợi ý dạy qua cổng gác ⇒ dùng câu của AI", () => {
+      const t = createMockGradeContext();
+      const aiQ = "`categoryRepo.findById` mỗi lần gọi là một lần hỏi cơ sở dữ liệu. Vậy nếu nó nằm trong vòng lặp, số lần hỏi có đổi theo số sản phẩm không?";
+      const g: GradingRaw = {
+        core_accuracy: 0, simplicity: 0, intent: "GIVE_UP",
+        points: [{ index: 1, covered: false, quote: "" }, { index: 2, covered: false, quote: "" }],
+        misconception: "", follow_up_question: aiQ, follow_up_type: "CODE_POINTER", follow_up_step_index: 2,
+        feedback: "Chưa đạt.", detected_jargons: [],
+      };
+      expect(decideFollowUp(g, 2, 3, false, t, "chịu")?.question).toBe(aiQ);
+    });
+
+    it("[K4] gradeWithAI: bí ở lượt 2 và gợi ý AI trượt cổng gác ⇒ ra gợi ý dạy tĩnh, không phải câu chỉ chỗ", async () => {
+      const t = createMockGradeContext();
+      const secretNum = (t.reference_answer.match(/\d+/) ?? ["201"])[0];
+      vi.mocked(callLLMWithRetry).mockResolvedValueOnce({
+        ok: true,
+        value: {
+          core_accuracy: 0, simplicity: 0, intent: "GIVE_UP",
+          points: [{ index: 1, covered: false, quote: "" }, { index: 2, covered: false, quote: "" }],
+          misconception: "", follow_up_question: `Có phải ${secretNum} truy vấn không?`,
+          follow_up_type: "CODE_POINTER", follow_up_step_index: 2,
+          feedback: "Không sao, mình cùng xem lại nhé.", detected_jargons: [],
+        } as GradingRaw,
+        tokens_in: 100, tokens_out: 50, model: "gemini-3.8-flash", fell_back: false,
+      });
+      const g = await gradeWithAI(t, "chưa biết luôn", 2, 3, createMockSession());
+      const fu = decideFollowUp(g, 2, 3, false, t, "chưa biết luôn");
+      expect(fu?.question).toContain(`Gợi ý: ${t.must_have_points[0]}`);
+    });
+
+    it("[K4] Prompt chấm có luật bí theo lượt: lượt 1 CÂU HỎI MỒI, lượt 2 GỢI Ý DẠY, lượt cuối không có", () => {
+      expect(giveUpHintRule(1, 3)).toContain("CÂU HỎI MỒI");
+      expect(giveUpHintRule(2, 3)).toContain("GỢI Ý DẠY");
+      expect(giveUpHintRule(3, 3)).toBeNull();
+      const t = createMockGradeContext();
+      const req = gradeRequest(t, "không biết", 2, 3, createMockSession());
+      expect(JSON.stringify(req)).toContain("GỢI Ý DẠY");
+    });
+
     it("[K4] GIVE_UP lượt cuối ⇒ không follow_up (null)", () => {
       const t = createMockGradeContext();
       const g: GradingRaw = {
@@ -688,7 +761,8 @@ describe("server/ai/grade", () => {
       expect(w.question).toContain("bước 2");
       expect(w.question).toContain("mấy lần");
       expect(w.question).not.toContain("điều gì xảy ra ở đây");
-      expect(staticHint("CODE_POINTER", { ...base, focus: "FLOW" }, 2).question).toContain("lần theo");
+      expect(staticHint("CODE_POINTER", { ...base, focus: "FLOW" }, 2).question).toContain("1 đầu vào cụ thể");
+      expect(staticHint("CODE_POINTER", { ...base, focus: "FLOW" }, 2).question).not.toContain("phần tử");
       expect(staticHint("CODE_POINTER", { ...base, focus: "ARCHITECTURE" }, 2).question).toContain("gọi hàm khác");
       expect(staticHint("CODE_POINTER", { ...base, focus: "CHANGE" }, 2).question).toContain("phải sửa");
     });

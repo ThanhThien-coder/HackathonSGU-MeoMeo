@@ -33,10 +33,19 @@ export const HINT_RULE: Record<FollowUpType | "NONE", string> = {
   CONCEPT:
     `Nếu chưa đạt: follow_up_type = "CONCEPT"; follow_up_step_index = null; follow_up_question = 1 câu hỏi gợi mở về KHÁI NIỆM người học đang hiểu sai hoặc còn thiếu. KHÔNG chỉ vị trí trong code: không nêu bước, file, tên hàm, tên biến, số dòng.`,
   CODE_POINTER:
-    `Nếu chưa đạt: follow_up_type = "CODE_POINTER"; chọn 1 bước trong <steps> liên quan trực tiếp tới ý bắt buộc đầu tiên còn thiếu, ghi số bước vào follow_up_step_index; follow_up_question = 1 CÂU HỎI MỒI tối đa 30 từ, gồm: (1) 1 tình huống nhỏ cụ thể với 2–3 phần tử (vd "Giả sử chỉ có 3 sản phẩm."); (2) chỉ vào hàm của bước đó, hoặc 1 lời gọi bên trong nó có nêu trong <reference_answer>; (3) hỏi đúng 1 việc người học trả lời được bằng cách ĐẾM hoặc LẦN THEO ở bước đó (dòng đó chạy mấy lần, hàm trả về gì, dữ liệu đi tiếp đến đâu). Câu trả lời của câu mồi là bậc thang dẫn tới ý còn thiếu: KHÔNG nói thẳng ý đó, KHÔNG dùng con số có trong <reference_answer>, KHÔNG hỏi chung chung kiểu "điều gì xảy ra ở đây". Nếu có <previous_answer>: hỏi tiếp hệ quả của điều người học vừa nêu (vd mỗi lần như vậy tốn gì, khi số phần tử tăng thì sao).`,
+    `Nếu chưa đạt: follow_up_type = "CODE_POINTER"; chọn 1 bước trong <steps> liên quan trực tiếp tới ý bắt buộc đầu tiên còn thiếu, ghi số bước vào follow_up_step_index; follow_up_question = 1 CÂU HỎI MỒI tối đa 30 từ, gồm: (1) 1 tình huống nhỏ cụ thể: 1 đầu vào cụ thể (vd "Giả sử gửi lên body rỗng {}.") hoặc 2–3 phần tử (vd "Giả sử chỉ có 3 sản phẩm."); (2) chỉ vào hàm của bước đó, hoặc 1 lời gọi bên trong nó có nêu trong <reference_answer>; (3) hỏi đúng 1 việc người học trả lời được bằng cách ĐẾM hoặc LẦN THEO ở bước đó (dòng đó chạy mấy lần, hàm trả về gì, dữ liệu đi tiếp đến đâu). Câu trả lời của câu mồi là bậc thang dẫn tới ý còn thiếu: KHÔNG nói thẳng ý đó, KHÔNG dùng con số có trong <reference_answer>, KHÔNG hỏi chung chung kiểu "điều gì xảy ra ở đây". Nếu có <previous_answer>: hỏi tiếp hệ quả của điều người học vừa nêu (vd mỗi lần như vậy tốn gì, khi số phần tử tăng thì sao).`,
   NONE:
     `Đây là lượt cuối: follow_up_question = null, follow_up_type = null, follow_up_step_index = null.`,
 };
+
+// Thang gợi ý khi người học bí (GIVE_UP / OFF_TOPIC không phải chèn lệnh): lượt 1 câu mồi ⇒ từ lượt 2 dạy ⇒ lượt cuối mở đáp án.
+export function giveUpHintRule(attempt: number, maxAttempts: number): string | null {
+  if (attempt >= maxAttempts) return null;
+  if (attempt <= 1) {
+    return `NẾU intent = "GIVE_UP" hoặc "OFF_TOPIC": bỏ qua luật gợi ý ở trên; follow_up_type = "CODE_POINTER"; viết CÂU HỎI MỒI đúng như sau. ${HINT_RULE.CODE_POINTER.replace(/^Nếu chưa đạt: follow_up_type = "CODE_POINTER"; /, "")}`;
+  }
+  return `NẾU intent = "GIVE_UP" hoặc "OFF_TOPIC": người học đã bí, câu hỏi mồi không còn đủ ⇒ bỏ qua luật gợi ý ở trên và viết GỢI Ý DẠY: follow_up_type = "CODE_POINTER"; chọn 1 bước trong <steps> liên quan trực tiếp tới ý bắt buộc đầu tiên còn thiếu, ghi số bước vào follow_up_step_index; follow_up_question tối đa 45 từ, đúng 2 câu: (1) 1 câu KHẲNG ĐỊNH giải thích cách 1 lời gọi hoặc hàm ở bước đó hoạt động nói chung (nó nhận gì, trả gì, gặp đầu vào sai hoặc thiếu thì làm gì) — chỉ dùng tên có trong <steps> hoặc <reference_answer>; (2) 1 câu hỏi có/không áp điều vừa giải thích vào 1 tình huống cụ thể của bài. KHÔNG chép nguyên văn ý bắt buộc, KHÔNG nêu kết luận cuối cùng của đáp án, KHÔNG dùng con số có trong <reference_answer>.`;
+}
 
 export const gradeSchema = (n: number): Schema =>
   obj({
@@ -166,7 +175,7 @@ misconception: 1 câu, chỉ hệ thống đọc: người học hiểu sai ho�
 
 GỢI Ý (follow_up_question, follow_up_type, follow_up_step_index)
 - Đạt (đủ mọi ý và core_accuracy ≥ ${CONFIG.PASS_CORE_ACCURACY}) ⇒ cả 3 trường null.
-- Chưa đạt ⇒ làm đúng <hint_rule>. Gợi ý là 1 câu hỏi dẫn người học tự tìm ra ý còn thiếu (dựa trên misconception); KHÔNG nói đáp án, con số của đáp án hay cách sửa.
+- Chưa đạt ⇒ làm đúng <hint_rule>. Gợi ý (trừ GỢI Ý DẠY trong <hint_rule>) là 1 câu hỏi dẫn người học tự tìm ra ý còn thiếu (dựa trên misconception); KHÔNG nói đáp án, con số của đáp án hay cách sửa.
 
 feedback (người học đọc, tối đa ${CONFIG.FEEDBACK_MAX_SENTENCES} câu)
 - Đạt: khen đúng điểm người học làm tốt.
@@ -193,7 +202,11 @@ export function gradeRequest(
 ): LlmRequest<GradingRaw> {
   const hintRuleKey =
     expectedFollowUpType(attempt, maxAttempts, t.tier) ?? "NONE";
-  const hintRuleText = HINT_RULE[hintRuleKey];
+  const giveUpRule = giveUpHintRule(attempt, maxAttempts);
+  const hintRuleText = giveUpRule
+    ? `${HINT_RULE[hintRuleKey]}
+${giveUpRule}`
+    : HINT_RULE[hintRuleKey];
 
   const targetSteps = (t.steps ?? []).filter((s) =>
     (t.step_indices ?? []).includes(s.step_index),
