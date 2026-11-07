@@ -1,1 +1,266 @@
 @import "tailwindcss";
+
+/*
+ * Token giao diện theo docs/spec/30_UI.md Mục 11 (D-67, D-79, D-89).
+ * Riêng màu nhấn --accent / --on-accent theo prototype (Q-11).
+ * Mặc định tối; theme-script.ts gán data-theme trước khi vẽ nên không nháy màu.
+ */
+:root,
+html[data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg: #09080f;
+  --panel: #12101a;
+  --panel-2: #0d0b14;
+  --text: #eeecf6;
+  --muted: #a5a0bb;
+  --subtle: #807b97;
+
+  --amber: #f5b942;
+  --green: #34d399;
+  --red: #fb6185;
+  --locked: #6a6580;
+  --violet: #b69cff;
+  --blue: #6ea8ff;
+
+  --accent: #5aa9ff;
+  --on-accent: #06121f;
+  --accent-2: #e04fa0;
+
+  --on-amber: #1a1204;
+  --ink: #ffffff;
+
+  --line: #272339;
+  --line-strong: #3a3552;
+  --btn-bg: #1b1827;
+  --btn-hover: #252133;
+
+  --st-done-bg: rgba(52, 211, 153, 0.12);
+  --st-done-border: rgba(52, 211, 153, 0.45);
+  --st-done-fg: #34d399;
+  --st-ready-bg: rgba(245, 185, 66, 0.12);
+  --st-ready-border: rgba(245, 185, 66, 0.45);
+  --st-ready-fg: #f5b942;
+  --st-fail-bg: rgba(251, 97, 133, 0.12);
+  --st-fail-border: rgba(251, 97, 133, 0.45);
+  --st-fail-fg: #fb6185;
+  --st-lock-bg: rgba(106, 101, 128, 0.14);
+  --st-lock-border: rgba(106, 101, 128, 0.5);
+  --st-lock-fg: #a5a0bb;
+
+  --hl-step: rgba(90, 169, 255, 0.16);
+  --hl-focus: rgba(245, 185, 66, 0.26);
+  --hl-good: rgba(52, 211, 153, 0.22);
+  --hl-bad: rgba(251, 97, 133, 0.24);
+
+  --shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  --overlay: rgba(3, 3, 8, 0.66);
+  --glass-bg: rgba(18, 16, 26, 0.82);
+}
+
+html[data-theme="light"] {
+  color-scheme: light;
+
+  --bg: #f8fafc;
+  --panel: #ffffff;
+  --panel-2: #f1f5f9;
+  --text: #0f172a;
+  --muted: #475569;
+  --subtle: #64748b;
+
+  --amber: #b45309;
+  --green: #15803d;
+  --red: #b91c1c;
+  --locked: #64748b;
+  --violet: #7c3aed;
+  --blue: #1d4ed8;
+
+  --accent: #1769e0;
+  --on-accent: #ffffff;
+  --accent-2: #4f46e5;
+
+  --on-amber: #ffffff;
+  --ink: #0f172a;
+
+  --line: #e2e8f0;
+  --line-strong: #cbd5e1;
+  --btn-bg: #ffffff;
+  --btn-hover: #f1f5f9;
+
+  --st-done-bg: #dcfce7;
+  --st-done-border: #86efac;
+  --st-done-fg: #15803d;
+  --st-ready-bg: #fef3c7;
+  --st-ready-border: #fcd34d;
+  --st-ready-fg: #92400e;
+  --st-fail-bg: #fee2e2;
+  --st-fail-border: #fca5a5;
+  --st-fail-fg: #b91c1c;
+  --st-lock-bg: #f1f5f9;
+  --st-lock-border: #cbd5e1;
+  --st-lock-fg: #475569;
+
+  --hl-step: rgba(23, 105, 224, 0.12);
+  --hl-focus: rgba(180, 83, 9, 0.2);
+  --hl-good: rgba(21, 128, 61, 0.16);
+  --hl-bad: rgba(185, 28, 28, 0.15);
+
+  --shadow: 0 10px 30px rgba(15, 23, 42, 0.16);
+  --overlay: rgba(15, 23, 42, 0.4);
+  --glass-bg: rgba(255, 255, 255, 0.85);
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-panel: var(--panel);
+  --color-panel-2: var(--panel-2);
+  --color-text: var(--text);
+  --color-muted: var(--muted);
+  --color-subtle: var(--subtle);
+
+  --color-amber: var(--amber);
+  --color-green: var(--green);
+  --color-red: var(--red);
+  --color-locked: var(--locked);
+  --color-violet: var(--violet);
+  --color-blue: var(--blue);
+
+  --color-accent: var(--accent);
+  --color-on-accent: var(--on-accent);
+  --color-accent-2: var(--accent-2);
+  --color-on-amber: var(--on-amber);
+  --color-ink: var(--ink);
+
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-btn: var(--btn-bg);
+  --color-btn-hover: var(--btn-hover);
+  --color-overlay: var(--overlay);
+
+  --color-st-done-bg: var(--st-done-bg);
+  --color-st-done-border: var(--st-done-border);
+  --color-st-done-fg: var(--st-done-fg);
+  --color-st-ready-bg: var(--st-ready-bg);
+  --color-st-ready-border: var(--st-ready-border);
+  --color-st-ready-fg: var(--st-ready-fg);
+  --color-st-fail-bg: var(--st-fail-bg);
+  --color-st-fail-border: var(--st-fail-border);
+  --color-st-fail-fg: var(--st-fail-fg);
+  --color-st-lock-bg: var(--st-lock-bg);
+  --color-st-lock-border: var(--st-lock-border);
+  --color-st-lock-fg: var(--st-lock-fg);
+
+  --color-hl-step: var(--hl-step);
+  --color-hl-focus: var(--hl-focus);
+  --color-hl-good: var(--hl-good);
+  --color-hl-bad: var(--hl-bad);
+
+  --shadow-pop: var(--shadow);
+
+  --font-sans:
+    var(--font-jakarta), "Segoe UI", system-ui, -apple-system, Roboto, Arial,
+    sans-serif;
+  --font-mono:
+    var(--font-jetbrains), Consolas, "Cascadia Mono", "SFMono-Regular", Menlo,
+    monospace;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.55;
+  transition:
+    background-color 0.2s,
+    color 0.2s;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+code {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+  background: var(--panel-2);
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+
+/* Kính mờ cho toast, popover, hộp thoại; cột và thẻ giữ nền đặc. */
+.glass {
+  background: var(--glass-bg);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+}
+
+@keyframes sf-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes sf-toast-in {
+  from {
+    opacity: 0;
+    transform: translateX(16px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.sf-fade-in {
+  animation: sf-fade-in 0.18s ease-out both;
+}
+
+.sf-toast-in {
+  animation: sf-toast-in 0.2s ease-out both;
+}
+
+/* Giảm chuyển động: tắt hết, chỉ đổi màu. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+}
