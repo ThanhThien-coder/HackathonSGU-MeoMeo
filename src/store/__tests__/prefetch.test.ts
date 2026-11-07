@@ -85,6 +85,7 @@ let calls: Call[];
 
 const tick = () => new Promise((r) => setTimeout(r, 0));
 const analyzedIds = () => analyze.mock.calls.map((c) => c[1]);
+const enrichedIds = () => enrich.mock.calls.map((c) => c[1]);
 
 beforeEach(() => {
   calls = [];
@@ -131,5 +132,86 @@ describe("tính trước sau khi quét repo", () => {
     await useWorkbenchStore.getState().ingest({ repo_url: "https://github.com/a/b" });
     await tick();
     expect(analyze).not.toHaveBeenCalled();
+  });
+});
+
+describe("tính trước câu hỏi sau khi phân tích xong", () => {
+  it("analyze-node xong ⇒ đúng 1 lời gọi enrich-node (LEARN) cho bài đó", async () => {
+    const sessionId = await ingestOk();
+    calls.find((c) => c.nodeId === "n1")?.resolve();
+    await tick();
+
+    expect(enrichedIds()).toEqual(["n1"]);
+    expect(enrich).toHaveBeenCalledWith(sessionId, "n1", "LEARN");
+    expect(useWorkbenchStore.getState().runs.n1?.run_id).toBe("run-n1");
+    expect(useWorkbenchStore.getState().ui.pending["enrich:n1"]).toBeUndefined();
+  });
+
+  it("bài LOCKED (node_state trả về) ⇒ 0 lời gọi enrich-node", async () => {
+    analyze.mockImplementation((_s, nodeId) => Promise.resolve(analyzeResponse(nodeId, "LOCKED")));
+    await ingestOk();
+    expect(analyzedIds().length).toBeGreaterThan(0);
+    expect(enrich).not.toHaveBeenCalled();
+  });
+
+  it("đang có khóa pending enrich:{id} ⇒ không gọi trùng", async () => {
+    await ingestOk();
+    useWorkbenchStore.setState((s) => ({ ui: { ...s.ui, pending: { "enrich:n1": true } } }));
+    calls.find((c) => c.nodeId === "n1")?.resolve();
+    await tick();
+    expect(enrich).not.toHaveBeenCalled();
+  });
+
+  it("lỗi enrich ngầm im lặng: không đặt submit_error, không đổi câu đang mở của bài khác", async () => {
+    enrich.mockResolvedValue({ ok: false, code: "ERR_AI_UNAVAILABLE", message: "lỗi", retryable: true });
+    await ingestOk();
+    useWorkbenchStore.setState({ active_node_id: "n2", active_question_index: 2 });
+    calls.find((c) => c.nodeId === "n1")?.resolve();
+    await tick();
+
+    const s = useWorkbenchStore.getState();
+    expect(enrichedIds()).toEqual(["n1"]);
+    expect(s.ui.submit_error).toBeNull();
+    expect(s.runs.n1).toBeUndefined();
+    expect(s.active_question_index).toBe(2);
+    expect(s.ui.pending["enrich:n1"]).toBeUndefined();
+  });
+
+  it("enrich ngầm thành công cho bài khác không đổi câu đang mở", async () => {
+    await ingestOk();
+    useWorkbenchStore.setState({ active_node_id: "n2", active_question_index: 2 });
+    calls.find((c) => c.nodeId === "n1")?.resolve();
+    await tick();
+
+    const s = useWorkbenchStore.getState();
+    expect(s.runs.n1).toBeDefined();
+    expect(s.active_node_id).toBe("n2");
+    expect(s.active_question_index).toBe(2);
+  });
+
+  it("enrich ngầm hết hạn mức ⇒ dừng, không đặt submit_error", async () => {
+    enrich.mockResolvedValue({ ok: false, code: "ERR_TOKEN_QUOTA_EXCEEDED", message: "hết", retryable: false });
+    await ingestOk();
+    calls.find((c) => c.nodeId === "n1")?.resolve();
+    await tick();
+    const s = useWorkbenchStore.getState();
+    expect(s.ui.quota_stopped).toBe(true);
+    expect(s.ui.submit_error).toBeNull();
+  });
+
+  it("Offline bật trong lúc đang phân tích ⇒ không gọi enrich-node", async () => {
+    await ingestOk();
+    useWorkbenchStore.setState({ is_offline_mode: true });
+    calls.find((c) => c.nodeId === "n1")?.resolve();
+    await tick();
+    expect(enrich).not.toHaveBeenCalled();
+  });
+
+  it("phiên đổi trong lúc phân tích ⇒ bỏ việc, không gọi enrich-node", async () => {
+    await ingestOk();
+    useWorkbenchStore.setState({ session_id: "phien-khac" });
+    calls.find((c) => c.nodeId === "n1")?.resolve();
+    await tick();
+    expect(enrich).not.toHaveBeenCalled();
   });
 });

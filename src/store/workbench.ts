@@ -480,6 +480,7 @@ export const useWorkbenchStore = create<WorkbenchStore>()((set, get) => {
    * Tính trước (PH-16): đưa các bài đang mở khóa (`AVAILABLE`) vào hàng phân tích mà không chờ người dùng bấm.
    * Chỉ bài `AVAILABLE` (bài khóa không tốn token). Offline / `?fixture=1` / hết hạn mức / phiên đã đổi ⇒ 0 việc.
    * Chỉ thêm vào cuối hàng, không đụng việc người dùng đã yêu cầu; `requestAnalysis` vẫn chuyển ưu tiên như cũ.
+   * Phân tích xong thì `runAnalysis` tự tính trước câu hỏi; bài đã có phân tích sẵn thì tính trước câu hỏi ngay.
    */
   const prefetchNodes = (sessionId: string, nodeIds: string[]) => {
     if (!sameSession(sessionId) || isLocal() || get().ui.quota_stopped) return;
@@ -488,7 +489,12 @@ export const useWorkbenchStore = create<WorkbenchStore>()((set, get) => {
     const added: string[] = [];
     for (const nodeId of nodeIds) {
       if (progress?.nodes[nodeId]?.status !== "AVAILABLE") continue;
-      if (analyses[nodeId] !== undefined) continue; // đã có kết quả, đang chờ hoặc đã lỗi (người dùng bấm "Thử lại")
+      const own = analyses[nodeId];
+      if (own !== undefined) {
+        // Đã có bản phân tích ⇒ chỉ thiếu câu hỏi. "PENDING" (runAnalysis sẽ tự gọi) hoặc "FAILED" (chờ "Thử lại") ⇒ bỏ.
+        if (own !== "PENDING" && own !== "FAILED") void fetchRun(nodeId, false, true);
+        continue;
+      }
       const key = analysisKey({ sessionId, nodeId });
       if (queued.has(key) || analysisRunning.has(key)) continue;
       analysisQueue.push(newAnalysisJob(sessionId, nodeId));
@@ -533,7 +539,9 @@ export const useWorkbenchStore = create<WorkbenchStore>()((set, get) => {
     mergeNodeState(data.node_state, data.tokens_used);
     await afterAnswer(sessionId, { ...data, skill_change: null }, before);
     // Phân tích về sau khi người học đã mở bài ⇒ gọi `enrich-node` (7.4 bước 2).
-    if (get().active_node_id === nodeId && data.analysis) void get().loadRun(nodeId);
+    if (!data.analysis) return;
+    if (get().active_node_id === nodeId) void get().loadRun(nodeId);
+    else void fetchRun(nodeId, false, true); // PH-16: tính trước câu hỏi, chỉ chạy nếu bài `AVAILABLE`
   };
 
   /**
@@ -541,7 +549,7 @@ export const useWorkbenchStore = create<WorkbenchStore>()((set, get) => {
    * (`ERR_ATTEMPT_OUT_OF_SYNC` / `ERR_QUESTION_FINISHED`, UI-77): bỏ qua điều kiện "đã có run chưa xong".
    * Giữ câu đang mở nếu câu đó vẫn còn trong run mới.
    */
-  const fetchRun = async (nodeId: string, force: boolean) => {
+  const fetchRun = async (nodeId: string, force: boolean, background = false) => {
     const { session_id: sessionId, ui, runs, analyses, progress } = get();
     const key = `enrich:${nodeId}`;
     if (!sessionId || ui.pending[key]) return;
@@ -549,18 +557,29 @@ export const useWorkbenchStore = create<WorkbenchStore>()((set, get) => {
     if (!analysis || analysis === "PENDING" || analysis === "FAILED") return;
     const state = progress?.nodes[nodeId];
     const openRun = runs[nodeId] && runs[nodeId].questions.some((q) => !q.state.finished);
+    // Chạy ngầm (PH-16): chỉ bài `AVAILABLE` (server từ chối bài khóa), không Offline/fixture, không khi hết hạn mức.
+    if (background && (isLocal() || ui.quota_stopped || state?.status !== "AVAILABLE")) return;
     const needRun = force || (!openRun && (state?.status === "AVAILABLE" || state?.last_run?.finished_at === null));
     if (!needRun) return;
 
     setPending(key, true);
-    if (!force) set((s) => ({ ui: { ...s.ui, submit_error: null } }));
+    if (!force && !background) set((s) => ({ ui: { ...s.ui, submit_error: null } }));
     const res = isLocal()
       ? cloneOk(offlineEnrichNode(nodeId, "LEARN", ui.offline_persona))
       : await enrichNodeSafe(sessionId, nodeId, "LEARN");
     setPending(key, false);
     if (!sameSession(sessionId)) return;
     if (!res.ok) {
-      if (!force) set((s) => ({ ui: { ...s.ui, submit_error: toUiError(res) } }));
+      if (background) {
+        // Im lặng: không `submit_error`. Hết hạn mức ⇒ dừng hàng như `runAnalysis`.
+        if (res.code === "ERR_TOKEN_QUOTA_EXCEEDED") {
+          set((s) => ({ ui: { ...s.ui, quota_stopped: true } }));
+          stopAnalysisQueue(sessionId);
+        } else if (get().active_node_id === nodeId) {
+          // Người học vừa mở bài trong lúc chờ (lời gọi của họ bị khóa `enrich:` chặn) ⇒ gọi lại bình thường.
+          void fetchRun(nodeId, false);
+        }
+      } else if (!force) set((s) => ({ ui: { ...s.ui, submit_error: toUiError(res) } }));
       return;
     }
     set((s) => {
