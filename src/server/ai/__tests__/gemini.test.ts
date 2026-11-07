@@ -1,3 +1,4 @@
+import { CONFIG } from "@/contracts/config";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import {
   aiCostUsd,
@@ -96,6 +97,14 @@ describe("gemini.ts", () => {
       expect(res).toBe("vertex");
     });
 
+    it("vertex có key, không có project ⇒ trả về vertex (express)", () => {
+      const res = assertGeminiEnv({
+        GEMINI_BACKEND: "vertex",
+        GEMINI_API_KEY: "vertex-key",
+      });
+      expect(res).toBe("vertex");
+    });
+
     it("studio thiếu key ⇒ ném lỗi", () => {
       expect(() => assertGeminiEnv({ GEMINI_BACKEND: "studio" })).toThrow(
         "Thiếu biến môi trường GEMINI_API_KEY"
@@ -133,6 +142,18 @@ describe("gemini.ts", () => {
         vertexai: true,
         project: "my-gcp-project",
         location: "global",
+      });
+    });
+
+    it("vertex có key ⇒ tạo client vertex express bằng apiKey, không truyền project", () => {
+      createGeminiClient({
+        GEMINI_BACKEND: "vertex",
+        GEMINI_API_KEY: " vertex-key ",
+        GOOGLE_CLOUD_PROJECT: "my-gcp-project",
+      });
+      expect(GoogleGenAI).toHaveBeenCalledWith({
+        vertexai: true,
+        apiKey: "vertex-key",
       });
     });
 
@@ -242,6 +263,18 @@ describe("gemini.ts", () => {
       expect(res.tokens_in).toBe(100);
       expect(res.tokens_out).toBe(60);
       expect(addSessionTokens).toHaveBeenCalledWith("sess-1", 100, 60);
+    });
+
+    it("luôn gửi thinkingConfig.thinkingBudget = CONFIG.LLM_THINKING_BUDGET (kể cả 0)", async () => {
+      const mockGenerate = vi.fn().mockResolvedValue({
+        text: '{"value": 1}',
+        usageMetadata: { promptTokenCount: 1, candidatesTokenCount: 1 },
+        candidates: [{ finishReason: "STOP" }],
+      });
+      const client = { models: { generateContent: mockGenerate } } as unknown as GoogleGenAI;
+      await callLLMOnce(dummyReq, client, validEnv);
+      const arg = mockGenerate.mock.calls[0][0] as { config: { thinkingConfig?: { thinkingBudget: number } } };
+      expect(arg.config.thinkingConfig).toEqual({ thinkingBudget: CONFIG.LLM_THINKING_BUDGET });
     });
 
     it("trả về INVALID_JSON khi finishReason != STOP", async () => {

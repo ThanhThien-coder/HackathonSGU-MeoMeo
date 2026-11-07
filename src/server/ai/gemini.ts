@@ -11,6 +11,10 @@ import { addSessionTokens } from "@/server/quota";
 
 export type GeminiBackend = "vertex" | "studio";
 
+function hasValue(v: string | undefined): v is string {
+  return typeof v === "string" && v.trim() !== "";
+}
+
 export function assertGeminiEnv(
   env: Record<string, string | undefined> = process.env
 ): GeminiBackend {
@@ -22,7 +26,9 @@ export function assertGeminiEnv(
   }
 
   if (backend === "vertex") {
-    if (!env.GOOGLE_CLOUD_PROJECT || env.GOOGLE_CLOUD_PROJECT.trim() === "") {
+    // Vertex express: có GEMINI_API_KEY thì gọi Vertex bằng key, không cần project.
+    if (hasValue(env.GEMINI_API_KEY)) return "vertex";
+    if (!hasValue(env.GOOGLE_CLOUD_PROJECT)) {
       throw new Error(
         "Thiếu biến môi trường GOOGLE_CLOUD_PROJECT cho GEMINI_BACKEND='vertex'."
       );
@@ -49,6 +55,12 @@ export function createGeminiClient(
 ): GoogleGenAI {
   const backend = assertGeminiEnv(env);
   if (backend === "vertex") {
+    if (hasValue(env.GEMINI_API_KEY)) {
+      return new GoogleGenAI({
+        vertexai: true,
+        apiKey: env.GEMINI_API_KEY.trim(),
+      });
+    }
     return new GoogleGenAI({
       vertexai: true,
       project: env.GOOGLE_CLOUD_PROJECT!.trim(),
@@ -240,9 +252,8 @@ export async function callLLMOnce<T>(
           category,
           threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH,
         })),
-        ...(CONFIG.LLM_THINKING_BUDGET > 0
-          ? { thinkingConfig: { thinkingBudget: CONFIG.LLM_THINKING_BUDGET } }
-          : {}),
+        // Luôn gửi: budget 0 phải gửi rõ, không thì model tự nghĩ theo mặc định và có thể cắt JSON.
+        thinkingConfig: { thinkingBudget: CONFIG.LLM_THINKING_BUDGET },
         responseMimeType: "application/json",
         responseSchema: req.schema,
         abortSignal: AbortSignal.timeout(CONFIG.LLM_TIMEOUT_MS),
