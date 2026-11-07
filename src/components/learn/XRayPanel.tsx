@@ -9,6 +9,7 @@ import { RoleCard } from "@/components/learn/RoleCard";
 import { LessonSummary } from "@/components/learn/LessonSummary";
 import { SkillChips } from "@/components/learn/SkillChips";
 import { TourStep } from "@/components/learn/TourStep";
+import { LoadingAnimation } from "@/components/ui/LoadingAnimation";
 import { analysisOf, buildRoleCard, buildTourSteps, skillsAtStep } from "@/lib/role-card";
 import { useWorkbenchStore } from "@/store/workbench";
 
@@ -160,22 +161,8 @@ export function XRayPanel() {
           Tóm tắt bài
         </h2>
         {waiting ? (
-          <div role="status" className="grid gap-3 min-w-0">
-            <div>
-              <div className="mb-1.5 text-xs font-bold uppercase tracking-wide text-[var(--done)]">Điểm hay</div>
-              <div className="grid gap-1.5">
-                <span className="h-3 w-full animate-pulse rounded bg-[var(--panel2)]" />
-                <span className="h-3 w-4/5 animate-pulse rounded bg-[var(--panel2)]" />
-              </div>
-            </div>
-            <div>
-              <div className="mb-1.5 text-xs font-bold uppercase tracking-wide text-[var(--fail)]">Điểm dở</div>
-              <div className="grid gap-1.5">
-                <span className="h-3 w-full animate-pulse rounded bg-[var(--panel2)]" />
-                <span className="h-3 w-3/5 animate-pulse rounded bg-[var(--panel2)]" />
-              </div>
-            </div>
-            <span className="text-xs text-[var(--muted)]">đang phân tích…</span>
+          <div role="status" className="flex flex-col items-center justify-center p-6 min-w-0">
+            <LoadingAnimation size={150} text="AI đang phân tích bài học…" subtext="Đang tổng hợp điểm hay và điểm dở" />
           </div>
         ) : (
           <p className="m-0 text-sm text-[var(--muted)] break-words">Cần bản phân tích để có tóm tắt.</p>

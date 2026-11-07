@@ -7,6 +7,7 @@ import * as monaco from "monaco-editor";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { HybridArchitecturalNode, NodeAnalysisView } from "@/contracts";
 import type { HighlightRange } from "@/store/workbench";
+import { LoadingAnimation } from "@/components/ui/LoadingAnimation";
 import {
   buildDtoModel,
   buildStepModel,
@@ -404,7 +405,11 @@ export default function MonacoPane({
         theme={theme}
         beforeMount={defineThemes}
         onMount={(ed) => setEditor(ed)}
-        loading={<p className="p-4 text-sm text-muted">Đang tải khung code…</p>}
+        loading={
+          <div className="flex h-full min-h-[300px] w-full items-center justify-center bg-[var(--code-bg)]">
+            <LoadingAnimation size={150} text="Đang tải khung code…" />
+          </div>
+        }
         options={options}
       />
     </div>

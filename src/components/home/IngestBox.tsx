@@ -222,7 +222,7 @@ export function IngestBox() {
         </div>
       ) : null}
 
-      <ScanTimer running={busy} />
+      <ScanTimer running={busy} redirecting={redirecting} />
     </section>
   );
 }

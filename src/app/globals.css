@@ -276,6 +276,18 @@ body {
   transition: background .2s var(--ease-snap), color .2s var(--ease-snap);
 }
 
+.brand-mark {
+  background-color: var(--accent);
+  mask: url("/simplifey.svg") center / contain no-repeat;
+}
+
+@media (forced-colors: active) {
+  .brand-mark {
+    forced-color-adjust: none;
+    background-color: CanvasText;
+  }
+}
+
 /* ==================== SELECTION TOKENS ==================== */
 ::selection {
   background: #38bdf8 !important;

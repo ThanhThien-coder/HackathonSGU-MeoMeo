@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { BrandMark } from "@/components/layout/BrandMark";
 import { Button } from "@/components/ui/common";
 import { signInWithGithub } from "@/lib/supabase/client";
 
@@ -46,7 +47,10 @@ export function LoginScreen() {
   return (
     <section className="mx-auto flex w-full max-w-md flex-col gap-5 rounded-2xl border border-line bg-panel p-6 sm:p-8">
       <div>
-        <h1 className="text-2xl font-bold text-text">SimpliFey</h1>
+        <h1 className="flex items-center gap-2.5 text-2xl font-bold tracking-tight text-text">
+          <BrandMark className="size-7" />
+          SimpliFey
+        </h1>
         <p className="mt-1 text-muted">
           Đăng nhập bằng GitHub để quét repo và học theo từng bài.
         </p>
