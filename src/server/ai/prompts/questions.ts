@@ -25,10 +25,13 @@ const QUESTIONS_SYSTEM_TEMPLATE = `Bạn là giảng viên kiến trúc mã ngu�
 ĐỘ KHÓ THEO tier — ĐỌC TRƯỚC, ƯU TIÊN HƠN MỌI LUẬT BÊN DƯỚI
 NOVICE (người học vừa xem tour giải thích từng bước của bài này lần đầu):
 - Hỏi về ĐÚNG 1 bước trong "buoc" của mục; đề nói rõ "ở Bước k".
-- feynman_question chỉ 1 câu, dưới 30 từ, lời đời thường.
-- Đáp án nằm gọn trong code của bước đó: nhìn lại Bước k là trả lời được.
+- feynman_question chỉ 1 câu, TỐI ĐA 25 từ (đếm cả tên hàm), lời đời thường.
+- Đáp án nằm gọn trong code của bước đó: nhìn lại Bước k là trả lời được. KHÔNG hỏi điều phải biết kiến thức ngoài code mới trả lời được (cách kẻ xấu tấn công, thư viện bên ngoài hoạt động thế nào, chuẩn bảo mật); chỉ hỏi điều đọc code của Bước k là thấy (giá trị trả về, nhánh if, lỗi được ném, dữ liệu được ghi).
+- KHÔNG hỏi "vì sao", "có nên … không", "có tái sử dụng được không": các dạng này bắt người mới tự đánh giá thiết kế.
 - FLOW: chọn 1 tình huống dễ thấy ở Bước k (giá trị đi vào một nhánh if, một giá trị được trả về, một lỗi được ném) rồi hỏi chuyện gì xảy ra.
 - WEAKNESS: hỏi "chuyện gì xảy ra với người dùng khi …"; KHÔNG hỏi "vì sao", không bắt người học tự chẩn đoán lỗi thiết kế.
+- ARCHITECTURE: hỏi "ở Bước k, việc nào hàm này tự làm, việc nào nó gọi hàm khác làm"; KHÔNG đưa yêu cầu mới, KHÔNG hỏi tái sử dụng.
+- CHANGE: hỏi "nếu đổi <1 giá trị cụ thể> thì ở Bước k dòng nào phải sửa"; KHÔNG hỏi "vì sao".
 - must_have_points: đúng {{PMIN}} ý.
 - Ví dụ NOVICE (chỉ minh họa cách hỏi, không chép tên): feynman_question = "Ở Bước 2, nếu không tìm thấy sản phẩm theo mã thì người dùng nhận được gì?"; reference_answer = 2 câu nói hàm kiểm kết quả rỗng rồi ném lỗi không tìm thấy, nên người dùng nhận lỗi thay vì dữ liệu; must_have_points = ["Hàm kiểm kết quả tìm được có rỗng không", "Không tìm thấy thì ném lỗi, người dùng nhận thông báo lỗi"].
 PRACTITIONER: tối đa 2 câu ngắn; thêm hậu quả hoặc cách sửa, hoặc so sánh 2 cách; được nối 2–3 bước.
@@ -51,8 +54,8 @@ LUẬT CHO MỖI CÂU
 GÓC HỎI (focus)
 - WEAKNESS (dựa vào diem_do cùng skill): NOVICE — như khối độ khó: hỏi chuyện gì xảy ra với người dùng trong 1 tình huống có con số hoặc hậu quả cụ thể. PRACTITIONER — hậu quả trong tình huống cụ thể và cách sửa; 1 ý bắt buộc là cách sửa. ARCHITECT — tình huống biên / đồng thời / dữ liệu rất lớn; ý bắt buộc gồm cơ chế hỏng và hướng sửa ở mức thiết kế. Tên chỗ dở phải có trong câu hỏi hoặc reference_answer.
 - FLOW: đặt 1 tình huống cụ thể mà code xử lý thấy được (giá trị vào đi vào một nhánh if, một lỗi được ném, một giá trị được trả về) rồi hỏi với đúng tình huống đó: dữ liệu được tạo / đổi / gắn thêm ở đâu, dừng hoặc rẽ ở đâu. Câu hỏi KHÔNG có dạng "đi qua những bước / hàm nào". Đáp án chỉ nêu xử lý có trong <code_data>. Không cần thuộc tên hàm. NOVICE chỉ 1 bước; PRACTITIONER và ARCHITECT: reference_answer nhắc tên ở ít nhất {{FLOW_MIN}} bước khác nhau (lát cắt ít bước hơn thì mọi bước), PRACTITIONER thêm nhánh lỗi / điều kiện rẽ, ARCHITECT thêm chỗ có thể hỏng giữa các bước.
-- ARCHITECTURE (dựa vào kien_truc, diem_hay): đưa 1 yêu cầu mới (VD thêm route có cùng ràng buộc): dùng lại được gì, viết thêm gì, vì sao.
-- CHANGE: đưa 1 thay đổi cụ thể (đổi đường dẫn route, đổi nguồn dữ liệu, thêm trường): sửa file nào, file nào không phải sửa, vì sao. reference_answer nêu ít nhất 1 tên file của node trong backtick.`;
+- ARCHITECTURE (dựa vào kien_truc, diem_hay): PRACTITIONER và ARCHITECT — đưa 1 yêu cầu mới (VD thêm route có cùng ràng buộc): dùng lại được gì, viết thêm gì, vì sao. NOVICE — theo khối độ khó ở trên.
+- CHANGE: đưa 1 thay đổi cụ thể (đổi đường dẫn route, đổi nguồn dữ liệu, thêm trường): sửa file nào, file nào không phải sửa, vì sao (NOVICE: theo khối độ khó ở trên, không hỏi vì sao). reference_answer nêu ít nhất 1 tên file của node trong backtick.`;
 
 export function buildQuestionsSystemPrompt(
   graph: StaticEngineResult,
