@@ -77,10 +77,16 @@ export function CockpitHeader({
         <PaneIcon side="left" />
       </button>
 
-      <div className="inline-flex items-center gap-2 text-[14.5px] font-bold tracking-tight">
+      <button
+        type="button"
+        onClick={otherRepo}
+        title="Về trang chủ"
+        aria-label="SimpliFey, về trang chủ"
+        className="inline-flex items-center gap-2 rounded-md text-[14.5px] font-bold tracking-tight transition-opacity hover:opacity-80"
+      >
         <BrandMark className="size-[22px]" />
         <span className="max-lg:sr-only">SimpliFey</span>
-      </div>
+      </button>
 
       <div
         className="repo-crumb inline-flex items-center gap-1.5 rounded-lg bg-[var(--panel2)] px-2.5 py-1 font-mono text-[12.5px] text-[var(--muted)]"
