@@ -1,4 +1,4 @@
-# SimpliFey
+# SimpliFey (PR thử CI, không merge)
 
 Học code từ repo thật theo bản đồ bài học do code dựng và AI giải thích.
 
