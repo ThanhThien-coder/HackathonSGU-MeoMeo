@@ -253,11 +253,8 @@ export function resolveTsJsImport(
   if (!hasPaths || !matchedAnyPattern) {
     if (specifier.startsWith("@/") || specifier.startsWith("~/")) {
       const subPath = specifier.slice(2);
-      const prefix = rootDirOffset
-        ? rootDirOffset.endsWith("/")
-          ? rootDirOffset
-          : `${rootDirOffset}/`
-        : "";
+      const base = tsConfig?.config_dir || rootDirOffset;
+      const prefix = base ? (base.endsWith("/") ? base : `${base}/`) : "";
       const fullTarget = `${prefix}src/${subPath}`;
       const normalizedTarget = normalizePosixPath(fullTarget);
       if (normalizedTarget !== null) {
@@ -398,6 +395,53 @@ export function collectTsJsImports(
     idx.re_exports.set(file.path, fileReExports);
   }
 
+  // `export { a as b }`, `import X; export { X }`, `import X; export default X`:
+  // ghi như re-export để barrel đi tiếp được tới file định nghĩa.
+  function collectLocalExports(node: Node): void {
+    const line = node.startPosition.row + 1;
+
+    const addExport = (name: string, exportedName: string): void => {
+      const imported = fileImports!.get(name);
+      if (imported) {
+        if (!imported.is_namespace) {
+          fileReExports!.push({
+            exported_name: exportedName,
+            imported_name: imported.imported_name,
+            source: imported.source,
+            resolved_file: imported.resolved_file,
+            line,
+          });
+        }
+      } else if (exportedName !== name) {
+        fileReExports!.push({
+          exported_name: exportedName,
+          imported_name: name,
+          source: "",
+          resolved_file: file.path,
+          line,
+        });
+      }
+    };
+
+    const clause = node.children.find((c) => c.type === "export_clause");
+    if (clause) {
+      for (const spec of clause.namedChildren) {
+        if (spec.type === "export_specifier") {
+          const nameNode = spec.childForFieldName("name");
+          const aliasNode = spec.childForFieldName("alias");
+          if (nameNode) {
+            addExport(nameNode.text, aliasNode ? aliasNode.text : nameNode.text);
+          }
+        }
+      }
+    }
+
+    const valueNode = node.childForFieldName("value");
+    if (valueNode?.type === "identifier" && node.children.some((c) => c.text === "default")) {
+      addExport(valueNode.text, "default");
+    }
+  }
+
   function walk(node: Node): void {
     if (node.type === "import_statement") {
       const sourceNode =
@@ -482,11 +526,11 @@ export function collectTsJsImports(
     }
 
     if (node.type === "export_statement") {
-      const sourceNode =
-        node.childForFieldName("source") ??
-        node.children.find((c) => c.type === "string");
+      const sourceNode = node.childForFieldName("source");
 
-      if (sourceNode) {
+      if (!sourceNode) {
+        collectLocalExports(node);
+      } else {
         const specifier = cleanStringLiteral(sourceNode.text);
         const resolved_file = resolveTsJsImport(
           file.path,
@@ -536,8 +580,8 @@ export function collectTsJsImports(
             }
           }
         }
+        return;
       }
-      return;
     }
 
     if (node.type === "call_expression") {
@@ -561,7 +605,26 @@ export function collectTsJsImports(
             const line = node.startPosition.row + 1;
 
             const parent = node.parent;
-            if (parent && parent.type === "variable_declarator") {
+            if (
+              parent &&
+              parent.type === "member_expression" &&
+              parent.parent?.type === "variable_declarator"
+            ) {
+              const localNode =
+                parent.parent.childForFieldName("name") ?? parent.parent.namedChild(0);
+              const propNode = parent.childForFieldName("property");
+              if (localNode?.type === "identifier" && propNode) {
+                fileImports!.set(localNode.text, {
+                  local_name: localNode.text,
+                  imported_name: propNode.text,
+                  source: specifier,
+                  resolved_file,
+                  is_default: false,
+                  is_namespace: false,
+                  line,
+                });
+              }
+            } else if (parent && parent.type === "variable_declarator") {
               const nameNode =
                 parent.childForFieldName("name") ?? parent.namedChild(0);
               if (nameNode) {
