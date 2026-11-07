@@ -371,10 +371,11 @@ export function buildCallGraph(
     }
   }
 
-  // Hàm theo file, bỏ bí danh #default để lời gọi luôn gắn vào khóa thật.
+  // Hàm theo file, bỏ bí danh #default để lời gọi luôn gắn vào khóa thật. Bỏ cả <module>:
+  // nó là mặc định khi không có hàm nào chứa, và có thể trùng khoảng dòng với hàm duy nhất của file.
   const functionsByFile = new Map<string, FunctionInfo[]>();
   for (const [key, fn] of idx.functions) {
-    if (canonicalKey(idx, key) !== key) {
+    if (canonicalKey(idx, key) !== key || key.endsWith("#<module>")) {
       continue;
     }
     const list = functionsByFile.get(fn.file_path);

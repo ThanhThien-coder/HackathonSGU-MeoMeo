@@ -121,4 +121,8 @@ export interface EngineContext {
   files: ParsedFile[];
   index: SymbolIndex;
   call_edges: FunctionCallEdge[];
+  call_sites: Map<string, CallSite[]>;
+  external_calls: Map<string, ExternalCall[]>;
+  bindings: RouteBinding[];
+  file_rank: Map<string, number>;
 }
