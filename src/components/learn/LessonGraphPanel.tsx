@@ -152,7 +152,7 @@ export function LessonGraphPanel() {
         <StatusPill status="AVAILABLE" />
         <StatusPill status="COMPLETED" />
         <StatusPill status="FAILED" />
-        <span>⚠ Node trước chưa vững</span>
+        <span>Node trước chưa vững</span>
       </div>
     </div>
   );

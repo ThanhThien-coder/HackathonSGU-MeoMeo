@@ -70,6 +70,11 @@ async function openSessionFromUrl(): Promise<void> {
   }
 
   const res = await ingest({ session_id: id });
+  if (res.ok && res.data.resumed) {
+    const completed = Object.values(res.data.progress.nodes).filter((n) => n.status === "COMPLETED").length;
+    const total = res.data.result.nodes.length;
+    useWorkbenchStore.getState().pushToast(`Đã mở lại ${res.data.result.repo_name} — ${completed}/${total} bài đã hoàn thành`, "info");
+  }
   if (!res.ok && res.code === "ERR_SESSION_NOT_FOUND") {
     try {
       window.localStorage.removeItem("sf.last_session");

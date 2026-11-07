@@ -40,7 +40,7 @@ export function ThemeToggle() {
       aria-label="Đổi chủ đề sáng hoặc tối"
       className="inline-flex items-center gap-1.5 rounded-lg border border-line-strong px-2.5 py-1 text-sm text-text transition-colors hover:bg-panel-2"
     >
-      {theme === "dark" ? "☀ Chế độ sáng" : "☾ Chế độ tối"}
+      {theme === "dark" ? "Chế độ sáng" : "Chế độ tối"}
     </button>
   );
 }

@@ -73,16 +73,7 @@ export function TourStep({
 
       <div className="stephead flex items-center justify-between gap-2.5 min-w-0">
         <h2 id="rp-title" tabIndex={-1} className="m-0 flex items-baseline gap-1.5 text-[15px] font-bold outline-none text-[var(--text)] min-w-0 break-words">
-          {step.has_weak ? (
-            <span
-              role="img"
-              aria-label="Có điểm dở do AI nhận định"
-              title={`Nhận định của AI: ${step.weak_what ?? ""}`}
-              className="text-[var(--ready)] flex-none"
-            >
-              ⚠
-            </span>
-          ) : null}
+
           <span className="min-w-0 break-words">
             Bước {step.step}/{step.total} · {step.layer_label}
           </span>

@@ -36,7 +36,7 @@ export function LessonGroup({
         <span className="gname font-semibold text-[13.5px] text-[var(--text)]">{group.name}</span>
         {group.recommended ? (
           <span className="badge text-[11px] font-semibold px-2 py-0.5 rounded-full bg-[var(--ready-bg)] text-[var(--ready)]">
-            ★ Nên học trước
+            Nên học trước
           </span>
         ) : null}
         <span className="cnt ml-auto text-xs text-[var(--muted)]">{group.node_ids.length} bài</span>

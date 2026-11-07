@@ -54,7 +54,7 @@ function NextAction({ nodeId }: { nodeId: string }) {
     return (
       <div role="status" className="grid gap-1 text-sm bg-[var(--panel2)] p-3 rounded-lg">
         <p className="m-0 font-semibold text-[var(--text)]">
-          {status === "COMPLETED" ? "✓ Đã hoàn thành bài này." : "✗ Bài này chưa đạt."}
+          {status === "COMPLETED" ? "Đã hoàn thành bài này." : "Bài này chưa đạt."}
         </p>
         <p className="m-0 text-[var(--muted)] text-xs">Xem lại câu hỏi ở tab Feynman. Không có ôn tập: bài giữ nguyên màu.</p>
       </div>
