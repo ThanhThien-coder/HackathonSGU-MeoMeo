@@ -1,46 +1,21 @@
 "use client";
 
 import { useEffect } from "react";
-import { create } from "zustand";
-
-export type ToastKind = "info" | "success" | "error";
-
-export interface ToastItem {
-  id: number;
-  kind: ToastKind;
-  text: string;
-}
-
-interface ToastState {
-  toasts: ToastItem[];
-  pushToast: (text: string, kind?: ToastKind) => void;
-  dismissToast: (id: number) => void;
-}
+import { useWorkbenchStore, type UiToast } from "@/store/workbench";
 
 const TOAST_MS = 5000;
-let nextId = 1;
 
-/**
- * Hàng toast. Store duy nhất `useWorkbenchStore` (PH-02) chưa có trên main nên
- * tạm giữ hàng ở đây; PH-02 nối `ui.toasts` vào thì chỉ đổi nguồn đọc trong
- * `Toasts()`, giao diện bên dưới giữ nguyên.
- */
-export const useToastStore = create<ToastState>((set) => ({
-  toasts: [],
-  pushToast: (text, kind = "info") =>
-    set((s) => ({ toasts: [...s.toasts, { id: nextId++, kind, text }] })),
-  dismissToast: (id) =>
-    set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),
-}));
+// Hàng toast nằm ở store duy nhất: `useWorkbenchStore.getState().pushToast(...)` ghi vào `ui.toasts`
+// và component này đọc đúng chỗ đó. Không giữ hàng riêng, nếu không toast của store sẽ không hiện.
 
-const KIND_VIEW: Record<ToastKind, { icon: string; cls: string }> = {
+const KIND_VIEW: Record<UiToast["kind"], { icon: string; cls: string }> = {
   info: { icon: "ℹ", cls: "text-accent" },
   success: { icon: "✓", cls: "text-st-done-fg" },
   error: { icon: "⚠", cls: "text-st-fail-fg" },
 };
 
-function ToastRow({ toast }: { toast: ToastItem }) {
-  const dismiss = useToastStore((s) => s.dismissToast);
+function ToastRow({ toast }: { toast: UiToast }) {
+  const dismiss = useWorkbenchStore((s) => s.dismissToast);
   useEffect(() => {
     const timer = window.setTimeout(() => dismiss(toast.id), TOAST_MS);
     return () => window.clearTimeout(timer);
@@ -67,7 +42,7 @@ function ToastRow({ toast }: { toast: ToastItem }) {
 
 /** Vùng `aria-live="polite"` luôn có mặt để trình đọc màn hình đọc toast mới. */
 export function Toasts() {
-  const toasts = useToastStore((s) => s.toasts);
+  const toasts = useWorkbenchStore((s) => s.ui.toasts);
   return (
     <div
       aria-live="polite"
