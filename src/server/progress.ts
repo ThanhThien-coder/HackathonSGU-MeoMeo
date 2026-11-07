@@ -353,8 +353,13 @@ interface RawRunInput {
 }
 
 function toRunView(run: RawRunInput): NodeRunView {
+  // bigint từ Postgres về dạng chuỗi số ("1700000000000") nên phải đổi bằng Number
   const toMs = (v: Date | string | number): number =>
-    typeof v === "number" ? v : new Date(v).getTime();
+    typeof v === "number"
+      ? v
+      : typeof v === "string" && /^\d+$/.test(v)
+        ? Number(v)
+        : new Date(v).getTime();
   return {
     run_id: run.id,
     node_id: run.node_id,
@@ -454,21 +459,33 @@ export async function getSessionProgress(
 ): Promise<SessionProgress> {
   return await withDbRead(async () => {
     const session = await verifySessionOwnership(sessionId, userId);
-    const rows = await sql<NodeProgressRow[]>`
-      select node_id, status, analysis_failed from node_progress where session_id = ${session.id}
-    `;
-    const runRows = await sql<
-      Array<{
-        id: string;
-        node_id: string;
-        mode: RunMode;
-        questions: RunQuestion[] | string;
-        started_at: Date | string | number;
-        finished_at: Date | string | number | null;
-      }>
-    >`
-      select distinct on (node_id) id, node_id, mode, questions, started_at, finished_at from node_runs where session_id = ${session.id} order by node_id, started_at desc
-    `;
+    // Câu SQL lấy từ bản tạm của TH-11 (route tiến độ): mỗi node 1 run,
+    // run đang mở trước, không có thì run mới nhất; thời điểm đổi sang ms trong SQL.
+    const [rows, runRows] = await Promise.all([
+      sql<NodeProgressRow[]>`
+      select node_id, status, analysis_failed
+      from node_progress
+      where session_id = ${session.id}
+    `,
+      sql<
+        Array<{
+          id: string;
+          node_id: string;
+          mode: RunMode;
+          questions: RunQuestion[] | string;
+          started_at: Date | string | number;
+          finished_at: Date | string | number | null;
+        }>
+      >`
+      select distinct on (node_id)
+        id, node_id, mode, questions,
+        (extract(epoch from started_at) * 1000)::bigint as started_at,
+        (extract(epoch from finished_at) * 1000)::bigint as finished_at
+      from node_runs
+      where session_id = ${session.id}
+      order by node_id, (finished_at is null) desc, started_at desc
+    `,
+    ]);
 
     const runsByNode = new Map<string, NodeRunView>();
     for (const r of runRows) {
