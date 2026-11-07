@@ -1,13 +1,17 @@
+import type postgres from "postgres";
 import { CONFIG } from "@/contracts";
 import type {
   GraphSkeletonNode,
+  NodeStateView,
   RunMode,
   RunQuestion,
   RunStepRef,
+  SessionProgress,
   StaticEngineResult,
 } from "@/contracts";
+import { deriveNodeStates, type NodeProgressRow } from "@/lib/derive";
 import { getEngineResultCache, setEngineResultCache } from "./cache";
-import { sql } from "./db";
+import { db, sql } from "./db";
 import { ApiHttpError } from "./errors";
 import { logger } from "./log";
 
@@ -157,4 +161,199 @@ export function toGraphSkeleton(
     prerequisites: n.prerequisites,
     is_capstone: n.is_capstone,
   }));
+}
+
+interface QueueWaiter {
+  resolve: () => void;
+  reject: (err: ApiHttpError) => void;
+  timer: ReturnType<typeof setTimeout>;
+}
+
+export class IngestionSemaphore {
+  private running = 0;
+  private readonly queue: QueueWaiter[] = [];
+
+  constructor(
+    private readonly maxConcurrent: number,
+    private readonly timeoutMs: number,
+  ) {}
+
+  acquire(): Promise<void> {
+    if (this.running < this.maxConcurrent) {
+      this.running++;
+      return Promise.resolve();
+    }
+
+    return new Promise<void>((resolve, reject) => {
+      const entry: QueueWaiter = {
+        resolve: () => {
+          clearTimeout(entry.timer);
+          resolve();
+        },
+        reject: (err: ApiHttpError) => {
+          clearTimeout(entry.timer);
+          reject(err);
+        },
+        timer: setTimeout(() => {
+          const idx = this.queue.indexOf(entry);
+          if (idx !== -1) {
+            this.queue.splice(idx, 1);
+          }
+          reject(new ApiHttpError("ERR_SERVER_BUSY"));
+        }, this.timeoutMs),
+      };
+      this.queue.push(entry);
+    });
+  }
+
+  release(): void {
+    if (this.queue.length > 0) {
+      // Nhường chỗ trực tiếp cho người chờ đầu tiên (FIFO)
+      const next = this.queue.shift()!;
+      next.resolve();
+    } else {
+      this.running = Math.max(0, this.running - 1);
+    }
+  }
+
+  async run<T>(fn: () => Promise<T>): Promise<T> {
+    await this.acquire();
+    try {
+      return await fn();
+    } finally {
+      this.release();
+    }
+  }
+}
+
+export const ingestionSemaphore = new IngestionSemaphore(
+  CONFIG.MAX_CONCURRENT_INGESTIONS,
+  CONFIG.INGEST_QUEUE_TIMEOUT_MS,
+);
+
+export async function createOrResumeSession(
+  userId: string,
+  result: StaticEngineResult,
+): Promise<{ session: SessionRecord; resumed: boolean }> {
+  return await db.tx(async (tx) => {
+    // 1. insert into profiles (user_id) values (...) on conflict (user_id) do nothing
+    await tx`
+      insert into profiles (user_id)
+      values (${userId})
+      on conflict (user_id) do nothing
+    `;
+
+    // 2. select pg_advisory_xact_lock(hashtextextended(${key}::text, 0))
+    const lockKey = `${userId}|${result.snapshot.source}|${result.snapshot.snapshot_id}|${result.snapshot.subdir}|${result.engine_version}`;
+    await tx`select pg_advisory_xact_lock(hashtextextended(${lockKey}::text, 0))`;
+
+    // 3. Tìm phiên theo khóa (user_id, source, snapshot_id, subdir, engine_version), order by last_active_at desc limit 1
+    const existing = await tx<SessionRecord[]>`
+      select * from learning_sessions
+      where user_id = ${userId}
+        and source = ${result.snapshot.source}
+        and snapshot_id = ${result.snapshot.snapshot_id}
+        and subdir = ${result.snapshot.subdir}
+        and engine_version = ${result.engine_version}
+      order by last_active_at desc
+      limit 1
+    `;
+
+    if (existing.length > 0) {
+      const updated = await tx<SessionRecord[]>`
+        update learning_sessions
+        set last_active_at = now()
+        where id = ${existing[0].id}
+        returning *
+      `;
+      const session = updated[0];
+      if (typeof session.graph_skeleton === "string") {
+        session.graph_skeleton = JSON.parse(
+          session.graph_skeleton,
+        ) as GraphSkeletonNode[];
+      }
+      return { session, resumed: true };
+    }
+
+    // 4. insert into learning_sessions và session_snapshots
+    const skeletonJson = tx.json(
+      toGraphSkeleton(result) as unknown as postgres.JSONValue,
+    );
+    const inserted = await tx<SessionRecord[]>`
+      insert into learning_sessions (
+        user_id,
+        source,
+        repo_key,
+        snapshot_id,
+        snapshot_id_kind,
+        subdir,
+        ref_label,
+        repo_name,
+        engine_version,
+        graph_skeleton
+      ) values (
+        ${userId},
+        ${result.snapshot.source},
+        ${result.snapshot.repo_key},
+        ${result.snapshot.snapshot_id},
+        ${result.snapshot.snapshot_id_kind},
+        ${result.snapshot.subdir},
+        ${result.snapshot.ref_label},
+        ${result.repo_name},
+        ${result.engine_version},
+        ${skeletonJson}
+      )
+      returning *
+    `;
+    const session = inserted[0];
+    if (typeof session.graph_skeleton === "string") {
+      session.graph_skeleton = JSON.parse(
+        session.graph_skeleton,
+      ) as GraphSkeletonNode[];
+    }
+
+    const resultJson = tx.json(result as unknown as postgres.JSONValue);
+    await tx`
+      insert into session_snapshots (session_id, result)
+      values (${session.id}, ${resultJson})
+    `;
+
+    return { session, resumed: false };
+  });
+}
+
+export async function touchSession(sessionId: string): Promise<void> {
+  await sql`update learning_sessions set last_active_at = now() where id = ${sessionId}`;
+}
+
+export async function loadSessionProgress(
+  session: SessionRecord,
+): Promise<SessionProgress> {
+  const rows = await sql<NodeProgressRow[]>`
+    select node_id, status, analysis_failed
+    from node_progress
+    where session_id = ${session.id}
+  `;
+
+  const skeleton = (
+    typeof session.graph_skeleton === "string"
+      ? JSON.parse(session.graph_skeleton)
+      : session.graph_skeleton
+  ) as GraphSkeletonNode[];
+
+  const derived = deriveNodeStates(skeleton, rows);
+  const nodes: Record<string, NodeStateView> = {};
+  for (const [nodeId, state] of Object.entries(derived)) {
+    nodes[nodeId] = {
+      ...state,
+      last_run: null,
+    };
+  }
+
+  // TH-12 thay bằng getSessionProgress đầy đủ.
+  return {
+    session_id: session.id,
+    nodes,
+    tokens_used: session.tokens_used,
+  };
 }
