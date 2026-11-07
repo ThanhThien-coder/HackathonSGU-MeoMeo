@@ -78,6 +78,14 @@ export interface ImportedSymbol {
   line: number;
 }
 
+export interface ReExport {
+  exported_name: string;
+  imported_name: string;
+  source: string;
+  resolved_file: string | null;
+  line: number;
+}
+
 export type SymbolTable = Map<string, SymbolDefinition>;
 
 export type ImportMap = Map<string, Map<string, ImportedSymbol>>;
@@ -91,6 +99,7 @@ export type LocalSymbolIndex = Map<string, Set<string>>;
 export interface SymbolIndex {
   symbols: SymbolTable;
   imports: ImportMap;
+  re_exports: Map<string, ReExport[]>;
   field_types: FieldTypeMap;
   interface_impls: InterfaceImplMap;
   locals: LocalSymbolIndex;

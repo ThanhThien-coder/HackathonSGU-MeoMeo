@@ -3,6 +3,7 @@ import * as path from "node:path";
 import type { IngestionReport, LanguageAdapter, LanguageId } from "@/contracts";
 import { parseAll } from "../src/server/engine/graph/parser";
 import { LANGUAGE_REGISTRY } from "../src/server/engine/graph/registry";
+import { collectSymbols, resolveImports } from "../src/server/engine/graph/symbols";
 
 const IGNORED_DIRS = new Set([
   "node_modules",
@@ -51,17 +52,28 @@ async function main(): Promise<void> {
 
   const code = new Map<string, string>();
   const langs = new Map<string, LanguageId>();
+  const manifests = new Map<string, string>();
 
   for (const absFilePath of filePaths) {
-    const adapter = getLanguageForFile(absFilePath);
-    if (!adapter) {
-      continue;
-    }
-
     const relPosixPath = path
       .relative(resolvedBaseDir, absFilePath)
       .split(path.sep)
       .join("/");
+
+    const baseName = path.basename(absFilePath);
+    if (
+      baseName === "tsconfig.json" ||
+      baseName === "jsconfig.json" ||
+      baseName === "package.json"
+    ) {
+      const content = await fs.readFile(absFilePath, "utf8");
+      manifests.set(relPosixPath, content);
+    }
+
+    const adapter = getLanguageForFile(absFilePath);
+    if (!adapter) {
+      continue;
+    }
 
     const content = await fs.readFile(absFilePath, "utf8");
     code.set(relPosixPath, content);
@@ -72,7 +84,7 @@ async function main(): Promise<void> {
     truncated: false,
     selective_fetch: false,
     code_file_count: code.size,
-    manifest_count: 0,
+    manifest_count: manifests.size,
     omitted_node_count: 0,
     skipped: {
       garbage: 0,
@@ -102,6 +114,37 @@ async function main(): Promise<void> {
       console.log(`- ${warning}`);
     }
   }
+
+  const idx = collectSymbols(parsedFiles);
+  resolveImports(parsedFiles, idx, manifests, {
+    go_module_path: null,
+    dart_package_name: null,
+    package_entry_files: [],
+  });
+
+  let a = 0;
+  let b = 0;
+  for (const fileImports of idx.imports.values()) {
+    for (const imp of fileImports.values()) {
+      if (
+        imp.source.startsWith("./") ||
+        imp.source.startsWith("../") ||
+        imp.source.startsWith("@/") ||
+        imp.source.startsWith("~/")
+      ) {
+        b++;
+        if (imp.resolved_file !== null) {
+          a++;
+        }
+      }
+    }
+  }
+
+  const percentage = b === 0 ? 0 : Math.round((a / b) * 100);
+
+  console.log(`Số định nghĩa: ${idx.symbols.size}`);
+  console.log(`Số hàm: ${idx.functions.size}`);
+  console.log(`Import nội bộ nối được: ${a}/${b} (${percentage}%)`);
 
   console.log("buildGraph: chưa có (MI-06)");
 }
