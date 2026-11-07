@@ -30,7 +30,7 @@ import {
   type ApiResult,
 } from "@/lib/api";
 import { CONFIG } from "@/contracts/config";
-import { deriveNodeStates } from "@/lib/derive";
+import { deriveNodeStates, displayTitle } from "@/lib/derive";
 import { formatErrorMessage } from "@/lib/messages";
 
 // ---------- Kiểu của slice `ui` (docs/spec/30_UI.md Mục 7.1) ----------
@@ -326,19 +326,57 @@ export const useWorkbenchStore = create<WorkbenchStore>()((set, get) => {
       },
     }));
 
-  /** Mục 7.5: có `skill_change` ⇒ làm mới hồ sơ bằng `GET /api/me`. */
+  /** Tên bài để đọc trong toast (cùng cách đặt tên với bản đồ bài học). */
+  const lessonName = (nodeId: string): string => {
+    const { result, overview } = get();
+    const node = result?.nodes.find((n) => n.id === nodeId);
+    return node ? displayTitle(node, overview === "PENDING" ? null : overview) : nodeId;
+  };
+
+  /**
+   * Mục 7.5 / UI-57: trạng thái bài vừa đổi sang xong hoặc chưa đạt ⇒ toast. Bài chưa đạt không có nút học
+   * lại (D-35); bài con vẫn mở kèm ⚠ nên người học không bị kẹt. Chỉ đọc kết quả server, không tự tính gì.
+   */
+  const announceStatus = (
+    state: NodeStateView,
+    statusBefore: NodeStateView["status"] | undefined,
+    unlockedNodeIds: string[],
+  ) => {
+    if (!statusBefore || statusBefore === state.status) return;
+    if (state.status === "COMPLETED") {
+      const opened = unlockedNodeIds.map(lessonName);
+      get().pushToast(`Bài đã xong!${opened.length > 0 ? ` Đã mở khóa: ${opened.join(", ")}.` : ""}`, "success");
+    } else if (state.status === "FAILED") {
+      get().pushToast("Bài chưa đạt.", "info");
+    }
+  };
+
+  /**
+   * Mục 7.5: `unlocked_node_ids` khác rỗng hoặc trạng thái node vừa đổi ⇒ toast + tải lại tiến độ từ server
+   * (mở khóa, `has_warning` của bài khác). `statusBefore` lấy trước khi `mergeNodeState` thay node.
+   */
+  const settleNodeState = async (
+    sessionId: string,
+    state: NodeStateView,
+    unlockedNodeIds: string[],
+    statusBefore: NodeStateView["status"] | undefined,
+  ) => {
+    const changed = statusBefore !== undefined && statusBefore !== state.status;
+    if (unlockedNodeIds.length === 0 && !changed) return;
+    if (!sameSession(sessionId)) return;
+    announceStatus(state, statusBefore, unlockedNodeIds);
+    set((s) => ({ ui: { ...s.ui, newly_unlocked: unlockedNodeIds } }));
+    await get().refreshProgress();
+  };
+
+  /** Mục 7.5: có `skill_change` ⇒ làm mới hồ sơ bằng đúng 1 lần `GET /api/me`, rồi áp `node_state`. */
   const afterAnswer = async (
     sessionId: string,
     r: { skill_change?: SkillChange | null; unlocked_node_ids: string[]; node_state: NodeStateView },
     statusBefore: NodeStateView["status"] | undefined,
   ) => {
     if (r.skill_change) void get().loadMe({ force: true });
-    if (r.unlocked_node_ids.length > 0 || (statusBefore && statusBefore !== r.node_state.status)) {
-      if (sameSession(sessionId)) {
-        set((s) => ({ ui: { ...s.ui, newly_unlocked: r.unlocked_node_ids } }));
-        await get().refreshProgress();
-      }
-    }
+    await settleNodeState(sessionId, r.node_state, r.unlocked_node_ids, statusBefore);
   };
 
   // ---- Hàng phân tích (Mục 7.3): hàng chờ + các lời gọi đang chạy, theo phiên ----
@@ -720,14 +758,16 @@ export const useWorkbenchStore = create<WorkbenchStore>()((set, get) => {
       await afterAnswer(sessionId, r, before);
     },
 
+    /** Thay `progress.nodes[node_id]` bằng bản server; mở khóa hoặc đổi trạng thái ⇒ tải lại tiến độ (UI-76). */
     applyNodeState: (state, unlockedNodeIds = []) => {
+      const sessionId = get().session_id;
+      if (!sessionId) return;
+      const before = get().progress?.nodes[state.node_id]?.status;
       mergeNodeState(state);
-      if (unlockedNodeIds.length > 0) {
-        set((s) => ({ ui: { ...s.ui, newly_unlocked: unlockedNodeIds } }));
-        void get().refreshProgress();
-      }
+      void settleNodeState(sessionId, state, unlockedNodeIds, before);
     },
 
+    /** `GET /api/sessions/{id}/progress` ⇒ thay nguyên `progress`; lỗi thì giữ bản đang có (UI-76). */
     refreshProgress: async () => {
       const { session_id: sessionId, ui } = get();
       if (!sessionId || ui.fixture) return;
