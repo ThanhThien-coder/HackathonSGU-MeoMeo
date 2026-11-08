@@ -779,3 +779,46 @@ describe("gemini.ts", () => {
     });
   });
 });
+
+describe("Khóa AI Studio (GEMINI_BACKEND=studio trong process.env)", () => {
+  const req: LlmRequest<{ value: number }> = {
+    kind: "ANALYZE",
+    system: "sys",
+    user: "usr",
+    schema: { type: "OBJECT" } as unknown as import("@google/genai").Schema,
+    sessionId: "sess-studio",
+    parse: (j: unknown) => (typeof j === "object" && j !== null && "value" in j ? (j as { value: number }) : null),
+  };
+
+  it("mọi loại lời gọi dùng flash-lite và không gửi thinkingConfig", async () => {
+    vi.stubEnv("GEMINI_BACKEND", "studio");
+    try {
+      for (const kind of ["ANALYZE", "OVERVIEW", "QUESTIONS", "GRADE", "EXPLAIN"] as const) {
+        expect(modelForKind(kind)).toBe(CONFIG.LLM_MODEL_FALLBACK);
+      }
+      const mockGenerate = vi.fn().mockResolvedValue({
+        text: '{"value": 1}',
+        usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 5 },
+        candidates: [{ finishReason: "STOP" }],
+      });
+      const client = { models: { generateContent: mockGenerate } } as unknown as GoogleGenAI;
+      const res = await callLLMOnce(req, client, { GEMINI_BACKEND: "studio", GEMINI_API_KEY: "key" });
+      expect(res.ok).toBe(true);
+      expect(mockGenerate).toHaveBeenCalledTimes(1);
+      const arg = mockGenerate.mock.calls[0][0] as { model: string; config: { thinkingConfig?: unknown } };
+      expect(arg.model).toBe(CONFIG.LLM_MODEL_FALLBACK);
+      expect(arg.config.thinkingConfig).toBeUndefined();
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("không đặt studio ⇒ giữ bảng model và vẫn gửi thinkingConfig", () => {
+    vi.stubEnv("GEMINI_BACKEND", "vertex");
+    try {
+      expect(modelForKind("ANALYZE")).toBe(CONFIG.LLM_MODEL_BY_KIND.ANALYZE);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+});
