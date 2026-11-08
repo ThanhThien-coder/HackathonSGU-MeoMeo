@@ -1,6 +1,7 @@
 "use client";
 
 // Nhóm bài học cột trái dạng cây thư mục kiểu VS Code: dòng thư mục mở/đóng, thư mục con lồng bên trong.
+import { BookOpen, CornerDownRight } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import type { LessonGroupView } from "@/lib/lesson-map";
 
@@ -17,12 +18,14 @@ function Chevron({ open }: { open: boolean }) {
   );
 }
 
-function FolderIcon({ open }: { open: boolean }) {
-  return (
-    <span aria-hidden="true" className="shrink-0 text-[13px] leading-none">
-      {open ? "📂" : "📁"}
-    </span>
-  );
+/** Nhóm = 1 chương học (quyển sách), không dùng hình thư mục để khỏi nhầm với thư mục code. */
+function GroupIcon() {
+  return <BookOpen size={15} strokeWidth={2} aria-hidden="true" className="shrink-0 text-[var(--accent)]" />;
+}
+
+/** Nhóm con = nhánh của chương. */
+function SubGroupIcon() {
+  return <CornerDownRight size={14} strokeWidth={2} aria-hidden="true" className="shrink-0 text-[var(--muted)]" />;
 }
 
 /** Nhóm cấp 1. Đóng ⇒ hiện 1 dòng tóm tắt tên các bài, nối bằng " · ". */
@@ -51,7 +54,7 @@ export function LessonGroup({
         className="grp-h flex w-full min-w-0 items-center gap-1.5 rounded-[8px] px-2 py-1.5 text-left transition-colors hover:bg-[var(--panel3)] cursor-pointer"
       >
         <Chevron open={open} />
-        <FolderIcon open={open} />
+        <GroupIcon />
         <span className="gname min-w-0 truncate font-semibold text-[13.5px] text-[var(--text)]">{group.name}</span>
         <span className="ml-auto flex shrink-0 items-center gap-1.5">
           {group.recommended ? (
@@ -98,7 +101,7 @@ export function LessonSubfolder({
         className="flex w-full min-w-0 items-center gap-1.5 rounded-[8px] px-1.5 py-1 text-left transition-colors hover:bg-[var(--panel3)] cursor-pointer"
       >
         <Chevron open={open} />
-        <FolderIcon open={open} />
+        <SubGroupIcon />
         <span className="min-w-0 truncate text-[13px] font-medium text-[var(--text)]">{label}</span>
         <span className="ml-auto shrink-0 text-xs text-[var(--muted)]">{count} bài</span>
       </button>

@@ -1,8 +1,8 @@
 "use client";
 
-// Thẻ bài học dạng một dòng: biểu tượng file · tên bài · nhãn bên phải.
+// Thẻ bài học dạng một dòng: biểu tượng trạng thái · tên bài · nhãn bên phải.
 // Route (title_evidence) nằm trong tooltip; "cần thêm: …" chỉ hiện khi bài cần học trước ở nhóm khác.
-import { File, FileCheck, FileX, Lock } from "lucide-react";
+import { CircleCheck, CircleDashed, CirclePlay, CircleX, Lock } from "lucide-react";
 import type { HybridArchitecturalNode, NodeStatus } from "@/contracts";
 import { cardAction } from "@/lib/lesson-map";
 
@@ -20,11 +20,12 @@ const STATUS_LABEL: Record<NodeStatus, string> = {
   FAILED: "Chưa đạt",
 };
 
-const STATUS_ICON: Record<NodeStatus, typeof File> = {
-  LOCKED: File,
-  AVAILABLE: File,
-  COMPLETED: FileCheck,
-  FAILED: FileX,
+// Biểu tượng theo trạng thái học, không dùng hình file để khỏi nhầm với file code thật.
+const STATUS_ICON: Record<NodeStatus, typeof CirclePlay> = {
+  LOCKED: CircleDashed,
+  AVAILABLE: CirclePlay,
+  COMPLETED: CircleCheck,
+  FAILED: CircleX,
 };
 
 export type CardAnalysis = "PENDING" | "FAILED" | "READY" | "NONE";
