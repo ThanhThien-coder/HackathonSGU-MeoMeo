@@ -175,7 +175,7 @@ export function SessionList({ variant = "home" }: { variant?: "home" | "history"
       ) : null}
       <div className="flex items-center justify-between">
         <h2 id="session-list-title" className="text-lg font-bold tracking-tight text-text">
-          {isHistory ? "Chọn phiên để xem lịch sử" : "Tiếp tục học"}
+          {isHistory ? "Các phiên đã học" : "Tiếp tục học"}
         </h2>
         {isHistory ? (
           <span className="rounded-full bg-panel-2 px-2.5 py-0.5 text-xs font-medium text-muted ring-1 ring-border">
@@ -209,11 +209,20 @@ export function SessionList({ variant = "home" }: { variant?: "home" | "history"
                         </div>
                       </div>
                       {isHistory ? (
+                        // Lịch sử: học hết ⇒ "Xem lại", chưa hết ⇒ "Tiếp tục học"; cả hai mở trang học của phiên.
                         <Button
                           variant="primary"
-                          onClick={() => router.push(`/history?session=${encodeURIComponent(s.session_id)}`)}
+                          disabled={!s.can_resume || ingesting || opening !== null}
+                          title={s.can_resume ? undefined : "Phiên tạo bằng phiên bản engine cũ, không mở lại được"}
+                          onClick={() => void resume(s)}
                         >
-                          Xem lịch sử
+                          {busyHere
+                            ? "Đang mở…"
+                            : !s.can_resume
+                              ? "Phiên cũ"
+                              : s.total_nodes > 0 && s.completed_count >= s.total_nodes
+                                ? "Xem lại"
+                                : "Tiếp tục học"}
                         </Button>
                       ) : (
                         <Button
