@@ -1,6 +1,6 @@
 import type { Node } from "web-tree-sitter";
 import type { FunctionCallEdge, IngestionReport, SymbolDefinition } from "@/contracts";
-import { guardOf } from "./branch";
+import { guardFieldsOf } from "./branch";
 import { getQuery } from "./parser";
 import { discoverRoutes } from "./routes";
 import type { DiscoveredRoute } from "./routes";
@@ -436,7 +436,7 @@ export function buildCallGraph(
       end_index: node.endIndex,
       confidence,
       ambiguous,
-      guard: guardOf(node),
+      ...guardFieldsOf(node),
     };
     const list = call_sites.get(caller);
     if (list) {

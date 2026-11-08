@@ -706,9 +706,13 @@ function draftStep(
   const rangeStart = isAnonymous && entry.binding ? entry.binding.line_start : fn.line_start;
   const rangeEnd = isAnonymous && entry.binding ? entry.binding.line_end : fn.line_end;
 
-  const calleeRows = (ctx.call_sites.get(reached.key) ?? [])
-    .filter((site) => keptKeys.has(site.callee))
-    .map((site) => site.line);
+  const keptSites = (ctx.call_sites.get(reached.key) ?? []).filter((site) => keptKeys.has(site.callee));
+  const calleeRows = keptSites.map((site) => site.line);
+  // Dòng điều kiện bao lời gọi sang bước sau (if/else/case/catch/vòng lặp): là mốc, để bước con
+  // có nhãn "Nhánh phụ" thì bước cha vẫn hiện đúng câu điều kiện đó.
+  const guardRows = keptSites
+    .map((site) => site.guard_line)
+    .filter((row): row is number => typeof row === "number" && row > 0);
   const externalCalls = ctx.external_calls.get(reached.key) ?? [];
   const sinkRows = externalCalls.filter((c) => isDataSinkCall(c, techStack)).map((c) => c.line);
   const externalRows = externalCalls
@@ -739,7 +743,7 @@ function draftStep(
     lineMap,
     signatureCount: Math.max(1, lineMap.indexOf(signatureEnd) + 1),
     milestone,
-    anchorRows: [...calleeRows, ...sinkRows],
+    anchorRows: [...calleeRows, ...sinkRows, ...guardRows],
     commentPrefix,
     window: CONFIG.CLAMP_WINDOW_LINES,
   };

@@ -64,6 +64,7 @@ export interface CallSite {
   confidence: "RESOLVED" | "INFERRED";
   ambiguous: boolean;
   guard?: StepBranch | null; // Điều kiện gần nhất bao lời gọi trong hàm gọi, null ⇒ luôn chạy
+  guard_line?: number | null; // Dòng của câu điều kiện đó (if/else/case/catch/vòng lặp), để snippet bước cha giữ dòng này
 }
 
 export interface FunctionInfo extends SymbolDefinition {
