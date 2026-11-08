@@ -1,7 +1,7 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import type { Node } from "web-tree-sitter";
 import type { IngestOutput, IngestionReport, LanguageId, StepBranch } from "@/contracts";
-import { conditionText, guardOf } from "./branch";
+import { conditionText, guardInfoOf, guardOf } from "./branch";
 import { buildGraph } from "./index";
 import { initParsers, parseAll } from "./parser";
 import { toClientResult } from "./to-client";
@@ -328,5 +328,54 @@ public interface ProjectRepository extends JpaRepository<Object, Long> {}
       kind: "IF",
       condition: "req.templateId() != null",
     });
+  });
+});
+
+describe("guardInfoOf: dòng của câu điều kiện (để bước cha giữ dòng này)", () => {
+  async function info(code: string, name: string, lang: "ts" | "java" = "ts") {
+    const path = lang === "ts" ? "src/a.ts" : "src/main/java/A.java";
+    const [file] = await parseAll(new Map([[path, code]]), new Map([[path, langOf(path)]]), report());
+    let found: Node | null = null;
+    const walk = (n: Node): void => {
+      const callee =
+        n.type === "call_expression"
+          ? n.childForFieldName("function")?.text
+          : n.type === "method_invocation"
+            ? n.childForFieldName("name")?.text
+            : undefined;
+      if (!found && callee !== undefined && (callee === name || callee.endsWith(`.${name}`))) found = n;
+      for (const c of n.namedChildren) if (c) walk(c);
+    };
+    walk(file.tree.rootNode);
+    if (!found) throw new Error(`không thấy lời gọi ${name}`);
+    return guardInfoOf(found);
+  }
+
+  it("Java if: dòng của if, không phải dòng lời gọi", async () => {
+    const code = [
+      "class A {",
+      "  Object create(Req req) {",
+      "    if (req.templateId() != null) {",
+      "      Object x = build(req);",
+      "      return svc.cloneTemplate(x);",
+      "    }",
+      "    return null;",
+      "  }",
+      "}",
+    ].join("\n");
+    const res = await info(code, "cloneTemplate", "java");
+    expect(res?.branch).toEqual({ kind: "IF", condition: "req.templateId() != null" });
+    expect(res?.line).toBe(3);
+  });
+
+  it("TS else: dòng của else", async () => {
+    const code = ["function f(a: number) {", "  if (a > 1) {", "    one();", "  } else {", "    two();", "  }", "}"].join("\n");
+    const res = await info(code, "two");
+    expect(res?.branch.kind).toBe("ELSE");
+    expect(res?.line).toBe(4);
+  });
+
+  it("không có điều kiện ⇒ null", async () => {
+    expect(await info("function f() {\n  go();\n}", "go")).toBeNull();
   });
 });

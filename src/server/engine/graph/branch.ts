@@ -134,32 +134,38 @@ function loopHeader(node: Node): string {
  * Điều kiện gần nhất bao lời gọi, trong cùng hàm (task nhánh phụ). null ⇒ luồng chính.
  * Lời gọi nằm ngay trong điều kiện (`if (isValid(x))`) hay trong `try` không phải nhánh.
  */
-export function guardOf(callNode: Node): StepBranch | null {
+/** Như `guardOf`, kèm dòng (1-based) của câu điều kiện: if, else, case, catch, vòng lặp, callback lặp. */
+export function guardInfoOf(callNode: Node): { branch: StepBranch; line: number } | null {
   let child: Node = callNode;
   let node: Node | null = callNode.parent;
 
   while (node) {
     if (FUNCTION_TYPES.has(node.type)) {
-      return node.type === "arrow_function" || node.type === "function_expression" || node.type === "lambda_expression"
-        ? loopOfCallback(node)
-        : null;
+      const loop =
+        node.type === "arrow_function" || node.type === "function_expression" || node.type === "lambda_expression"
+          ? loopOfCallback(node)
+          : null;
+      return loop ? { branch: loop, line: node.startPosition.row + 1 } : null;
     }
 
     if (node.type === "if_statement") {
       const condition = node.childForFieldName("condition");
       if (sameNode(child, node.childForFieldName("consequence"))) {
-        return { kind: "IF", condition: conditionText(condition?.text ?? "") };
+        return { branch: { kind: "IF", condition: conditionText(condition?.text ?? "") }, line: node.startPosition.row + 1 };
       }
       if (sameNode(child, node.childForFieldName("alternative"))) {
-        return { kind: "ELSE", condition: negate(conditionText(condition?.text ?? "")) };
+        return {
+          branch: { kind: "ELSE", condition: negate(conditionText(condition?.text ?? "")) },
+          line: (node.childForFieldName("alternative") ?? node).startPosition.row + 1,
+        };
       }
     } else if (node.type === "ternary_expression") {
       const condition = conditionText(node.childForFieldName("condition")?.text ?? "");
       if (sameNode(child, node.childForFieldName("consequence"))) {
-        return { kind: "TERNARY", condition };
+        return { branch: { kind: "TERNARY", condition }, line: node.startPosition.row + 1 };
       }
       if (sameNode(child, node.childForFieldName("alternative"))) {
-        return { kind: "ELSE", condition: negate(condition) };
+        return { branch: { kind: "ELSE", condition: negate(condition) }, line: node.startPosition.row + 1 };
       }
     } else if (
       node.type === "switch_case" ||
@@ -170,15 +176,15 @@ export function guardOf(callNode: Node): StepBranch | null {
       const isLabel =
         sameNode(child, node.childForFieldName("value")) || child.type === "switch_label";
       if (!isLabel) {
-        return { kind: "SWITCH", condition: switchLabel(node) };
+        return { branch: { kind: "SWITCH", condition: switchLabel(node) }, line: node.startPosition.row + 1 };
       }
     } else if (node.type === "catch_clause") {
       if (sameNode(child, node.childForFieldName("body")) || child.type === "block") {
-        return { kind: "CATCH", condition: catchParam(node) };
+        return { branch: { kind: "CATCH", condition: catchParam(node) }, line: node.startPosition.row + 1 };
       }
     } else if (LOOP_TYPES.has(node.type)) {
       if (sameNode(child, node.childForFieldName("body"))) {
-        return { kind: "LOOP", condition: loopHeader(node) };
+        return { branch: { kind: "LOOP", condition: loopHeader(node) }, line: node.startPosition.row + 1 };
       }
     }
 
@@ -186,4 +192,14 @@ export function guardOf(callNode: Node): StepBranch | null {
     node = node.parent;
   }
   return null;
+}
+
+export function guardOf(callNode: Node): StepBranch | null {
+  return guardInfoOf(callNode)?.branch ?? null;
+}
+
+/** Trường guard của CallSite: điều kiện và dòng của nó (để giữ dòng điều kiện trong snippet bước cha). */
+export function guardFieldsOf(callNode: Node): { guard: StepBranch | null; guard_line: number | null } {
+  const info = guardInfoOf(callNode);
+  return { guard: info?.branch ?? null, guard_line: info?.line ?? null };
 }
