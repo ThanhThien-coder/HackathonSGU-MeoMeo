@@ -2,6 +2,7 @@
 
 // Khung code cột giữa: hàng tab file (.ftab), dòng đường dẫn (.fpath), Monaco của bước đang xem.
 // docs/spec/30_UI.md Mục 5, docs/prototype.html `.ftabs` / `.fpath`.
+import { ExternalLink } from "lucide-react";
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { SelectionPopover } from "@/components/code/SelectionPopover";
@@ -100,6 +101,18 @@ export function CodeSnippetViewer() {
   };
 
   const beforeLines = showDto ? 0 : step.line_start - 1;
+
+  // Link file thật trên GitHub, ghim đúng commit của phiên (zip không có GitHub ⇒ null).
+  const snap = result?.snapshot;
+  const githubUrl = (anchor: string): string | null =>
+    !showDto && snap?.source === "GITHUB" && snap.snapshot_id_kind === "COMMIT_SHA"
+      ? `https://github.com/${snap.repo_key}/blob/${snap.snapshot_id}/${step.file_path
+          .split("/")
+          .map(encodeURIComponent)
+          .join("/")}${anchor}`
+      : null;
+  const beforeUrl = githubUrl(`#L1-L${beforeLines}`);
+  const afterUrl = githubUrl(`#L${step.line_end + 1}`);
   const fontSize = BASE_FONT_SIZE;
 
   return (
@@ -143,7 +156,20 @@ export function CodeSnippetViewer() {
 
       {beforeLines > 0 ? (
         <p className={`${MONO} flex-none bg-[var(--code-bg)] py-0.5 pl-14 text-xs italic text-[var(--gutter)]`}>
-          ⋯ dòng 1–{beforeLines} không thuộc bài học
+          {beforeUrl ? (
+            <a
+              href={beforeUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              title="Mở đoạn này trên GitHub (đúng commit của phiên)"
+              className="inline-flex items-center gap-1 underline-offset-2 transition-colors hover:text-[var(--accent)] hover:underline"
+            >
+              ⋯ dòng 1–{beforeLines} không thuộc bài học
+              <ExternalLink size={11} aria-hidden="true" />
+            </a>
+          ) : (
+            <>⋯ dòng 1–{beforeLines} không thuộc bài học</>
+          )}
         </p>
       ) : null}
 
@@ -167,7 +193,20 @@ export function CodeSnippetViewer() {
 
       {!showDto ? (
         <p className={`${MONO} flex-none bg-[var(--code-bg)] py-0.5 pl-14 text-xs italic text-[var(--gutter)]`}>
-          ⋯ phần còn lại của file
+          {afterUrl ? (
+            <a
+              href={afterUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              title="Mở phần còn lại trên GitHub (đúng commit của phiên)"
+              className="inline-flex items-center gap-1 underline-offset-2 transition-colors hover:text-[var(--accent)] hover:underline"
+            >
+              ⋯ phần còn lại của file
+              <ExternalLink size={11} aria-hidden="true" />
+            </a>
+          ) : (
+            <>⋯ phần còn lại của file</>
+          )}
         </p>
       ) : null}
 
