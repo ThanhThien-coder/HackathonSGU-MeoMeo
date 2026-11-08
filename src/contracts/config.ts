@@ -82,7 +82,7 @@ export const CONFIG = {
   DOMAIN_TERM_MIN_TF: 2,
 
   // ---------- AI (20_AI_GOI_VA_PROMPT, 21_AI_KIEM_VA_DUYET) ----------
-  LLM_MODEL: "gemini-3.5-flash-lite", // model chính, thay D-50; số đo 07/11
+  LLM_MODEL: "gemini-3.8-flash", // model chính, thay D-50; số đo 07/11
   LLM_MODEL_FALLBACK: "gemini-3.5-flash-lite", // dùng khi model chính quá LLM_PRIMARY_TIMEOUT_MS hoặc lỗi
   LLM_PRIMARY_TIMEOUT_MS: 12000, // đo 07/11: 8/9 lần 3.8-flash ≤ 11,4 s; xấu nhất ~12 s + ~3 s flash-lite
   LLM_TEMPERATURE: 0,
@@ -91,9 +91,9 @@ export const CONFIG = {
   LLM_LITE_TIMEOUT_MS: 10000,         // NH-15: mọi lời gọi flash-lite (model chính của GRADE/EXPLAIN và fallback); đo 07/11 trung bình 2,8 s
   // NH-14: model chính theo loại lời gọi. Chấm và giải thích cần nhanh ⇒ flash-lite; phân tích, tổng quan, câu hỏi được tính trước ⇒ 3.8-flash
   LLM_MODEL_BY_KIND: {
-    ANALYZE: "gemini-3.5-flash-lite",
-    OVERVIEW: "gemini-3.5-flash-lite",
-    QUESTIONS: "gemini-3.5-flash-lite",
+    ANALYZE: "gemini-3.8-flash",
+    OVERVIEW: "gemini-3.8-flash",
+    QUESTIONS: "gemini-3.8-flash",
     GRADE: "gemini-3.5-flash-lite",
     EXPLAIN: "gemini-3.5-flash-lite",
   },
