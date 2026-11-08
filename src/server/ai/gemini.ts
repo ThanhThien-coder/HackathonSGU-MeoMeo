@@ -279,7 +279,10 @@ async function executeSingleModelCall<T>(
           threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH,
         })),
         // Luôn gửi: budget 0 phải gửi rõ, không thì model tự nghĩ theo mặc định và có thể cắt JSON.
-        thinkingConfig: { thinkingBudget: CONFIG.LLM_THINKING_BUDGET },
+        // AI Studio (khóa free) trả 400 INVALID_ARGUMENT với thinkingBudget cho flash-lite ⇒ chỉ gửi ở Vertex.
+        ...(isStudioBackend()
+          ? {}
+          : { thinkingConfig: { thinkingBudget: CONFIG.LLM_THINKING_BUDGET } }),
         responseMimeType: "application/json",
         responseSchema: req.schema,
         abortSignal: AbortSignal.timeout(timeoutMs),
@@ -377,8 +380,13 @@ async function executeSingleModelCall<T>(
 }
 
 // NH-14: model chính theo loại lời gọi
+/** Khóa Google AI Studio (gói free): 3.8-flash rất chậm và không nhận thinkingBudget ⇒ mọi lời gọi dùng flash-lite. */
+function isStudioBackend(): boolean {
+  return process.env.GEMINI_BACKEND === "studio";
+}
+
 export function modelForKind(kind: LlmRequest<unknown>["kind"]): string {
-  return CONFIG.LLM_MODEL_BY_KIND[kind];
+  return isStudioBackend() ? CONFIG.LLM_MODEL_FALLBACK : CONFIG.LLM_MODEL_BY_KIND[kind];
 }
 
 // NH-15: flash-lite chờ LLM_LITE_TIMEOUT_MS; model chậm (3.8-flash) chờ LLM_PRIMARY_TIMEOUT_MS
